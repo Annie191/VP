@@ -1,0 +1,6 @@
+/target/
+/logs/
+/databases/
+*.log
+.env
+.env.*
