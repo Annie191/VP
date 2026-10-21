@@ -1,0 +1,3 @@
+database	files	done	candidate	tlp_checked	tlp_inconsistent	norec_checked	norec_inconsistent	skipped	no_single_table_query	setup_failed	query_failed	unavailable
+MySQL	25	5	0	5	2	5	4	20	0	0	0	0
+TOTAL	25	5	0	5	2	5	4	20	0	0	0	0

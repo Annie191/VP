@@ -1,0 +1,98 @@
+https://bugs.mysql.com/bug.php?id=120966&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro_mysql714_db4;
+CREATE DATABASE repro_mysql714_db4;
+USE repro_mysql714_db4;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+SET SESSION big_tables = 1;
+
+CREATE TABLE vp_s (
+    vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    c0       BIGINT NULL
+) ENGINE = InnoDB;
+
+INSERT INTO vp_s (c0) VALUES (-903494292), (1);
+
+CREATE INDEX src_idx ON vp_s(c0, vp_rowid);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 BIGINT NULL) ENGINE = InnoDB;
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY) ENGINE = InnoDB;
+
+INSERT INTO vp_l SELECT vp_rowid, c0 FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid FROM vp_s;
+
+CREATE INDEX l_idx ON vp_l(vp_rowid, c0);
+
+-- 单表查询（covering index → IN 转 = 走索引 → 错误命中 c0=1）
+SELECT DISTINCT NULL AS ref0 FROM vp_s
+WHERE (LEAST(0.8543270419078102, '2F')) IN (vp_s.c0)
+GROUP BY NULL;
+
+-- STRING_PACK 多表查询（hash join filter → 正确无匹配）
+SELECT DISTINCT NULL AS ref0 FROM (
+    SELECT l.vp_rowid, l.c0
+    FROM vp_l l
+    JOIN (SELECT vp_rowid, CONCAT('vp:', vp_rowid) AS payload FROM vp_r) sp
+      ON CONCAT('vp:', l.vp_rowid) = sp.payload
+    JOIN vp_r r ON r.vp_rowid = sp.vp_rowid
+) vp_source
+WHERE (LEAST(0.8543270419078102, '2F')) IN (vp_source.c0)
+GROUP BY NULL;
+
+=== 单表 ===
+| NULL |              ← 错误：返回 1 行（LEAST=0.854，不应匹配任何 BIGINT）
+
+=== STRING_PACK ===
+Empty set             ← 正确：无匹配
+
+执行计划
+单表（索引查找 → 错误命中）：
+
+-> Group (no aggregates)
+    -> Covering index lookup on vp_s using src_idx (c0 = least(0.8543270419078102,'2F'))
+
+STRING_PACK（hash join filter → 正确）：
+
+-> Group (no aggregates)
+    -> Nested loop inner join
+        -> Inner hash join (concat('vp:',l.vp_rowid) = concat('vp:',vp_r.vp_rowid))
+            -> Covering index scan on vp_r using PRIMARY
+            -> Hash
+                -> Filter: (<cache>(least(0.854...,'2F')) = l.c0)
+                    -> Covering index scan on l using l_idx
+        -> Single-row covering index lookup on r using PRIMARY
+
+MySQL 优化器在处理 IN 谓词转换为等值条件时，对混合类型常量表达式 LEAST() 进行了错误的整型求值，导致索引查找使用了错误的键值。
+
+单表查询（错误命中）的执行逻辑
+sql
+SELECT DISTINCT NULL FROM vp_s
+WHERE (LEAST(0.8543270419078102, '2F')) IN (vp_s.c0);
+优化器将 expr IN (column) 简化为 column = LEAST(...)。
+
+由于被比较的列 c0 是 BIGINT，优化器在准备索引查找键时，强制要求以整数类型获取 LEAST() 的值，即调用该表达式对象的 val_int() 方法。
+
+LEAST() 在整数上下文中对其参数逐一求值：
+
+浮点数 0.8543270419078102 调用 val_int() → 四舍五入为 1
+
+字符串 '2F' 转换为整数 → 仅有效前导数字部分，得到 2
+
+LEAST(1, 2) 返回 1
+
+最终生成索引条件 c0 = 1，恰好匹配表中 c0 = 1 的行，因此返回了一行结果（DISTINCT NULL）。
+
+多表查询（正确无匹配）的执行逻辑
+sql
+SELECT DISTINCT NULL FROM (
+    ...
+) vp_source
+WHERE (LEAST(0.8543270419078102, '2F')) IN (vp_source.c0);
+多表联接中的派生表迫使优化器采用 hash join，条件中的 LEAST(...) 被放入 缓存 (<cache>)，作为关联过滤条件（Filter: <cache>(least(...)) = l.c0）。
+
+缓存在计算时保留了表达式的原始数值类型（DOUBLE），比较时按常规规则将 l.c0（BIGINT）转换为 DOUBLE 再进行比较，即 0.854... = c0。
+
+正确的比较逻辑下，0.854... 不与任何 c0 值相等，结果为空集。

@@ -1,0 +1,20 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120834.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT DISTINCT\n  SUM(DISTINCT 0.829074650150795) AS a,\n  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))\n    || ((+ ((s.x) >= (s.id)))) AS b,\n  EXISTS (SELECT 1 WHERE FALSE) AS c,\n  AVG(x) AS d\nFROM s\nGROUP BY\n  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))\n    || ((+ ((s.x) >= (s.id))))",
+      "ok": true,
+      "rows": [
+        "0.829074650150795\tNULL\t0\tNULL",
+        "0.829074650150795\t1\t0\t0"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 13,
+  "target_query": "SELECT DISTINCT\n  SUM(DISTINCT 0.829074650150795) AS a,\n  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))\n    || ((+ ((s.x) >= (s.id)))) AS b,\n  EXISTS (SELECT 1 WHERE FALSE) AS c,\n  AVG(x) AS d\nFROM s\nGROUP BY\n  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))\n    || ((+ ((s.x) >= (s.id))));",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

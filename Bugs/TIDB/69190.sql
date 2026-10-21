@@ -1,0 +1,53 @@
+DROP DATABASE IF EXISTS repro_tidb614_db14;
+CREATE DATABASE repro_tidb614_db14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+USE repro_tidb614_db14;
+
+CREATE TABLE src (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 BOOLEAN NULL
+);
+
+INSERT INTO src(c0) VALUES
+  (FALSE),
+  (TRUE);
+
+CREATE TABLE l (
+  id BIGINT NOT NULL PRIMARY KEY
+);
+
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 BOOLEAN NULL
+);
+
+INSERT INTO l SELECT id FROM src;
+INSERT INTO r SELECT id, c0 FROM src;
+
+-- 单表 source 查询：返回 0
+SELECT
+  BIT_AND(
+    CAST(
+      CASE 0.964765709243282
+        WHEN id THEN id
+        ELSE CAST(c0 AS DATE)
+      END AS DATETIME
+    )
+  ) AS source_val
+FROM src
+WHERE '2023-05-28';
+
+-- split/join 查询：返回 18446744073709551615
+SELECT
+  BIT_AND(
+    CAST(
+      CASE 0.964765709243282
+        WHEN v.id THEN v.id
+        ELSE CAST(v.c0 AS DATE)
+      END AS DATETIME
+    )
+  ) AS split_val
+FROM (
+  SELECT id, r.c0 AS c0
+  FROM l JOIN r USING(id)
+) v
+WHERE '2023-05-28';

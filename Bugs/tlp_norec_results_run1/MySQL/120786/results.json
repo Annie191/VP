@@ -1,0 +1,19 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120786.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT MIN(DISTINCT CAST((CAST(s.c1 AS SIGNED)) IN ((s.c0) != (s.c2)) AS SIGNED)) AS ref0\nFROM s\nWHERE IFNULL(0.9349479012631875, -1058210595) IN (s.c3)\nGROUP BY EXISTS (SELECT 1)",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 13,
+  "target_query": "SELECT MIN(DISTINCT CAST((CAST(s.c1 AS SIGNED)) IN ((s.c0) != (s.c2)) AS SIGNED)) AS ref0\nFROM s\nWHERE IFNULL(0.9349479012631875, -1058210595) IN (s.c3)\nGROUP BY EXISTS (SELECT 1);",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

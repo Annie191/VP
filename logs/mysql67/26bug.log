@@ -1,0 +1,127 @@
+https://bugs.mysql.com/bug.php?id=120639 Verified as described.
+
+MySQL 9.6 在 indexed integer column 上，
+对 WHERE NOT (IFNULL(non-integer numeric constant, ...) NOT IN (indexed_col)) 的聚合计数执行了错误的索引优化。
+逐行谓词为 false，但 COUNT(*) 返回 1。
+
+DROP DATABASE IF EXISTS test_db2;
+CREATE DATABASE test_db2;
+USE test_db2;
+
+CREATE TABLE s (
+  id BIGINT NOT NULL,
+  KEY(id)
+) ENGINE=InnoDB;
+
+INSERT INTO s VALUES (1);
+
+SELECT COUNT(*) AS cnt
+FROM s
+WHERE NOT (IFNULL(0.5, 0) NOT IN (id));
+
+SELECT id,
+       NOT (IFNULL(0.5, 0) NOT IN (id)) AS pred
+FROM s;
+
+实际结果：
+cnt = 1
+
+id | pred
+1  | 0
+
+期望结果：cnt = 0
+
+-- 对照 1：无索引，结果正确
+CREATE TABLE s_plain (
+  id BIGINT NOT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO s_plain VALUES (1);
+
+SELECT COUNT(*) AS cnt
+FROM s_plain
+WHERE NOT (IFNULL(0.5, 0) NOT IN (id));
+-- returns 0, correct
+
+
+-- 对照 2：不使用 IFNULL，结果正确
+SELECT COUNT(*) AS cnt
+FROM s
+WHERE NOT (0.5 NOT IN (id));
+-- returns 0, correct
+
+这两个对照说明：
+
+不是 SQL 三值逻辑问题；
+不是 NOT IN 本身问题；
+不是 0.5 和 1 比较的问题；
+是 indexed column + IFNULL(non-integer)
+
+EXPLAIN FORMAT=TREE
+SELECT COUNT(*) AS cnt
+FROM s
+WHERE NOT (IFNULL(0.5, 0) NOT IN (id));
+
+EXPLAIN FORMAT=TREE
+SELECT id,
+       NOT (IFNULL(0.5, 0) NOT IN (id)) AS pred
+FROM s;
+
+EXPLAIN FORMAT=TREE
+SELECT COUNT(*) AS cnt
+FROM s_plain
+WHERE NOT (IFNULL(0.5, 0) NOT IN (id));
+
+mysql> EXPLAIN FORMAT=TREE
+    -> SELECT COUNT(*) AS cnt
+    -> FROM s
+    -> WHERE NOT (IFNULL(0.5, 0) NOT IN (id));
++-------------------------------------------------------------------------------------------------------------------------------+
+| EXPLAIN                                                                                                                       |
++-------------------------------------------------------------------------------------------------------------------------------+
+| -> Aggregate: count(0)  (cost=0.45 rows=1)
+    -> Covering index lookup on s using id (id=ifnull(0.5,0))  (cost=0.35 rows=1)
+ |
++-------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+mysql> 
+mysql> EXPLAIN FORMAT=TREE
+    -> SELECT id,
+    ->        NOT (IFNULL(0.5, 0) NOT IN (id)) AS pred
+    -> FROM s;
++--------------------------------------------------+
+| EXPLAIN                                          |
++--------------------------------------------------+
+| -> Index scan on s using id  (cost=0.35 rows=1)
+ |
++--------------------------------------------------+
+1 row in set (0.00 sec)
+
+mysql> 
+mysql> EXPLAIN FORMAT=TREE
+    -> SELECT COUNT(*) AS cnt
+    -> FROM s_plain
+    -> WHERE NOT (IFNULL(0.5, 0) NOT IN (id));
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| EXPLAIN                                                                                                                                                                   |
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| -> Aggregate: count(0)  (cost=0.45 rows=1)
+    -> Filter: (<cache>(ifnull(0.5,0)) = s_plain.id)  (cost=0.35 rows=1)
+        -> Table scan on s_plain  (cost=0.35 rows=1)
+ |
++---------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+
+MySQL 8.0.46: COUNT(*) over indexed integer column returns 1 although WHERE predicate evaluates to false
+
+For a table with an index on BIGINT column id, MySQL returns COUNT(*) = 1 for:
+
+WHERE NOT (IFNULL(0.5, 0) NOT IN (id))
+
+However, evaluating the same predicate row by row returns 0 for the only row. Without the index, or without IFNULL(), COUNT(*) correctly returns 0.
+
+VP single query 直接访问带索引/主键的 vp_source，触发错误 index/count 优化；
+VP split query 经 derived/CTE reconstruction，改变访问路径，返回正确 0；
+因此 single/split mismatch 揭示了 optimizer bug。

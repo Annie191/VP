@@ -1,0 +1,733 @@
+[
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120639.sql",
+    "status": "done",
+    "queries": {
+      "original": {
+        "sql": "SELECT COUNT(*) AS cnt\nFROM vp_source\nWHERE NOT (IFNULL(0.5, 0) NOT IN (id))",
+        "ok": true,
+        "rows": [
+          "1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "tlp_base": {
+        "sql": "SELECT COUNT(*) AS cnt FROM vp_source",
+        "ok": true,
+        "rows": [
+          "1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "tlp_union": {
+        "sql": "SELECT SUM(agg0) FROM (SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id)) UNION ALL SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT NOT (NOT COALESCE(0.5, 0) IN (id)) UNION ALL SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id)) IS NULL) AS tlp_parts",
+        "ok": true,
+        "rows": [
+          "3"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "norec_optimized": {
+        "sql": "SELECT COUNT(*) FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id))",
+        "ok": true,
+        "rows": [
+          "1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "norec_unoptimized": {
+        "sql": "SELECT SUM(CASE WHEN NOT (NOT COALESCE(0.5, 0) IN (id)) THEN 1 ELSE NULL END) FROM vp_source",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 11,
+    "target_query": "SELECT COUNT(*) AS cnt\nFROM vp_source\nWHERE NOT (IFNULL(0.5, 0) NOT IN (id));",
+    "variants": {
+      "tlp_base": "SELECT COUNT(*) AS cnt FROM vp_source",
+      "tlp_part_true": "SELECT COUNT(*) AS cnt FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id))",
+      "tlp_part_false": "SELECT COUNT(*) AS cnt FROM vp_source WHERE NOT NOT (NOT COALESCE(0.5, 0) IN (id))",
+      "tlp_part_unknown": "SELECT COUNT(*) AS cnt FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id)) IS NULL",
+      "tlp_union": "SELECT SUM(agg0) FROM (SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id)) UNION ALL SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT NOT (NOT COALESCE(0.5, 0) IN (id)) UNION ALL SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id)) IS NULL) AS tlp_parts",
+      "norec_optimized": "SELECT COUNT(*) FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id))",
+      "norec_unoptimized": "SELECT SUM(CASE WHEN NOT (NOT COALESCE(0.5, 0) IN (id)) THEN 1 ELSE NULL END) FROM vp_source",
+      "predicate": "NOT (NOT COALESCE(0.5, 0) IN (id))"
+    },
+    "tlp_checked": true,
+    "tlp_inconsistent": true,
+    "norec_checked": true,
+    "norec_inconsistent": true
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120716.sql",
+    "status": "done",
+    "queries": {
+      "original": {
+        "sql": "-- 正确基线：空表聚合，返回 NULL\nSELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v\nFROM s",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "tlp_base": {
+        "sql": "/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v FROM s",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "tlp_union": {
+        "sql": "SELECT MIN(agg0) FROM (/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE TRUE UNION ALL /* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE NOT TRUE UNION ALL /* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE TRUE IS NULL) AS tlp_parts",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "norec_optimized": {
+        "sql": "/* 正确基线：空表聚合，返回 NULL */ SELECT COUNT(*) FROM s",
+        "ok": true,
+        "rows": [
+          "0"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "norec_unoptimized": {
+        "sql": "/* 正确基线：空表聚合，返回 NULL */ SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM s",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 6,
+    "target_query": "-- 正确基线：空表聚合，返回 NULL\nSELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v\nFROM s;",
+    "variants": {
+      "tlp_base": "/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v FROM s",
+      "tlp_part_true": "/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v FROM s WHERE TRUE",
+      "tlp_part_false": "/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v FROM s WHERE NOT TRUE",
+      "tlp_part_unknown": "/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v FROM s WHERE TRUE IS NULL",
+      "tlp_union": "SELECT MIN(agg0) FROM (/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE TRUE UNION ALL /* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE NOT TRUE UNION ALL /* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE TRUE IS NULL) AS tlp_parts",
+      "norec_optimized": "/* 正确基线：空表聚合，返回 NULL */ SELECT COUNT(*) FROM s",
+      "norec_unoptimized": "/* 正确基线：空表聚合，返回 NULL */ SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM s",
+      "predicate": "TRUE"
+    },
+    "tlp_checked": true,
+    "tlp_inconsistent": false,
+    "norec_checked": true,
+    "norec_inconsistent": true
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120721.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 原表：空结果\nSELECT 0.4034060568939616 AS ref0\nFROM src\nWHERE COALESCE(NULL,0.026605629777798234) IN (c1)\nORDER BY id",
+        "ok": true,
+        "rows": [],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "-- 原表：空结果\nSELECT 0.4034060568939616 AS ref0\nFROM src\nWHERE COALESCE(NULL,0.026605629777798234) IN (c1)\nORDER BY id;",
+    "skip_reason": "ORDER BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120732.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT DISTINCT\n  LEAST((! s.c), s.id NOT IN (NULL, NULL, s.c)) AS a,\n  (((s.c) IN (s.id)) AND (IFNULL(s.c, 1767027735))) AND (0.07523026689631984) AS b,\n  SUM(DISTINCT EXISTS (SELECT 1)) AS c\nFROM s\nGROUP BY\n  LEAST((NOT s.c), s.id NOT IN (NULL, NULL, s.c)),\n  (((s.c) IN (s.id)) AND (IFNULL(s.c, 1767027735))) AND (0.07523026689631984)",
+        "ok": true,
+        "rows": [
+          "NULL\tNULL\t1",
+          "NULL\t0\t1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "SELECT DISTINCT\n  LEAST((! s.c), s.id NOT IN (NULL, NULL, s.c)) AS a,\n  (((s.c) IN (s.id)) AND (IFNULL(s.c, 1767027735))) AND (0.07523026689631984) AS b,\n  SUM(DISTINCT EXISTS (SELECT 1)) AS c\nFROM s\nGROUP BY\n  LEAST((NOT s.c), s.id NOT IN (NULL, NULL, s.c)),\n  (((s.c) IN (s.id)) AND (IFNULL(s.c, 1767027735))) AND (0.07523026689631984);",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120733.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 原表：两组\nSELECT DISTINCTROW\n  (NOT ((src.c2) IS FALSE)) AS ref0,\n  (((+ (src.id))) IN (src.c3)) AND ((+ ((NULL) IN (691925563)))) AS ref1,\n  COUNT(DISTINCT '伴ꪎ鲫K') AS ref2\nFROM src\nWHERE ((NOT ((CASE 476522779\n  WHEN 0.6412434890036196 THEN 0.09819858593173747\n  WHEN src.id THEN src.c6\n  WHEN -200221192 THEN src.id\n  ELSE 0.5051427622194795\nEND)))) <= (((! ('a'))) >= (CAST(633536363 AS SIGNED)))\nGROUP BY\n  (! ((src.c2) IS FALSE)),\n  (((+ (src.id))) IN (src.c3)) AND ((+ ((NULL) IN (691925563))))\nORDER BY 'I' DESC",
+        "ok": true,
+        "rows": [
+          "1\tNULL\t1",
+          "1\t0\t1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "-- 原表：两组\nSELECT DISTINCTROW\n  (NOT ((src.c2) IS FALSE)) AS ref0,\n  (((+ (src.id))) IN (src.c3)) AND ((+ ((NULL) IN (691925563)))) AS ref1,\n  COUNT(DISTINCT '伴ꪎ鲫K') AS ref2\nFROM src\nWHERE ((NOT ((CASE 476522779\n  WHEN 0.6412434890036196 THEN 0.09819858593173747\n  WHEN src.id THEN src.c6\n  WHEN -200221192 THEN src.id\n  ELSE 0.5051427622194795\nEND)))) <= (((! ('a'))) >= (CAST(633536363 AS SIGNED)))\nGROUP BY\n  (! ((src.c2) IS FALSE)),\n  (((+ (src.id))) IN (src.c3)) AND ((+ ((NULL) IN (691925563))))\nORDER BY 'I' DESC;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120734.sql",
+    "status": "done",
+    "queries": {
+      "original": {
+        "sql": "-- Single query: returns 1\nSELECT MAX(DISTINCT source.vp_rowid) AS ref0\nFROM source\nWHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)",
+        "ok": true,
+        "rows": [
+          "1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "tlp_base": {
+        "sql": "/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS ref0 FROM source",
+        "ok": true,
+        "rows": [
+          "1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "tlp_union": {
+        "sql": "SELECT MAX(agg0) FROM (/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) UNION ALL /* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE NOT LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) UNION ALL /* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) IS NULL) AS tlp_parts",
+        "ok": true,
+        "rows": [
+          "1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "norec_optimized": {
+        "sql": "/* Single query: returns 1 */ SELECT COUNT(*) FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)",
+        "ok": true,
+        "rows": [
+          "0"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "norec_unoptimized": {
+        "sql": "/* Single query: returns 1 */ SELECT SUM(CASE WHEN LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) THEN 1 ELSE NULL END) FROM source",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "-- Single query: returns 1\nSELECT MAX(DISTINCT source.vp_rowid) AS ref0\nFROM source\nWHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid);",
+    "variants": {
+      "tlp_base": "/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS ref0 FROM source",
+      "tlp_part_true": "/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS ref0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)",
+      "tlp_part_false": "/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS ref0 FROM source WHERE NOT LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)",
+      "tlp_part_unknown": "/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS ref0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) IS NULL",
+      "tlp_union": "SELECT MAX(agg0) FROM (/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) UNION ALL /* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE NOT LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) UNION ALL /* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) IS NULL) AS tlp_parts",
+      "norec_optimized": "/* Single query: returns 1 */ SELECT COUNT(*) FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)",
+      "norec_unoptimized": "/* Single query: returns 1 */ SELECT SUM(CASE WHEN LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) THEN 1 ELSE NULL END) FROM source",
+      "predicate": "LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)"
+    },
+    "tlp_checked": true,
+    "tlp_inconsistent": false,
+    "norec_checked": true,
+    "norec_inconsistent": true
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120737.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT DISTINCT\n  'single' AS q,\n  COUNT((GREATEST(s.c0, '')) && (0.980680600517849)) AS ref0,\n  (+(((s.c1) IS FALSE) &&\n     ((CASE 0.03346139528957415 WHEN s.c0 THEN s.vp_rowid ELSE 1446123744 END)))) AS ref1,\n  SUM(DISTINCT CAST(s.c0 AS DECIMAL(65,30))) AS ref2\nFROM s\nGROUP BY (+(((s.c1) IS FALSE) &&\n       ((CASE 0.03346139528957415 WHEN s.c0 THEN s.vp_rowid ELSE 1446123744 END))))",
+        "ok": true,
+        "rows": [
+          "single\t2\t0\t100000000000000000000000001930040182.999999999999999999999999999999"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 11,
+    "target_query": "SELECT DISTINCT\n  'single' AS q,\n  COUNT((GREATEST(s.c0, '')) && (0.980680600517849)) AS ref0,\n  (+(((s.c1) IS FALSE) &&\n     ((CASE 0.03346139528957415 WHEN s.c0 THEN s.vp_rowid ELSE 1446123744 END)))) AS ref1,\n  SUM(DISTINCT CAST(s.c0 AS DECIMAL(65,30))) AS ref2\nFROM s\nGROUP BY (+(((s.c1) IS FALSE) &&\n       ((CASE 0.03346139528957415 WHEN s.c0 THEN s.vp_rowid ELSE 1446123744 END))));",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120785.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT DISTINCT s.c0 AS ref0\nFROM s\nGROUP BY s.c0",
+        "ok": true,
+        "rows": [
+          "1903340000",
+          "1894990000",
+          "-0",
+          "NULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 13,
+    "target_query": "SELECT DISTINCT s.c0 AS ref0\nFROM s\nGROUP BY s.c0;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120786.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT MIN(DISTINCT CAST((CAST(s.c1 AS SIGNED)) IN ((s.c0) != (s.c2)) AS SIGNED)) AS ref0\nFROM s\nWHERE IFNULL(0.9349479012631875, -1058210595) IN (s.c3)\nGROUP BY EXISTS (SELECT 1)",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 13,
+    "target_query": "SELECT MIN(DISTINCT CAST((CAST(s.c1 AS SIGNED)) IN ((s.c0) != (s.c2)) AS SIGNED)) AS ref0\nFROM s\nWHERE IFNULL(0.9349479012631875, -1058210595) IN (s.c3)\nGROUP BY EXISTS (SELECT 1);",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120802.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT DISTINCTROW c0 AS ref0\nFROM s\nWHERE c1 IN (COALESCE(0.36047097332362965, NULL, NULL, 275915752))",
+        "ok": true,
+        "rows": [],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 13,
+    "target_query": "SELECT DISTINCTROW c0 AS ref0\nFROM s\nWHERE c1 IN (COALESCE(0.36047097332362965, NULL, NULL, 275915752));",
+    "skip_reason": "DISTINCT is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120803.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT CAST(LEAST('z', '_ejEZpA(1', '2090248689', c0) AS SIGNED) AS ref0\nFROM s\nORDER BY vp_rowid",
+        "ok": true,
+        "rows": [
+          "0",
+          "1521367719",
+          "2090248689"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "SELECT CAST(LEAST('z', '_ejEZpA(1', '2090248689', c0) AS SIGNED) AS ref0\nFROM s\nORDER BY vp_rowid;",
+    "skip_reason": "ORDER BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120832.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- Single: 查 src\nSELECT 'single' AS query_type, (((c0) LIKE (NULL)) IS FALSE) IS NULL AS ref0\nFROM src\nWHERE (CAST((vp_rowid) IS NOT NULL AS SIGNED)) IS FALSE\nGROUP BY (((c0) LIKE (NULL)) IS FALSE) IS NULL WITH ROLLUP",
+        "ok": true,
+        "rows": [
+          "single\tNULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "-- Single: 查 src\nSELECT 'single' AS query_type, (((c0) LIKE (NULL)) IS FALSE) IS NULL AS ref0\nFROM src\nWHERE (CAST((vp_rowid) IS NOT NULL AS SIGNED)) IS FALSE\nGROUP BY (((c0) LIKE (NULL)) IS FALSE) IS NULL WITH ROLLUP;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120833.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- Single query: 查 src（有索引 → INDEX LOOKUP，0.433 截断为 0 → 错误匹配 2 行）\nSELECT 'single' AS query_type, COUNT(*) AS row_count\nFROM src\nWHERE (IF(NULL, 0.3530399531809283, 0.43307147808600643)) IN (c0)",
+        "ok": true,
+        "rows": [
+          "single\t2"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 12,
+    "target_query": "-- Single query: 查 src（有索引 → INDEX LOOKUP，0.433 截断为 0 → 错误匹配 2 行）\nSELECT 'single' AS query_type, COUNT(*) AS row_count\nFROM src\nWHERE (IF(NULL, 0.3530399531809283, 0.43307147808600643)) IN (c0);",
+    "skip_reason": "only one top-level aggregate expression is supported"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120834.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT DISTINCT\n  SUM(DISTINCT 0.829074650150795) AS a,\n  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))\n    || ((+ ((s.x) >= (s.id)))) AS b,\n  EXISTS (SELECT 1 WHERE FALSE) AS c,\n  AVG(x) AS d\nFROM s\nGROUP BY\n  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))\n    || ((+ ((s.x) >= (s.id))))",
+        "ok": true,
+        "rows": [
+          "0.829074650150795\tNULL\t0\tNULL",
+          "0.829074650150795\t1\t0\t0"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 13,
+    "target_query": "SELECT DISTINCT\n  SUM(DISTINCT 0.829074650150795) AS a,\n  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))\n    || ((+ ((s.x) >= (s.id)))) AS b,\n  EXISTS (SELECT 1 WHERE FALSE) AS c,\n  AVG(x) AS d\nFROM s\nGROUP BY\n  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))\n    || ((+ ((s.x) >= (s.id))));",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120864.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- Single: 覆盖索引 → (-2,0), (-1,NULL) ✓\nSELECT (- vp_rowid) AS ref0, ('x') = (IFNULL(NULL, c1) XOR 0) AS ref1\nFROM src GROUP BY (- vp_rowid), ('x') = (IFNULL(NULL, c1) XOR 0)",
+        "ok": true,
+        "rows": [
+          "-2\t0",
+          "-1\tNULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 10,
+    "target_query": "-- Single: 覆盖索引 → (-2,0), (-1,NULL) ✓\nSELECT (- vp_rowid) AS ref0, ('x') = (IFNULL(NULL, c1) XOR 0) AS ref1\nFROM src GROUP BY (- vp_rowid), ('x') = (IFNULL(NULL, c1) XOR 0);",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120867.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT 'single' AS qt, s.c1 AS ref0\nFROM s\nWHERE s.c0 < IFNULL(1.7976931348623157E308, -1605651052)\nGROUP BY s.c1",
+        "ok": true,
+        "rows": [],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 12,
+    "target_query": "SELECT 'single' AS qt, s.c1 AS ref0\nFROM s\nWHERE s.c0 < IFNULL(1.7976931348623157E308, -1605651052)\nGROUP BY s.c1;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120903.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT 'single' AS qt,\n       src.vp_rowid,\n       -((src.vp_rowid) = ((src.c0) NOT IN (src.c1))) AS ref2,\n       CAST(IFNULL(src.c1, src.vp_rowid) AS SIGNED) AS ref3,\n       BIT_AND(CAST(vp_rowid AS SIGNED)) AS ref4\nFROM src\nGROUP BY\n       -((src.vp_rowid) = ((src.c0) NOT IN (src.c1))),\n       src.vp_rowid,\n       CAST(IFNULL(src.c1, src.vp_rowid) AS SIGNED)\nWITH ROLLUP\nORDER BY src.vp_rowid\nLIMIT 4",
+        "ok": true,
+        "rows": [
+          "single\tNULL\t0\tNULL\t0",
+          "single\tNULL\tNULL\tNULL\t0",
+          "single\tNULL\tNULL\tNULL\t0",
+          "single\t1\tNULL\tNULL\t1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "SELECT 'single' AS qt,\n       src.vp_rowid,\n       -((src.vp_rowid) = ((src.c0) NOT IN (src.c1))) AS ref2,\n       CAST(IFNULL(src.c1, src.vp_rowid) AS SIGNED) AS ref3,\n       BIT_AND(CAST(vp_rowid AS SIGNED)) AS ref4\nFROM src\nGROUP BY\n       -((src.vp_rowid) = ((src.c0) NOT IN (src.c1))),\n       src.vp_rowid,\n       CAST(IFNULL(src.c1, src.vp_rowid) AS SIGNED)\nWITH ROLLUP\nORDER BY src.vp_rowid\nLIMIT 4;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120905.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- Single: 返回 1043103758\nSELECT 'single' AS q,\n    SUM(DISTINCT CASE 0.5 WHEN id THEN c1 ELSE 1043103758 END) AS ref0\nFROM src\nGROUP BY id",
+        "ok": true,
+        "rows": [
+          "single\t1043103758"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "-- Single: 返回 1043103758\nSELECT 'single' AS q,\n    SUM(DISTINCT CASE 0.5 WHEN id THEN c1 ELSE 1043103758 END) AS ref0\nFROM src\nGROUP BY id;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120907.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 单表：实际返回空\nSELECT c0\nFROM src\nWHERE +(IF('', NULL, '0.22857643383585602')) IN (c0)\nORDER BY CAST((CASE c0 WHEN vp_rowid THEN vp_rowid ELSE NULL END) IS NOT NULL AS SIGNED) DESC",
+        "ok": true,
+        "rows": [],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "-- 单表：实际返回空\nSELECT c0\nFROM src\nWHERE +(IF('', NULL, '0.22857643383585602')) IN (c0)\nORDER BY CAST((CASE c0 WHEN vp_rowid THEN vp_rowid ELSE NULL END) IS NOT NULL AS SIGNED) DESC;",
+    "skip_reason": "ORDER BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120908.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- Single: 返回 2 行\nSELECT DISTINCTROW\n    'single' AS q,\n    ('x') OR (CAST((src.c0) XOR (src.id) AS SIGNED)) AS ref0,\n    (((src.id) < (src.id)) >= ((src.c0) NOT IN (3.35077561E8))) IN (NULL) AS ref1,\n    COUNT(DISTINCT (src.c0) IS NOT TRUE) AS ref2\nFROM src\nGROUP BY\n    (((src.id) < (src.id)) >= ((src.c0) NOT IN (3.35077561E8))) IN (NULL),\n    ('x') OR (CAST((src.c0) XOR (src.id) AS SIGNED))",
+        "ok": true,
+        "rows": [
+          "single\t0\tNULL\t1",
+          "single\t1\tNULL\t1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "-- Single: 返回 2 行\nSELECT DISTINCTROW\n    'single' AS q,\n    ('x') OR (CAST((src.c0) XOR (src.id) AS SIGNED)) AS ref0,\n    (((src.id) < (src.id)) >= ((src.c0) NOT IN (3.35077561E8))) IN (NULL) AS ref1,\n    COUNT(DISTINCT (src.c0) IS NOT TRUE) AS ref2\nFROM src\nGROUP BY\n    (((src.id) < (src.id)) >= ((src.c0) NOT IN (3.35077561E8))) IN (NULL),\n    ('x') OR (CAST((src.c0) XOR (src.id) AS SIGNED));",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120909.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT 'single' AS q,\n       COUNT(EXISTS(SELECT 1 WHERE FALSE)) AS ref0,\n       src.id AS ref1,\n       COALESCE((NULL) XOR (src.id), CAST('x' AS SIGNED)) AS ref2\nFROM src\nGROUP BY\n       src.id,\n       COALESCE((NULL) XOR (src.id), CAST('x' AS SIGNED))\nWITH ROLLUP\nORDER BY src.id\nLIMIT 2",
+        "ok": true,
+        "rows": [
+          "single\t5\tNULL\tNULL",
+          "single\t1\t1\tNULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 12,
+    "target_query": "SELECT 'single' AS q,\n       COUNT(EXISTS(SELECT 1 WHERE FALSE)) AS ref0,\n       src.id AS ref1,\n       COALESCE((NULL) XOR (src.id), CAST('x' AS SIGNED)) AS ref2\nFROM src\nGROUP BY\n       src.id,\n       COALESCE((NULL) XOR (src.id), CAST('x' AS SIGNED))\nWITH ROLLUP\nORDER BY src.id\nLIMIT 2;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120966.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 单表查询（covering index → IN 转 = 走索引 → 错误命中 c0=1）\nSELECT DISTINCT NULL AS ref0 FROM vp_s\nWHERE (LEAST(0.8543270419078102, '2F')) IN (vp_s.c0)\nGROUP BY NULL",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 14,
+    "target_query": "-- 单表查询（covering index → IN 转 = 走索引 → 错误命中 c0=1）\nSELECT DISTINCT NULL AS ref0 FROM vp_s\nWHERE (LEAST(0.8543270419078102, '2F')) IN (vp_s.c0)\nGROUP BY NULL;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120975.sql",
+    "status": "done",
+    "queries": {
+      "original": {
+        "sql": "-- 单表（优化器常量评估 → Impossible WHERE → 0 行）\nSELECT EXISTS (SELECT 1) AS ref0 FROM vp_s\nWHERE (vp_s.c0) IN (IFNULL(0.7957106135922298, 'nK'))",
+        "ok": true,
+        "rows": [],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "tlp_base": {
+        "sql": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s",
+        "ok": true,
+        "rows": [
+          "1",
+          "1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "tlp_union": {
+        "sql": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) UNION ALL /* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE NOT (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) UNION ALL /* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) IS NULL",
+        "ok": true,
+        "rows": [
+          "1",
+          "1"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "norec_optimized": {
+        "sql": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT COUNT(*) FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK'))",
+        "ok": true,
+        "rows": [
+          "0"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "norec_unoptimized": {
+        "sql": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT SUM(CASE WHEN (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) THEN 1 ELSE NULL END) FROM vp_s",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 13,
+    "target_query": "-- 单表（优化器常量评估 → Impossible WHERE → 0 行）\nSELECT EXISTS (SELECT 1) AS ref0 FROM vp_s\nWHERE (vp_s.c0) IN (IFNULL(0.7957106135922298, 'nK'));",
+    "variants": {
+      "tlp_base": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s",
+      "tlp_part_true": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK'))",
+      "tlp_part_false": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE NOT (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK'))",
+      "tlp_part_unknown": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) IS NULL",
+      "tlp_union": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) UNION ALL /* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE NOT (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) UNION ALL /* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) IS NULL",
+      "norec_optimized": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT COUNT(*) FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK'))",
+      "norec_unoptimized": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT SUM(CASE WHEN (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) THEN 1 ELSE NULL END) FROM vp_s",
+      "predicate": "(vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK'))"
+    },
+    "tlp_checked": true,
+    "tlp_inconsistent": false,
+    "norec_checked": true,
+    "norec_inconsistent": true
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120976.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 单表查询（covering index → CAST 正确）\nSELECT DISTINCTROW MAX(DISTINCT vp_s.vp_rowid) AS ref0 FROM vp_s\nWHERE CAST(IFNULL(vp_s.c0, vp_s.c1) AS SIGNED)",
+        "ok": true,
+        "rows": [
+          "2"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 16,
+    "target_query": "-- 单表查询（covering index → CAST 正确）\nSELECT DISTINCTROW MAX(DISTINCT vp_s.vp_rowid) AS ref0 FROM vp_s\nWHERE CAST(IFNULL(vp_s.c0, vp_s.c1) AS SIGNED);",
+    "skip_reason": "DISTINCT is not handled by this batch rewriter"
+  },
+  {
+    "database": "MySQL",
+    "source": "/home/lwm/sqlancer/Bugs/MySQL/120981.sql",
+    "status": "done",
+    "queries": {
+      "original": {
+        "sql": "-- 单表查询（covering index → IFNULL 正确 → c0=0 的行通过）\nSELECT COUNT(*) FROM vp_s\nWHERE 1 NOT IN (IFNULL(NULL, vp_s.c0), CAST('abc' AS SIGNED))",
+        "ok": true,
+        "rows": [
+          "2"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "tlp_base": {
+        "sql": "/* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) FROM vp_s",
+        "ok": true,
+        "rows": [
+          "4"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "tlp_union": {
+        "sql": "SELECT SUM(agg0) FROM (/* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) AS agg0 FROM vp_s WHERE NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED)) UNION ALL /* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) AS agg0 FROM vp_s WHERE NOT NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED)) UNION ALL /* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) AS agg0 FROM vp_s WHERE NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED)) IS NULL) AS tlp_parts",
+        "ok": true,
+        "rows": [
+          "6"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "norec_optimized": {
+        "sql": "/* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) FROM vp_s WHERE NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED))",
+        "ok": true,
+        "rows": [
+          "2"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      },
+      "norec_unoptimized": {
+        "sql": "/* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT SUM(CASE WHEN NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED)) THEN 1 ELSE NULL END) FROM vp_s",
+        "ok": true,
+        "rows": [
+          "2"
+        ],
+        "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+        "stdout": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 14,
+    "target_query": "-- 单表查询（covering index → IFNULL 正确 → c0=0 的行通过）\nSELECT COUNT(*) FROM vp_s\nWHERE 1 NOT IN (IFNULL(NULL, vp_s.c0), CAST('abc' AS SIGNED));",
+    "variants": {
+      "tlp_base": "/* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) FROM vp_s",
+      "tlp_part_true": "/* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) FROM vp_s WHERE NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED))",
+      "tlp_part_false": "/* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) FROM vp_s WHERE NOT NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED))",
+      "tlp_part_unknown": "/* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) FROM vp_s WHERE NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED)) IS NULL",
+      "tlp_union": "SELECT SUM(agg0) FROM (/* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) AS agg0 FROM vp_s WHERE NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED)) UNION ALL /* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) AS agg0 FROM vp_s WHERE NOT NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED)) UNION ALL /* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) AS agg0 FROM vp_s WHERE NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED)) IS NULL) AS tlp_parts",
+      "norec_optimized": "/* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT COUNT(*) FROM vp_s WHERE NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED))",
+      "norec_unoptimized": "/* 单表查询（covering index → IFNULL 正确 → c0=0 的行通过） */ SELECT SUM(CASE WHEN NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED)) THEN 1 ELSE NULL END) FROM vp_s",
+      "predicate": "NOT 1 IN (COALESCE(NULL, vp_s.c0), CAST('abc' AS SIGNED))"
+    },
+    "tlp_checked": true,
+    "tlp_inconsistent": true,
+    "norec_checked": true,
+    "norec_inconsistent": false
+  }
+]

@@ -1,0 +1,177 @@
+#69177 https://github.com/pingcap/tidb/issues/69177 confirmed as a bug.
+
+DROP DATABASE IF EXISTS repro39;
+CREATE DATABASE repro39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+USE repro39;
+
+CREATE TABLE src (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 CHAR(1)
+) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+INSERT INTO src(c0) VALUES ('-'), ('(');
+
+CREATE TABLE l (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 CHAR(1)
+) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 CHAR(1)
+) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+INSERT INTO l SELECT id, c0 FROM src;
+INSERT INTO r SELECT id, c0 FROM src;
+
+SELECT HEX(MIN(CAST(c0 AS BINARY))) AS source_hex,
+       MIN(CAST(c0 AS BINARY)) AS source_val
+FROM src;
+
+SELECT HEX(MIN(CAST(l.c0 AS BINARY))) AS join_hex,
+       MIN(CAST(l.c0 AS BINARY)) AS join_val
+FROM l JOIN r ON l.id = r.id;
+
+
+| 字符  | ASCII 码 | HEX    |
+| --- | ------- | ------ |
+| `(` | 40      | `0x28` |
+| `-` | 45      | `0x2D` |
+二进制最小值应为 (（0x28），因为 0x28 < 0x2D
+
+
+| 查询              | 结果           | HEX  | 实际最小值    |
+| --------------- | ------------ | ---- | -------- |
+| 单表 `src`        | `0x2D`  | `2D` | ❌ **错误** |
+| JOIN `l JOIN r` | `0x28`   | `28` | ✅ **正确** |
+
+单表查询执行计划（错误结果）
+
+Projection_8              [root]      hex(Column#4)->Column#5, Column#4
+└─StreamAgg_13            [root]      funcs:min(Column#8)->Column#4
+  └─Projection_27         [root]      cast(repro39.src.c0, var_string(1) BINARY)->Column#8
+    └─Projection_25       [root]      repro39.src.c0
+      └─TopN_14           [root]      Column#7, offset:0, count:1
+        └─Projection_26   [root]      repro39.src.c0, cast(... BINARY)->Column#7
+          └─TableReader_21[root]      data:TopN_20
+            └─TopN_20     [cop[tikv]] cast(repro39.src.c0, var_string(1) BINARY), offset:0, count:1  ← ⚠️ 下推
+              └─Selection_19[cop[tikv]] not(isnull(cast(... BINARY)))
+                └─TableFullScan_18[cop[tikv]] table:src
+
+JOIN 查询执行计划（正确结果）
+
+Projection_12           [root]      hex(Column#7)->Column#8, Column#7
+└─StreamAgg_17          [root]      funcs:min(Column#11)->Column#7
+  └─Projection_54       [root]      cast(repro39.l.c0, var_string(1) BINARY)->Column#11
+    └─Projection_52     [root]      repro39.l.c0
+      └─TopN_20         [root]      Column#10, offset:0, count:1           ← ✅ 保留在 Root
+        └─Projection_53 [root]      repro39.l.c0, cast(... BINARY)->Column#10
+          └─IndexJoin_23  [root]      inner join, outer key:l.id, inner key:r.id
+            ├─TableReader_44[root]    data:Selection_43
+            │ └─Selection_43[cop[tikv]] not(isnull(cast(l.c0, BINARY)))
+            │   └─TableFullScan_42[cop[tikv]] table:l
+            └─TableReader_46[root]    data:TableRangeScan_45
+              └─TableRangeScan_45[cop[tikv]] table:r, range: decided by [l.id]
+
+| 维度                    | 单表查询（错误）               | JOIN 查询（正确）            |
+| --------------------- | ---------------------- | ---------------------- |
+| `TopN` 位置             | **TiKV** (`cop[tikv]`) | **TiDB Root** (`root`) |
+| `CAST AS BINARY` 执行位置 | TiKV 端                 | TiDB 端                 |
+| 排序比较器                 | TiKV 实现                | TiDB 实现                |
+| 结果                    | `0x2D` (`-`) ❌         | `0x28` (`(`) ✅         |
+
+
+TiDB 将 MIN(expr) 优化为 TopN(expr, 1)（即 ORDER BY expr LIMIT 1）。
+当 TopN 被下推到 TiKV 时：
+    TiKV 使用自己的表达式计算引擎对 CAST(c0 AS BINARY) 进行排序
+    TiKV 的排序结果与 TiDB 的排序结果不一致
+
+JOIN 查询中，由于存在多表关联，优化器判断 TopN 无法安全下推到 TiKV（或下推收益不大），因此 TopN 保留在 TiDB Root 层执行，避开了 TiKV 的 Bug。
+
+
+
+DROP DATABASE IF EXISTS repro41;
+CREATE DATABASE repro41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+USE repro41;
+
+CREATE TABLE src (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 CHAR(1)
+) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+INSERT INTO src(c0) VALUES (''), ('璘');
+
+CREATE TABLE l (
+  id BIGINT NOT NULL PRIMARY KEY
+) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 CHAR(1)
+) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+INSERT INTO l SELECT id FROM src;
+INSERT INTO r SELECT id, c0 FROM src;
+
+SELECT HEX(MAX(BINARY c0)) AS single_hex,
+       MAX(BINARY c0) AS single_val
+FROM src;
+
+SELECT HEX(MAX(BINARY r.c0)) AS join_hex,
+       MAX(BINARY r.c0) AS join_val
+FROM l JOIN r ON l.id = r.id;
+
+| 字符  | UTF-8 字节序列 | HEX        |
+| --- | ---------- | ---------- |
+| `` | `EE AC 86` | `0xEEAC86` |
+| `璘` | `EF A7 AF` | `0xEFA7AF` |
+二进制最大值应为 璘（0xEFA7AF），因为逐字节比较 EF > EE
+
+| 查询              | 结果         | HEX      | 实际最大值    |
+| --------------- | ---------- | -------- | -------- |
+| 单表 `src`        | `0xEEAC86` | `EEAC86` | ❌ **错误** |
+| JOIN `l JOIN r` | `0xEFA7AF` | `EFA7AF` | ✅ **正确** |
+
+单表查询执行计划（错误结果）
+Projection_8           [root]      hex(Column#4)->Column#5, Column#4
+└─StreamAgg_13       [root]      funcs:max(Column#8)->Column#4
+  └─Projection_27    [root]      cast(repro41.src.c0, binary(1))->Column#8
+    └─Projection_25  [root]      repro41.src.c0
+      └─TopN_14      [root]      Column#7:desc, offset:0, count:1
+        └─Projection_26[root]    repro41.src.c0, cast(... binary(1))->Column#7
+          └─TableReader_21[root] data:TopN_20
+            └─TopN_20  [cop[tikv]] cast(repro41.src.c0, binary(1)):desc, offset:0, count:1  ← ⚠️ 下推
+              └─Selection_19[cop[tikv]] not(isnull(cast(... binary(1))))
+                └─TableFullScan_18[cop[tikv]] table:src
+
+
+JOIN 查询执行计划（正确结果）
+Projection_13        [root]      hex(Column#6)->Column#7, Column#6
+└─StreamAgg_18       [root]      funcs:max(Column#10)->Column#6
+  └─Projection_57    [root]      cast(repro41.r.c0, binary(1))->Column#10
+    └─Projection_55  [root]      repro41.r.c0
+      └─TopN_21      [root]      Column#9:desc, offset:0, count:1           ← ✅ 保留在 Root
+        └─Projection_56[root]    repro41.r.c0, cast(... binary(1))->Column#9
+          └─MergeJoin_24[root]  inner join, left key:r.id, right key:l.id
+            ├─TableReader_43[root] data:TableFullScan_42
+            │ └─TableFullScan_42[cop[tikv]] table:l, keep order:true
+            └─TableReader_41[root] data:Selection_40
+              └─Selection_40[cop[tikv]] not(isnull(cast(r.c0, binary(1))))
+                └─TableFullScan_39[cop[tikv]] table:r, keep order:true
+
+| 维度               | 单表查询（错误）               | JOIN 查询（正确）            |
+| ---------------- | ---------------------- | ---------------------- |
+| `TopN` 位置        | **TiKV** (`cop[tikv]`) | **TiDB Root** (`root`) |
+| `BINARY c0` 执行位置 | TiKV 端                 | TiDB 端                 |
+| 排序方向             | `desc`（MAX 优化）         | `desc`                 |
+| 连接算子             | 无                      | `MergeJoin_24`         |
+| `TableReader` 数量 | 1 个                    | 2 个（Build + Probe）     |
+| 排序比较器            | TiKV 实现                | TiDB 实现                |
+| 结果               | `0xEEAC86` (``) ❌     | `0xEFA7AF` (`璘`) ✅     |
+
+
+TiDB 将 MAX(expr) 优化为 TopN(expr, desc, 1)（即 ORDER BY expr DESC LIMIT 1）。
+当 TopN 被下推到 TiKV 时：
+TiKV 使用自己的表达式计算引擎对 BINARY c0 进行排序
+TiKV 的排序结果与 TiDB 的排序结果不一致
+JOIN 查询中，由于存在多表关联，优化器判断 TopN 无法安全下推到 TiKV，因此 TopN 保留在 TiDB Root 层执行，避开了 TiKV 的 Bug。

@@ -1,0 +1,236 @@
+#69358: https://github.com/pingcap/tidb/issues/69358 confirmed as a bug.
+
+DROP DATABASE IF EXISTS repro_tidb617_db31_min;
+CREATE DATABASE repro_tidb617_db31_min;
+USE repro_tidb617_db31_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+
+CREATE TABLE src(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 BOOLEAN NULL,
+  c2 DECIMAL(65,30) NULL
+);
+
+INSERT INTO src(c0,c2) VALUES
+  (0,0),
+  (1,NULL);
+
+CREATE TABLE l(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c2 DECIMAL(65,30) NULL
+);
+
+CREATE TABLE r(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 BOOLEAN NULL
+);
+
+INSERT INTO l SELECT id,c2 FROM src;
+INSERT INTO r SELECT id,c0 FROM src;
+
+SELECT
+  id,
+  c0,
+  c2,
+  CASE '2025-02-01 20:39:39'
+    WHEN c0 THEN ((false) REGEXP NULL)
+    ELSE CAST(c2 AS TIME)
+  END AS case_expr,
+  CAST(
+    CASE '2025-02-01 20:39:39'
+      WHEN c0 THEN ((false) REGEXP NULL)
+      ELSE CAST(c2 AS TIME)
+    END AS DATETIME
+  ) AS val
+FROM src
+ORDER BY id;
+
+SELECT
+  CAST(
+    CASE '2025-02-01 20:39:39'
+      WHEN c0 THEN ((false) REGEXP NULL)
+      ELSE CAST(c2 AS TIME)
+    END AS DATETIME
+  ) AS val
+FROM src
+GROUP BY
+  CAST(
+    CASE '2025-02-01 20:39:39'
+      WHEN c0 THEN ((false) REGEXP NULL)
+      ELSE CAST(c2 AS TIME)
+    END AS DATETIME
+  );
+
+SELECT
+  CAST(
+    CASE '2025-02-01 20:39:39'
+      WHEN v.c0 THEN ((false) REGEXP NULL)
+      ELSE CAST(v.c2 AS TIME)
+    END AS DATETIME
+  ) AS val
+FROM (
+  SELECT l.id, r.c0, l.c2
+  FROM l
+  JOIN (
+    SELECT id, COUNT(*) AS cnt
+    FROM r
+    GROUP BY id
+  ) rg ON l.id = rg.id
+  JOIN r ON r.id = rg.id
+) v
+GROUP BY
+  CAST(
+    CASE '2025-02-01 20:39:39'
+      WHEN v.c0 THEN ((false) REGEXP NULL)
+      ELSE CAST(v.c2 AS TIME)
+    END AS DATETIME
+  );
+
+我来逐行解析这个 TiDB 查询优化器 bug，重点分析 GROUP BY 表达式在 TiKV cop 层和 TiDB root 层的去重语义差异。
+一、数据准备阶段
+sql
+DROP DATABASE IF EXISTS repro_tidb617_db31_min;
+CREATE DATABASE repro_tidb617_db31_min;
+USE repro_tidb617_db31_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,...';
+SET time_zone='+00:00';
+sql
+CREATE TABLE src(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 BOOLEAN NULL,
+  c2 DECIMAL(65,30) NULL
+);
+
+INSERT INTO src(c0,c2) VALUES
+  (0,0),      -- 行1: c0=FALSE, c2=0
+  (1,NULL);   -- 行2: c0=TRUE, c2=NULL
+sql
+CREATE TABLE l(id BIGINT PRIMARY KEY, c2 DECIMAL(65,30));
+CREATE TABLE r(id BIGINT PRIMARY KEY, c0 BOOLEAN);
+
+INSERT INTO l SELECT id,c2 FROM src;
+INSERT INTO r SELECT id,c0 FROM src;
+二、核心表达式分析
+sql
+SELECT
+  id, c0, c2,
+  CASE '2025-02-01 20:39:39'
+    WHEN c0 THEN ((false) REGEXP NULL)   -- c0='2025-02-01...' ? 不成立，走 ELSE
+    ELSE CAST(c2 AS TIME)
+  END AS case_expr,
+  CAST(case_expr AS DATETIME) AS val
+FROM src
+ORDER BY id;
+逐行求值：
+表格
+行	c0	c2	CASE WHEN c0 THEN ... ELSE CAST(c2 AS TIME)	CAST(... AS DATETIME)
+1	0 (FALSE)	0	CAST(0 AS TIME) → '00:00:00'	CAST('00:00:00' AS DATETIME) → NULL（TIME 转 DATETIME 失败）
+2	1 (TRUE)	NULL	FALSE REGEXP NULL → NULL	CAST(NULL AS DATETIME) → NULL
+结果验证：
+Text
+| id | c0 | c2   | case_expr | val  |
+|  1 |  0 | 0.00 | 00:00:00  | NULL |
+|  2 |  1 | NULL | NULL      | NULL |
+关键：两行最终 val 都是 NULL，但来源完全不同：
+行1：NULL 来自 CAST('00:00:00' AS DATETIME)（类型转换失败/不兼容）
+行2：NULL 来自 CAST(NULL AS DATETIME)（NULL 传播）
+三、Single 查询（直接查基表）
+sql
+SELECT
+  CAST(CASE '2025-02-01 20:39:39'
+         WHEN c0 THEN ((false) REGEXP NULL)
+         ELSE CAST(c2 AS TIME)
+       END AS DATETIME) AS val
+FROM src
+GROUP BY /* 相同表达式 */;
+预期： 两行 val 都是 NULL，GROUP BY NULL 应该合并为一组 → 返回 1 行
+实际结果：
+Text
++------+
+| val  |
++------+
+| NULL |
+| NULL |  ← 2 行！
++------+
+❌ 错误：两行 NULL 没有被合并！
+四、Split 查询（多表 JOIN）
+sql
+SELECT
+  CAST(CASE '2025-02-01 20:39:39'
+         WHEN v.c0 THEN ((false) REGEXP NULL)
+         ELSE CAST(v.c2 AS TIME)
+       END AS DATETIME) AS val
+FROM (
+  SELECT l.id, r.c0, l.c2
+  FROM l
+  JOIN (SELECT id, COUNT(*) FROM r GROUP BY id) rg ON l.id = rg.id
+  JOIN r ON r.id = rg.id
+) v
+GROUP BY /* 相同表达式 */;
+实际结果：
+Text
++------+
+| val  |
++------+
+| NULL |  ← 1 行
++------+
+✓ 正确：两行 NULL 被合并为一组
+五、核心矛盾
+表格
+路径	表达式相同	预期	实际
+Single	CAST(CASE ... AS DATETIME)	1 行	2 行 ❌
+Split	CAST(CASE ... AS DATETIME)	1 行	1 行 ✓
+同一数据、同一 GROUP BY 表达式，分组结果不同！
+六、执行计划对比
+Single 路径（关键）
+Text
+Projection_4                root
+  cast(case(...), datetime)->Column#5
+└─HashAgg_9                 root
+  group by:Column#7,
+  funcs:firstrow(src.c0), funcs:firstrow(src.c2)
+  └─TableReader_10          root
+    data:HashAgg_5
+    └─HashAgg_5             cop[tikv]    ← GROUP BY 下推到 TiKV
+      group by:
+        cast(
+          case(
+            eq(2025, cast(src.c0, double)),
+            NULL,
+            cast(cast(src.c2, time), var_string(10))  ← 注意这里！
+          ),
+          datetime
+        )
+      funcs:firstrow(src.c0), funcs:firstrow(src.c2)
+      └─TableFullScan_8     cop[tikv] table:src
+关键发现：TiKV 的 GROUP BY 表达式被改写为：
+sql
+CAST(
+  CASE
+    WHEN EQ('2025-02-01 20:39:39', CAST(c0, DOUBLE)) THEN NULL
+    ELSE CAST(CAST(c2 AS TIME), VAR_STRING(10))
+  END,
+  DATETIME
+)
+注意 ELSE 分支的变化：
+原始：CAST(c2 AS TIME)
+TiKV：CAST(CAST(c2 AS TIME), VAR_STRING(10))
+多了一层 CAST(... AS VAR_STRING(10))！
+Split 路径（关键）
+Text
+Projection_17               root
+  cast(case(...), datetime)->Column#11
+└─HashAgg_20                root
+  group by:Column#16,
+  funcs:firstrow(r.c0), funcs:firstrow(l.c2)
+  └─Projection_87           root
+    cast(case(...), datetime)->Column#16    ← 在 root 层计算分组键
+    └─MergeJoin_22          root
+      inner join
+      ...
+关键：GROUP BY 在 TiDB root 层完成，表达式直接在 root 计算
+
+这是一个典型的 "执行引擎分层语义不一致" bug：TiDB 优化器为了性能将 GROUP BY 下推到 TiKV，但在表达式改写过程中引入了额外的类型转换层，导致 TiKV 对 NULL 的内部表示与 TiDB 层不一致，最终破坏了分组语义。

@@ -1,0 +1,73 @@
+https://bugs.mysql.com/bug.php?id=120976&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro_mysql714_db38;
+CREATE DATABASE repro_mysql714_db38;
+USE repro_mysql714_db38;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+SET SESSION big_tables = 0;
+SET SESSION internal_tmp_mem_storage_engine = 'MEMORY';
+
+CREATE TABLE vp_s (
+    vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    c0       DECIMAL(65, 30) NULL,
+    c1       DECIMAL(65, 30) NULL
+) ENGINE = InnoDB;
+
+INSERT INTO vp_s (c0, c1) VALUES (NULL, NULL), (NULL, 1611551235), (0, NULL);
+
+ALTER TABLE vp_s ADD UNIQUE KEY i2 (c1, c0);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 DECIMAL(65, 30) NULL) ENGINE = InnoDB;
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c1 DECIMAL(65, 30) NULL) ENGINE = InnoDB;
+
+INSERT INTO vp_l SELECT vp_rowid, c0 FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c1 FROM vp_s;
+
+CREATE INDEX l_idx ON vp_l(c0);
+CREATE INDEX r_idx ON vp_r(c1);
+
+-- 单表查询（covering index → CAST 正确）
+SELECT DISTINCTROW MAX(DISTINCT vp_s.vp_rowid) AS ref0 FROM vp_s
+WHERE CAST(IFNULL(vp_s.c0, vp_s.c1) AS SIGNED);
+
+-- LATERAL 重构（JOIN → CAST 异常）
+SELECT DISTINCTROW MAX(DISTINCT vp_rowid) AS ref0 FROM (
+    SELECT l.vp_rowid AS vp_rowid, l.c0 AS c0, r.c1 AS c1
+    FROM vp_l l
+    JOIN LATERAL (SELECT * FROM vp_r rr WHERE rr.vp_rowid = l.vp_rowid) r ON TRUE
+) vp_source
+WHERE CAST(IFNULL(vp_source.c0, vp_source.c1) AS SIGNED);
+
+== 单表 ===
+|    2 |        ← MAX=2：vp_rowid=2 通过过滤
+
+=== LATERAL_DERIVED ===
+| NULL |        ← NULL：没有行通过过滤
+
+执行计划
+单表（covering index）：
+
+-> Aggregate: max(vp_s.vp_rowid)
+    -> Filter: (0 <> cast(ifnull(vp_s.c0,vp_s.c1) as signed))
+        -> Covering index scan on vp_s using i2 (c1, c0)
+
+LATERAL_DERIVED（JOIN）：
+
+-> Aggregate: max(l.vp_rowid)
+    -> Nested loop inner join
+        -> Covering index scan on l using l_idx
+        -> Filter: (0 <> cast(ifnull(l.c0,rr.c1) as signed))
+            -> Single-row index lookup on rr using PRIMARY (vp_rowid = l.vp_rowid)
+
+LATERAL 查询（异常）
+逻辑上，派生表 vp_source 由 vp_l 与 LATERAL (SELECT * FROM vp_r WHERE vp_rowid = l.vp_rowid) 做嵌套循环连接得到，列 c0、c1 分别来自 vp_l 和 vp_r。对 vp_rowid=2，应有 c0=NULL, c1=1611551235，理应通过过滤。
+但执行计划显示，过滤器是直接作用于嵌套循环连接结果的 0 <> cast(ifnull(l.c0, rr.c1) as signed)。实际运行时，这个表达式被错误求值，rr.c1（即 r.c1）的值被忽略或替换为 NULL，导致 IFNULL(l.c0, rr.c1) 对 c0=NULL 的行返回 NULL，CAST(NULL AS SIGNED) 也是 NULL，条件 0 <> NULL 为假，行被丢弃。
+
+成因推断
+
+优化器重写下推错误：MySQL 在处理 LATERAL 派生表时，可能会尝试将外层 WHERE 条件下推到嵌套循环的内表。但由于 IFNULL 的特殊语义（当外表列非空时不会读取内表列），下推逻辑可能把内表列 rr.c1 错误地常量化为 NULL（或直接省略引用），导致后续求值始终为 NULL。
+
+内部临时表类型转换：尽管执行计划未显示临时表，但在 internal_tmp_mem_storage_engine = MEMORY 的设定下，优化器若对 LATERAL 子查询进行了隐式物化（某些版本可能这样做），MEMORY 引擎不支持 DECIMAL(65,30) 列，会将其转为 DOUBLE 或 VARCHAR，此时可能因精度截断或转换失败产生 NULL。然而更直接的证据是，单表查询与 LATERAL 查询的数据完全相同，说明根因更偏向于 LATERAL 子句中对内表列引用的处理缺陷。

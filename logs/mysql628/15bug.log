@@ -1,0 +1,56 @@
+https://bugs.mysql.com/bug.php?id=120832&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro;
+CREATE DATABASE repro;
+USE repro;
+
+-- 源表
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 BIGINT
+) ENGINE=InnoDB;
+INSERT INTO src (c0) VALUES (1689933404);
+
+-- 拆分：l 只存 rowid，r 存 rowid + c0
+CREATE TABLE l (vp_rowid BIGINT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+CREATE TABLE r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 BIGINT) ENGINE=InnoDB;
+INSERT INTO l (vp_rowid) SELECT vp_rowid FROM src;
+INSERT INTO r (vp_rowid, c0) SELECT vp_rowid, c0 FROM src;
+
+-- Single: 查 src
+SELECT 'single' AS query_type, (((c0) LIKE (NULL)) IS FALSE) IS NULL AS ref0
+FROM src
+WHERE (CAST((vp_rowid) IS NOT NULL AS SIGNED)) IS FALSE
+GROUP BY (((c0) LIKE (NULL)) IS FALSE) IS NULL WITH ROLLUP;
+
+-- Split: SCALAR_SUBQUERY 从 l/r 重建
+SELECT 'split' AS query_type, (((c0) LIKE (NULL)) IS FALSE) IS NULL AS ref0
+FROM (
+  SELECT l.vp_rowid,
+    (SELECT r.c0 FROM r WHERE r.vp_rowid = l.vp_rowid) AS c0
+  FROM l
+) AS src
+WHERE (CAST((vp_rowid) IS NOT NULL AS SIGNED)) IS FALSE
+GROUP BY (((c0) LIKE (NULL)) IS FALSE) IS NULL WITH ROLLUP;
+
+single:  NULL  (ROLLUP 全链路 → 超聚集行为 NULL)
+split:   0     (Zero input rows 短路 → 直接输出 0)
+
+-- Single: 全链路
+-> Group (no aggregates)
+    -> Sort: ref0
+        -> Filter: ((0 <> cast((vp_rowid is not null) as signed)) is false)
+            -> Table scan on src
+
+-- Split: Zero input rows 短路
+-> Zero input rows (no matching row in const table), aggregated into one output row
+
+	全链路	Zero input rows 短路
+经过 ROLLUP？	✅ 是	❌ 否（跳过）
+ref0 来源	ROLLUP 超聚集的 GROUP BY key = NULL	真空上下文中求值 = 0
+((c0 LIKE NULL) IS FALSE) IS NULL	不重新求值，直接用 GROUP BY key	重新求值但无 c0
+证明 ref0 用的是 GROUP BY key 而非重新求值：
+
+即使表中有 c0=NULL 的行，((NULL LIKE NULL) IS FALSE) IS NULL = (NULL IS FALSE) IS NULL = 0 IS NULL = 0（永远不为 NULL）。所以 ref0 = NULL 不可能是重新求值得来的，只能是 ROLLUP 超聚集的 GROUP BY key 值。
+
+结论：MySQL 的 Zero input rows 优化路径没有正确应用 WITH ROLLUP 语义，导致 short-circuit 时表达式求值结果与全链路 ROLLUP 超聚集行不一致。

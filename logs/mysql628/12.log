@@ -1,0 +1,67 @@
+DROP DATABASE IF EXISTS repro;
+CREATE DATABASE repro;
+USE repro;
+
+CREATE TABLE t (id INT PRIMARY KEY, c0 FLOAT) ENGINE=InnoDB;
+INSERT INTO t VALUES (1, 1e-16);
+
+-- Single：直接查，FLOAT 保持原样
+SELECT 'single' AS qt, c0 FROM t;                          -- → 1e-16
+
+-- Split：FULL_OUTER_SIMULATION 的 UNION ALL 导致 FLOAT → DOUBLE
+SELECT 'split' AS qt, c0 FROM (
+  SELECT l.id, l.c0 FROM t l LEFT JOIN t r ON l.id = r.id
+  UNION ALL
+  SELECT r.id, l.c0 FROM t l RIGHT JOIN t r ON l.id = r.id WHERE l.id IS NULL
+) s;                                                        -- → 1.0000000168623835e-16
+
+-- 本质：CAST(FLOAT → DOUBLE) 暴露了精度误差
+SELECT CAST(1e-16 AS DOUBLE);                               -- → 1.0000000168623835e-16
+
+
+single: 1e-16                  ← FLOAT，保持原始精度
+split:  1.0000000168623835e-16 ← 被展成 DOUBLE，暴露二进制误差
+
+真相：CAST(1e-16 AS DOUBLE) = 1.0000000168623835e-16
+
+	database10	database12
+类型	collation 不一致	FLOAT → DOUBLE 隐式扩展
+根因	拆分表列未继承 utf8mb4_bin	UNION ALL 物化时展宽了 FLOAT 精度
+SQLancer 侧	拆分表建表漏 collation	FULL_OUTER_SIMULATION 的 UNION 路径引入了类型转换
+
+Single
+
+-> Table scan on src  (cost=0.55 rows=3)
+
+直接全表扫描，c0 全程保持 FLOAT，显示 1e-16。
+
+Split
+
+-> Table scan on s
+    -> Union all materialize  (cost=4.52 rows=6)
+        -> Nested loop left join          -- LEFT  JOIN: l ⋈ r
+            -> Table scan on l
+            -> Single-row index lookup on r (id = l.id)
+        -> Filter: (l.id is null)          -- RIGHT JOIN 补偿: r-only 行
+            -> Hash antijoin (l.id = r.id)
+                -> Index scan on r
+                -> Hash -> Table scan on l
+
+关键在 Union all materialize——UNION ALL 会创建物化临时表，此时 FLOAT 被隐式扩展为 DOUBLE。
+
+根因：FLOAT 经过 UNION ALL 物化表后，再与外层字符串 UNION ALL 混合时，FLOAT→VARCHAR 转换使用了 DOUBLE 精度而非 FLOAT 精度，暴露了二进制舍入误差。
+
+FLOAT(1e-16) 实际二进制值 = 1.0000000168623835... × 10⁻¹⁶
+
+直接 FLOAT → VARCHAR:  显示 1e-16          (FLOAT 精度，~6位有效数字)
+UNION ALL 物化 → VARCHAR: 显示 1.0000000168623835e-16  (DOUBLE 精度暴露)
+
+FLOAT 二进制值（32位 IEEE 754）:  同一个值，完全相同
+显示为 FLOAT 格式:               1e-16
+显示为 DOUBLE 格式:              1.0000000168623835e-16
+                                  ^^^^^^^^^^^^^^^^ 这部分是 FLOAT 无法精确表示 1e-16 产生的舍入噪声，远超出 FLOAT 的 ~7 位有效数字
+
+
+FLOAT 只有 ~7 位有效数字精度。1e-16 和 1.0000000168623835e-16 的前 7 位都是 1.000000，在 FLOAT 语义下完全相等。多出来的 ...0168623835 是 FLOAT→DOUBLE 展宽时泄露的二进制舍入尾数，没有实际意义。
+
+所以这是 SQLancer 的 false positive——它比较的是字符串表示而非数值本身。S:18:0.0000000000000001 和 S:34:0.00000000000000010000000168623835 的底层 FLOAT 值是同一个，只是展示精度不同。

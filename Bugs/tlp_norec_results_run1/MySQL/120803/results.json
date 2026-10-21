@@ -1,0 +1,21 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120803.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT CAST(LEAST('z', '_ejEZpA(1', '2090248689', c0) AS SIGNED) AS ref0\nFROM s\nORDER BY vp_rowid",
+      "ok": true,
+      "rows": [
+        "0",
+        "1521367719",
+        "2090248689"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "SELECT CAST(LEAST('z', '_ejEZpA(1', '2090248689', c0) AS SIGNED) AS ref0\nFROM s\nORDER BY vp_rowid;",
+  "skip_reason": "ORDER BY is not handled by this batch rewriter"
+}

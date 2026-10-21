@@ -1,0 +1,142 @@
+#69308  https://github.com/pingcap/tidb/issues/69308 confirmed as a bug.
+
+DROP DATABASE IF EXISTS repro_tidb617_1_db18_min;
+CREATE DATABASE repro_tidb617_1_db18_min;
+USE repro_tidb617_1_db18_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+
+CREATE TABLE src(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL
+);
+
+INSERT INTO src(c0) VALUES (0);
+
+CREATE TABLE l(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL
+);
+
+CREATE TABLE r(
+  id BIGINT NOT NULL PRIMARY KEY
+);
+
+INSERT INTO l SELECT id, c0 FROM src;
+INSERT INTO r SELECT id FROM src;
+
+-- 单表：返回 80
+SELECT MAX(
+  BIT_LENGTH(
+    CASE c0
+      WHEN ((BINARY id) | (id NOT LIKE c0)) THEN NULL
+      ELSE CAST(0.7772428249950747 AS TIME)
+    END
+  )
+) AS single_val
+FROM src
+WHERE 1
+ORDER BY id;
+
+-- split/join：返回 64
+SELECT MAX(
+  BIT_LENGTH(
+    CASE v.c0
+      WHEN ((BINARY v.id) | (v.id NOT LIKE v.c0)) THEN NULL
+      ELSE CAST(0.7772428249950747 AS TIME)
+    END
+  )
+) AS split_val
+FROM (
+  SELECT l.id, l.c0
+  FROM l JOIN r ON l.id = r.id
+) v
+WHERE 1
+ORDER BY v.id;
+实测结果：
+single_val = 80
+split_val  = 64
+我也直接查了 root 层逐行表达式：
+SELECT
+  id,
+  c0,
+  ((BINARY id) | (id NOT LIKE c0)) AS cmp,
+  CASE c0
+    WHEN ((BINARY id) | (id NOT LIKE c0)) THEN NULL
+    ELSE CAST(0.7772428249950747 AS TIME)
+  END AS expr,
+  BIT_LENGTH(
+    CASE c0
+      WHEN ((BINARY id) | (id NOT LIKE c0)) THEN NULL
+      ELSE CAST(0.7772428249950747 AS TIME)
+    END
+  ) AS root_bit_length
+FROM src;
+结果：
++----+----------------------------------+------+----------+-----------------+
+| id | c0                               | cmp  | expr     | root_bit_length |
++----+----------------------------------+------+----------+-----------------+
+|  1 | 0.000000000000000000000000000000 |    1 | 00:00:01 |              64 |
++----+----------------------------------+------+----------+-----------------+
+也就是说，root 逐行求值认为 BIT_LENGTH(...) = 64；单表聚合下推到 TiKV 后，MAX(BIT_LENGTH(...)) 变成了 80。
+执行计划
+单表查询：
+Projection_7                   root      Column#4->Column#5
+└─Sort_9                       root      src.id
+  └─HashAgg_17                 root      funcs:max(Column#6)->Column#4, funcs:firstrow(Column#7)->src.id
+    └─TableReader_18           root      data:HashAgg_11
+      └─HashAgg_11             cop[tikv] funcs:max(bit_length(cast(case(..., NULL, 00:00:01), var_string(10))))->Column#6,
+                                          funcs:firstrow(src.id)->Column#7
+        └─TableFullScan_16     cop[tikv] table:src
+split/join 查询：
+Projection_12                  root      Column#6->Column#7
+└─Sort_14                      root      l.id
+  └─HashAgg_18                 root      funcs:max(Column#8)->Column#6, funcs:firstrow(Column#9)->l.id
+    └─Projection_63            root      bit_length(cast(case(..., <nil>, 00:00:01), var_string(10)))->Column#8,
+                                          l.id->Column#9
+      └─MergeJoin_21           root      inner join, left key:l.id, right key:r.id
+        ├─TableReader_39       root      table:r
+        └─TableReader_37       root      table:l
+关键差异
+单表路径：
+HashAgg_11 cop[tikv]
+funcs:max(bit_length(cast(case(..., NULL, 00:00:01), var_string(10))))
+
+关键：HashAgg_11 在 cop[tikv] 层执行！
+表达式被下推为：
+plain
+funcs:max(bit_length(cast(case(..., NULL, 00:00:01), var_string(10))))
+注意这里的类型标注：var_string(10) —— TiKV 认为 CAST AS TIME 的结果是长度 10 的字符串。
+
+split/join 路径：
+Projection_63 root
+bit_length(cast(case(..., <nil>, 00:00:01), var_string(10)))
+
+关键：Projection_63 在 root 层执行！
+表达式在 root 层计算：
+plain
+bit_length(cast(case(..., <nil>, 00:00:01), var_string(10)))
+
+
+所以核心问题是：
+同一个 CASE + TIME 表达式在 TiKV cop 聚合下推中被当成长度 10 字节，即 BIT_LENGTH=80；
+但在 TiDB root 投影中被当成长度 8 字节，即 BIT_LENGTH=64。
+另外这个触发依赖 ORDER BY id。我验证过：
+SELECT MAX(BIT_LENGTH(...)) FROM src;
+不带 ORDER BY id 时，单表也返回 64。带 ORDER BY id 后计划多了 Sort + firstrow(id)，并将 max(bit_length(...)) 下推到 TiKV cop，才出现 80。
+
+
+另外这个触发依赖 ORDER BY id。我验证过：
+SELECT MAX(BIT_LENGTH(...)) FROM src;
+不带 ORDER BY id 时，单表也返回 64。带 ORDER BY id 后计划多了 Sort + firstrow(id)，并将 max(bit_length(...)) 下推到 TiKV cop，才出现 80。
+执行计划变化：
+表格
+查询形式	计划特点	结果
+SELECT MAX(...) FROM src	无 ORDER BY，可能不走 Sort，聚合可能在 root 层	64
+SELECT MAX(...) FROM src ORDER BY id	需要 Sort + firstrow(id)，优化器选择下推聚合到 TiKV	80
+
+ORDER BY id 的存在使得优化器认为：
+需要保留 id 列用于排序
+为了效率，将 MAX(...) 和 firstrow(id) 一起下推到 TiKV
+这样 TiDB root 层只需做 Sort，减少数据传输

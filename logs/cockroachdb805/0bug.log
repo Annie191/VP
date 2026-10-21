@@ -1,0 +1,147 @@
+https://github.com/cockroachdb/cockroach/issues/176163
+
+DROP DATABASE IF EXISTS repro_tidb617_db0_min CASCADE;
+CREATE DATABASE repro_tidb617_db0_min;
+USE repro_tidb617_db0_min;
+
+SET allow_unsafe_internals = true;
+SET vectorize = 'on';
+SET distsql = 'on';
+
+CREATE TABLE vp_source (
+    vp_rowid INT8 NOT NULL PRIMARY KEY,
+    c0 INT8,
+    c1 JSONB,
+    c2 INT8[],
+    c3 STRING COLLATE de,
+    c4 STRING,
+    c5 INT8,
+    rowid INT8,
+    vp_computed INT8 AS (vp_rowid * 2) STORED,
+    FAMILY "primary" (vp_rowid),
+    FAMILY payload_a (c0, c2, c4, rowid),
+    FAMILY payload_b (c1, c3, c5, vp_computed)
+);
+
+CREATE INVERTED INDEX vp_source_c1_inv ON vp_source (c1);
+CREATE INVERTED INDEX vp_source_c2_inv ON vp_source (c2);
+CREATE INDEX vp_source_cover ON vp_source (rowid, c4, c0, c3, c5);
+
+CREATE TABLE vp_l (
+    vp_rowid INT8 NOT NULL PRIMARY KEY,
+    c1 JSONB,
+    c2 INT8[],
+    c4 STRING,
+    rowid INT8,
+    vp_computed INT8 AS (vp_rowid * 2) STORED,
+    FAMILY "primary" (vp_rowid),
+    FAMILY payload (c1, c2, c4, rowid, vp_computed)
+);
+
+CREATE INVERTED INDEX vp_l_c1_inv ON vp_l (c1);
+CREATE INVERTED INDEX vp_l_c2_inv ON vp_l (c2);
+
+CREATE TABLE vp_r (
+    vp_rowid INT8 NOT NULL PRIMARY KEY,
+    c0 INT8,
+    c3 STRING COLLATE de,
+    c5 INT8,
+    FAMILY "primary" (vp_rowid),
+    FAMILY payload (c0, c3, c5)
+);
+
+INSERT INTO vp_source
+    (vp_rowid, c0, c1, c2, c3, c4, c5, rowid)
+SELECT
+    i,
+    i,
+    CASE i % 4
+        WHEN 0 THEN NULL
+        WHEN 1 THEN '{"vp":1}'::JSONB
+        WHEN 2 THEN '{"k":null}'::JSONB
+        ELSE '[1,2]'::JSONB
+    END,
+    CASE i % 4
+        WHEN 0 THEN NULL
+        WHEN 1 THEN ARRAY[]::INT8[]
+        WHEN 2 THEN ARRAY[1,NULL]::INT8[]
+        ELSE ARRAY[0,1,1]::INT8[]
+    END,
+    CASE i % 4
+        WHEN 0 THEN NULL
+        WHEN 1 THEN 'Aa'
+        WHEN 2 THEN 'a'
+        ELSE 'b'
+    END,
+    'm_last',
+    i % 1000,
+    i
+FROM generate_series(1, 4096) AS g(i);
+
+INSERT INTO vp_l (vp_rowid, c1, c2, c4, rowid)
+SELECT vp_rowid, c1, c2, c4, rowid
+FROM vp_source;
+
+INSERT INTO vp_r (vp_rowid, c0, c3, c5)
+SELECT vp_rowid, c0, c3, c5
+FROM vp_source;
+
+SELECT DISTINCT
+    NULL::TIME,
+    COUNT(vp_computed),
+    VARIANCE(vp_rowid)
+FROM vp_source
+WHERE c2 @> ARRAY[]::INT8[]
+  AND (c3 IS NULL OR c3 IS NULL OR c3 = c3)
+GROUP BY NULL::TIME
+HAVING COUNT(*) > 0
+ORDER BY NULL::TIME
+LIMIT 2;
+
+
+SELECT DISTINCT
+    NULL::TIME,
+    COUNT(r.vp_rowid),
+    VARIANCE(l.vp_rowid)
+FROM vp_l@{FORCE_INDEX=vp_l_pkey} AS l
+JOIN vp_r AS r
+  ON l.vp_rowid = r.vp_rowid
+WHERE l.c2 @> ARRAY[]::INT8[]
+  AND (r.c3 IS NULL OR r.c3 IS NULL OR r.c3 = r.c3)
+GROUP BY NULL::TIME
+HAVING COUNT(*) > 0
+ORDER BY NULL::TIME
+LIMIT 2;
+
+单表：
+ERROR: internal error: inverted column should have type encodedkey
+DETAIL:
+pkg/sql/rowexec/inverted_filterer.go:237: readInput()
+pkg/sql/rowexec/inverted_filterer.go:173: Next()
+pkg/sql/colfetcher/index_join.go:388: next()
+
+多表：
+ time | count |       variance
+------+-------+-----------------------
+      | 3072  | 1398555.9257570823836
+
+
+单表关键计划：
+group-by (streaming)
+ └── index-join vp_source
+      └── inverted-filter
+           ├── inverted column: c2
+           └── scan vp_source@vp_source_c2_inv,inverted
+EXPLAIN (DISTSQL) 显示：
+distribution: local
+ └── index join
+      └── inverted filter
+           ├── inverted column: c2_inverted_key
+           └── scan vp_source@vp_source_c2_inv
+错误正是发生在这个 inverted-filter/index-join 路径。
+
+多表计划走：
+merge join
+ ├── scan vp_r@vp_r_pkey
+ └── scan vp_l@vp_l_pkey
+      └── filter c2 @> ARRAY[]

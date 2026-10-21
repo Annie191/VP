@@ -1,0 +1,124 @@
+https://bugs.mysql.com/bug.php?id=120905&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro8_final;
+CREATE DATABASE repro8_final;
+USE repro8_final;
+
+CREATE TABLE src (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    c1 FLOAT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO src(c1) VALUES (NULL);
+
+CREATE TABLE l (
+    id BIGINT NOT NULL PRIMARY KEY,
+    c1 FLOAT NULL,
+    KEY li(id,c1)
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+    id BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+INSERT INTO l SELECT id,c1 FROM src;
+INSERT INTO r SELECT id FROM src;
+
+-- Single: 返回 1043103758
+SELECT 'single' AS q,
+    SUM(DISTINCT CASE 0.5 WHEN id THEN c1 ELSE 1043103758 END) AS ref0
+FROM src
+GROUP BY id;
+
+-- Split: 返回 1043103744
+SELECT 'split' AS q,
+    SUM(DISTINCT CASE 0.5 WHEN s.id THEN s.c1 ELSE 1043103758 END) AS ref0
+FROM (
+    SELECT l.id AS id, l.c1 AS c1
+    FROM l
+    JOIN (
+        SELECT id, CONCAT('vp:', id) AS payload
+        FROM r
+    ) sp ON CONCAT('vp:', l.id) = sp.payload
+    JOIN r ON r.id = sp.id
+) s
+GROUP BY id;
+
++--------+------------+
+| q      | ref0       |
++--------+------------+
+| single | 1043103758 |
++--------+------------+
+
++-------+------------+
+| q     | ref0       |
++-------+------------+
+| split | 1043103744 |
++-------+------------+
+
+
+执行计划对比：
+
+Single（直接查 src）：
+
+-> Group aggregate: sum(distinct (case 0.5 when src.id then src.c1 else 1043103758 end))
+    -> Index scan on src using PRIMARY
+
+Split（多层 JOIN 展开后查）：
+
+-> Group aggregate: sum(distinct tmp_field)
+    -> Sort: id
+        -> Stream results
+            -> Nested loop inner join
+                -> Inner hash join (concat('vp:',l.id) = concat('vp:',r.id))
+                    -> Covering index scan on r using PRIMARY
+                    -> Hash
+                        -> Covering index scan on l using li
+                -> Single-row covering index lookup on r using PRIMARY (id = r.id)
+
+CASE 0.5 WHEN s.id THEN s.c1 ELSE 1043103758 END 有两个分支：
+
+THEN s.c1 → FLOAT
+
+ELSE 1043103758 → 整数（BIGINT 字面量）
+
+MySQL 为 CASE 表达式确定结果类型时，遵循“公共类型”提升规则：包含 FLOAT 和整数的表达式会被提升为 FLOAT（双精度用 DOUBLE，但此处 s.c1 列类型是 FLOAT，因此整体结果类型为 FLOAT）。
+
+常量 1043103758 是一个 10 位十进制数，超出了 FLOAT 的 7 位有效数字精度。转换为单精度浮点数时会被舍入到最近的机器表示值。单精度浮点数在 2³⁰ 附近的步长（分辨率）为 128（2^(30−23)），因此 1043103758 无法精确存储，只能表示为：
+
+1043103744（向下舍入 14）
+
+或 1043103872（向上舍入 114）
+
+实际计算中 MySQL 选择了 1043103744。
+
+single 查询
+
+src 表直接扫描，c1 为 FLOAT NULL。
+
+虽然 CASE 的静态类型应为 FLOAT，但在执行时 优化器发现 0.5 WHEN id 条件恒假（id 为整数 1，0.5 是小数，二者永不相等），因此可能直接在求值阶段将 CASE 折叠为常量 1043103758。
+
+由于无需计算 THEN 分支，常量以 原始整数值 参与 SUM(DISTINCT)，后续去重与求和均使用整数，未经历浮点转换。
+
+执行计划中 Group aggregate 直接基于索引扫描，无额外物化或临时表类型强制，也佐证了简化的处理路径。
+
+split 查询
+
+数据源变为 多层 JOIN 与派生表 s，其中 s.c1 明确来源于 l.c1（FLOAT 类型）。
+
+由于查询结构复杂（嵌套循环、哈希连接、物化子查询），优化器 无法在早期将 CASE 表达式折叠为常量，必须完整保留表达式的运行时求值。
+
+CASE 的结果类型在解析阶段即被强制确定为 FLOAT，因此常量 1043103758 在求值时立即转换为 FLOAT，产生近似值 1043103744.0。
+
+后续 SUM(DISTINCT) 操作在临时表或排序过程中处理的是 FLOAT 类型的值，最终输出该近似值（显示为整数形式 1043103744）。
+
+执行计划中的 Sort: id、Stream results、临时表等步骤进一步证实了完整的表达式求值链路，类型强制未能消除。
+
+4. 核心矛盾
+MySQL 的类型推导与常量折叠优化在简单查询和复杂子查询中作用范围不同：
+
+简单查询：优化器有机会将逻辑上恒定的表达式直接替换为原始常量，绕过类型提升。
+
+复杂子查询：表达式必须按静态类型（FLOAT）求值，导致整数字面量被转换为低精度浮点数，最终结果不一致。
+
+这属于 MySQL 优化器的一个已知缺陷：当查询存在派生表/多表连接时，表达式类型的强制转换未被“延迟”或“还原”为精确计算，而简单查询中的简化优化掩盖了类型提升的影响，造成语义等价查询的结果偏差。

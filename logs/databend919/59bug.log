@@ -1,0 +1,82 @@
+https://github.com/databendlabs/databend/issues/20645 confirmed
+
+DROP DATABASE IF EXISTS repro_databend922_db59_min;
+CREATE DATABASE repro_databend922_db59_min;
+USE repro_databend922_db59_min;
+
+CREATE TABLE s(id BIGINT NOT NULL, v INT NULL) ENGINE=MEMORY;
+CREATE TABLE l(id BIGINT NOT NULL) ENGINE=MEMORY;
+CREATE TABLE r(id BIGINT NOT NULL, v INT NULL) ENGINE=MEMORY;
+
+INSERT INTO s VALUES (1, 1);
+INSERT INTO l SELECT id FROM s;
+INSERT INTO r SELECT id, v FROM s;
+
+-- 单表：成功，返回 NULL
+SELECT AVG(id)
+FROM s
+WHERE -2 * id NOT IN (id, -id)
+  AND -id = id;
+
+-- 多表：报错，预期同样返回 NULL
+SELECT AVG(id)
+FROM (
+    SELECT l.id,
+           (SELECT r.v FROM r WHERE r.id = l.id) AS v
+    FROM l
+    WHERE EXISTS (
+        SELECT 1 FROM r WHERE r.id = l.id
+    )
+) AS s
+WHERE -2 * id NOT IN (id, -id)
+  AND -id = id;
+
+单表：
+NULL
+
+多表：
+ERROR 1105 (HY000):
+SemanticError. Code: 1065,
+Text = cannot access the "r"."id" in ANTI or SEMI join. 
+
+单表计划的关键部分如下，省略估算行数和列编号：
+EvalScalar
+  expressions: sum(id) / if(count(id) = 0, 1, count(id))
+└── AggregateFinal
+    aggregate functions: [sum(id), count()]
+    └── AggregatePartial
+        aggregate functions: [sum(id), count()]
+        └── Filter
+            filters:
+              -s.id = s.id
+              NOT (-2 * -s.id = -s.id OR -2 * -s.id = s.id)
+              NOT (-2 * s.id = s.id OR -2 * s.id = -s.id)
+            └── TableScan
+                table: repro_databend922_db59_min.s
+                read rows: 1
+多表查询加 EXPLAIN，仍报相同 Code 1065，无法生成执行计划
+
+为展示相关子查询的正常转换路径，删除 NOT IN 后的多表对照查询可以执行并返回 NULL：
+EXPLAIN
+SELECT AVG(id)
+FROM (
+    SELECT l.id,
+           (SELECT r.v FROM r WHERE r.id = l.id) AS v
+    FROM l
+    WHERE EXISTS (
+        SELECT 1 FROM r WHERE r.id = l.id
+    )
+) AS s
+WHERE -id = id;
+该对照的实际计划骨架：
+EvalScalar
+└── AggregateFinal [sum(id), count()]
+    └── AggregatePartial [sum(id), count()]
+        └── HashJoin [RIGHT SINGLE]
+            ├── HashJoin [RIGHT SEMI]
+            │   ├── Filter [l.id = -s.id]
+            │   │   └── TableScan l
+            │   └── TableScan r
+            └── TableScan r
+
+多表查询的语义结果应为 NULL，实际报 Code 1065 是优化器 bug。单表计划和去掉 NOT IN 的对照计划都说明问题出在 NOT IN 与内部 EXISTS/SEMI JOIN 的交互上。

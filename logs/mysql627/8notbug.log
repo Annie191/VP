@@ -1,0 +1,109 @@
+https://bugs.mysql.com/bug.php?id=120800&thanks=4 not a bug
+
+DROP DATABASE IF EXISTS codex_db8;
+CREATE DATABASE codex_db8;
+USE codex_db8;
+
+SET SESSION sql_mode =
+'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+
+SET SESSION optimizer_switch =
+'index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,engine_condition_pushdown=on,index_condition_pushdown=on,mrr=on,mrr_cost_based=on,block_nested_loop=on,batched_key_access=off,materialization=on,semijoin=on,loosescan=on,firstmatch=on,duplicateweedout=on,subquery_materialization_cost_based=on,use_index_extensions=on,condition_fanout_filter=on,derived_merge=on,use_invisible_indexes=off,skip_scan=on,hash_join=on,subquery_to_derived=off,prefer_ordering_index=on,hypergraph_optimizer=off,derived_condition_pushdown=on,hash_set_operations=on';
+
+SET SESSION big_tables = 0;
+SET SESSION internal_tmp_mem_storage_engine = 'MEMORY';
+
+CREATE TABLE s(
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 FLOAT NULL,
+  KEY i0(vp_rowid, c0)
+) ENGINE=InnoDB;
+
+INSERT INTO s(c0) VALUES (NULL), (NULL), (NULL), (NULL);
+
+CREATE TABLE l(
+  vp_rowid BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+CREATE TABLE r(
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 FLOAT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO l(vp_rowid)
+SELECT vp_rowid FROM s;
+
+INSERT INTO r(vp_rowid, c0)
+SELECT vp_rowid, c0 FROM s;
+
+SELECT
+  SUM(IF((+ (NULL)),
+         (CASE 0.7946739770279212
+            WHEN '0.9061888832149968' THEN c0
+            ELSE vp_rowid
+          END),
+         (+ (1455738264)))) AS ref0,
+  CAST(IFNULL(vp_rowid, c0) AS SIGNED) AS ref1,
+  SUM(DISTINCT vp_rowid) AS ref2
+FROM s
+GROUP BY CAST(IFNULL(vp_rowid, c0) AS SIGNED);
+
+SELECT
+  SUM(IF((+ (NULL)),
+         (CASE 0.7946739770279212
+            WHEN '0.9061888832149968' THEN d.c0
+            ELSE d.vp_rowid
+          END),
+         (+ (1455738264)))) AS ref0,
+  CAST(IFNULL(d.vp_rowid, d.c0) AS SIGNED) AS ref1,
+  SUM(DISTINCT d.vp_rowid) AS ref2
+FROM (
+  SELECT l.vp_rowid AS vp_rowid, r.c0 AS c0
+  FROM l
+  JOIN LATERAL (
+    SELECT * FROM r rr WHERE rr.vp_rowid = l.vp_rowid
+  ) r ON TRUE
+) d
+GROUP BY CAST(IFNULL(d.vp_rowid, d.c0) AS SIGNED);
+
+原查询
+
+1455738264 | 1 | 1
+1455738264 | 2 | 2
+1455738264 | 3 | 3
+1455738264 | 4 | 4
+
+重构查询
+
+1455738240 | 1 | 1
+1455738240 | 2 | 2
+1455738240 | 3 | 3
+1455738240 | 4 | 4
+
+也就是每组的 SUM(...) 从 1455738264 错成了 1455738240，固定差了 24。
+
+关键计划片段是：
+Group aggregate: sum(tmp_field), sum(distinct l.vp_rowid)
+  -> Sort: ref1
+    -> Stream results
+      -> Nested loop inner join
+        -> Covering index scan on l using PRIMARY
+        -> Single-row index lookup on rr using PRIMARY (vp_rowid = l.vp_rowid)
+我的判断是：这不是丢行，也不是分组错，而是 LATERAL 重构路径里表达式被放进 tmp_field 后，1455738264 被按浮点/中间类型近似了，导致常量和的值被截成 1455738240。
+
+| 查询                               | 执行路径                  | 类型处理                                                                                     |
+| -------------------------------- | --------------------- | ---------------------------------------------------------------------------------------- |
+| **原查询** `FROM s`                 | 直接对基表聚合               | `CASE` 表达式的类型推导保留完整上下文，`+1455738264` 作为整数常量参与，`SUM` 内部使用 `DOUBLE` 或 `DECIMAL` 精度         |
+| **重构查询** `FROM (LATERAL JOIN) d` | derived table merge 后 | 优化器将 `d.c0`（FLOAT 类型）的**类型属性向上传播**到 `CASE` 表达式，导致整个 `CASE` 的 `field_type()` 被标记为 `FLOAT` |
+
+关键差异在于 derived merge 优化：
+sql
+-- 重构查询的 derived table
+SELECT l.vp_rowid AS vp_rowid, r.c0 AS c0
+FROM l JOIN LATERAL (...) r ON TRUE
+当优化器执行 derived_merge 时，它会将子查询合并到外层，并重新推导表达式类型。此时：
+d.c0 来自表 r.c0，类型为 FLOAT
+CASE 表达式的类型推导规则：结果类型由各分支的聚合类型决定
+由于 THEN d.c0 是 FLOAT，ELSE d.vp_rowid（BIGINT）被隐式转换，CASE 整体被推导为 FLOAT
+常量 1455738264 在 ELSE 分支中被预先转换为 FLOAT → 1455738240.0
+SUM(IF(...)) 实际上在累加 1455738240.0 而非 1455738264

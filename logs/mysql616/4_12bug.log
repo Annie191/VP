@@ -1,0 +1,190 @@
+https://bugs.mysql.com/bug.php?id=120732&thanks=4   Verified as described.
+
+derived/CTE reconstruction 查询在 DISTINCT + GROUP BY + SUM(DISTINCT EXISTS(subquery)) 组合下少返回一组结果。derived_merge=off 后 split 查询恢复正确，hash_join=off 不恢复
+
+case1
+
+DROP DATABASE IF EXISTS vp_min12;
+CREATE DATABASE vp_min12;
+USE vp_min12;
+
+CREATE TABLE s (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c FLOAT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO s(c) VALUES (NULL), (0.524686);
+
+CREATE TABLE l (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c FLOAT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+INSERT INTO l SELECT id, c FROM s;
+INSERT INTO r SELECT id FROM s;
+
+SELECT DISTINCT
+  LEAST((! s.c), s.id NOT IN (NULL, NULL, s.c)) AS a,
+  (((s.c) IN (s.id)) AND (IFNULL(s.c, 1767027735))) AND (0.07523026689631984) AS b,
+  SUM(DISTINCT EXISTS (SELECT 1)) AS c
+FROM s
+GROUP BY
+  LEAST((NOT s.c), s.id NOT IN (NULL, NULL, s.c)),
+  (((s.c) IN (s.id)) AND (IFNULL(s.c, 1767027735))) AND (0.07523026689631984);
+
+
+  SELECT DISTINCT
+  LEAST((! x.c), x.id NOT IN (NULL, NULL, x.c)) AS a,
+  (((x.c) IN (x.id)) AND (IFNULL(x.c, 1767027735))) AND (0.07523026689631984) AS b,
+  SUM(DISTINCT EXISTS (SELECT 1)) AS c
+FROM (
+  SELECT l.id, l.c
+  FROM (SELECT * FROM l) l
+  JOIN (SELECT * FROM r) r ON l.id = r.id
+) x
+GROUP BY
+  LEAST((NOT x.c), x.id NOT IN (NULL, NULL, x.c)),
+  (((x.c) IN (x.id)) AND (IFNULL(x.c, 1767027735))) AND (0.07523026689631984);
+
+
+原表查询，返回 2 行：
+a     b     c
+NULL  NULL  1
+NULL  0     1
+
+等价 split/reconstruction 查询，只返回 1 行，少了 (NULL, 0, 1)：
+a     b     c
+NULL  NULL  1
+
+-- single
+-> Group aggregate: sum(distinct exists(select #2))
+    -> Sort: a, b
+        -> Table scan on s
+-> Select #2 (subquery in projection; run only once)
+    -> Limit: 1 row(s)
+        -> Rows fetched before execution
+
+-- split
+-> Sort with duplicate removal: a, b, c
+    -> Stream results
+        -> Group aggregate: sum(distinct exists(select #2))
+            -> Sort: a, ((l.c = l.id) and (0 <> ifnull(l.c,1767027735)) and ...)
+                -> Stream results
+                    -> Inner hash join (l.id = r.id)
+                        -> Table scan on l
+                        -> Hash
+                            -> Covering index scan on r using PRIMARY
+-> Select #2 (subquery in projection; run only once)
+    -> Limit: 1 row(s)
+        -> Rows fetched before execution
+验证 optimizer 相关性：
+SET SESSION optimizer_switch='derived_merge=off';
+-- split 查询恢复为两行：NULL/NULL/1 和 NULL/0/1
+
+SET SESSION optimizer_switch='derived_merge=on,hash_join=off';
+-- split 查询仍然只返回一行
+
+case2
+
+DROP DATABASE IF EXISTS vp_min4;
+CREATE DATABASE vp_min4;
+USE vp_min4;
+
+CREATE TABLE s (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+
+INSERT INTO s(c) VALUES (NULL), (1);
+
+CREATE TABLE lt (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE rt (
+  id BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+INSERT INTO lt SELECT id, c FROM s;
+INSERT INTO rt SELECT id FROM s;
+
+SELECT DISTINCTROW
+  (s.id) IS NOT TRUE AS a,
+  (((NULL) IN (NULL, s.id)) IS TRUE) || ((+ (GREATEST(s.c, 0.4379614263980073)))) AS b,
+  SUM(DISTINCT EXISTS (SELECT 1 WHERE FALSE)) AS c
+FROM s
+GROUP BY
+  (s.id) IS NOT TRUE,
+  (((NULL) IN (NULL, s.id)) IS TRUE) || ((+ (GREATEST(s.c, 0.4379614263980073))));
+
+原表查询，返回 2 行：
+a  b     c
+0  NULL  0
+0  1     0
+
+等价 CTE reconstruction 查询，只返回 1 行，少了 (0, 1, 0)：
+a  b     c
+0  NULL  0
+
+-- single
+-> Group aggregate: sum(distinct exists(select #2))
+    -> Sort: a, b
+        -> Table scan on s
+-> Select #2 (subquery in projection; run only once)
+    -> Zero rows (Impossible WHERE)
+
+-- split
+-> Sort with duplicate removal: a, b, c
+    -> Stream results
+        -> Group aggregate: sum(distinct exists(select #2))
+            -> Sort: a, (((NULL in (NULL,l.id)) is true) or (0 <> greatest(l.c,...)))
+                -> Stream results
+                    -> Inner hash join (l.id = r.id)
+                        -> Table scan on l
+                        -> Hash
+                            -> Covering index scan on r using PRIMARY
+-> Select #2 (subquery in projection; run only once)
+    -> Zero rows (Impossible WHERE)
+
+同样验证 optimizer 相关性：
+SET SESSION optimizer_switch='derived_merge=off';
+-- split 查询恢复为两行：0/NULL/0 和 0/1/0
+
+SET SESSION optimizer_switch='derived_merge=on,hash_join=off';
+-- split 查询仍然只返回一行
+
+
+| 案例             | 触发条件                                                                                      | 现象                                      |
+| -------------- | ----------------------------------------------------------------------------------------- | --------------------------------------- |
+| **case1**  |derived table (子查询) + `DISTINCT` + `GROUP BY` + `SUM(DISTINCT EXISTS(subquery))`          | split/reconstruction 查询比原表查询**少返回 1 行** |
+| **case2**  | CTE reconstruction + `DISTINCTROW` + `GROUP BY` + `SUM(DISTINCT EXISTS(... WHERE FALSE))` | CTE 查询比原表查询**少返回 1 行**                  |
+
+共同特征：
+都是 derived/CTE reconstruction（将原表查询改写为派生表/CTE 形式）
+都涉及 DISTINCT + GROUP BY + SUM(DISTINCT EXISTS(subquery)) 的组合
+derived_merge=off 后恢复正常，hash_join=off 不恢复
+
+当 derived_merge=on 时：
+派生表被合并到外层
+优化器在顶层添加了 Sort with duplicate removal: a, b, c（对 a, b, c 三列去重）
+但 c = SUM(DISTINCT EXISTS(...)) 是聚合函数结果，不应该参与去重键
+错误的 duplicate removal 导致某些行被错误合并
+具体来说：
+SUM(DISTINCT EXISTS(SELECT 1)) 对每组都是 1（常量）
+如果 a 相同（如两个 NULL），b 不同（NULL vs 0），但 c 相同（都是 1）
+顶层 Sort with duplicate removal: a, b, c 应该保留 (NULL, NULL, 1) 和 (NULL, 0, 1)
+但实际行为是：当 b 涉及复杂表达式（含 NULL 传播、类型转换等）时，duplicate removal 错误地认为两行是重复的
+4.3 为什么 derived_merge=off 修复？
+关闭 derived_merge 后：
+派生表物化为临时表
+外层查询看到的是"普通表"，优化器不会错误地添加顶层 duplicate removal
+GROUP BY 和 DISTINCT 按正常语义执行
+4.4 为什么 hash_join=off 不修复？
+因为问题不在 join 算法，而在：
+derived_merge 后的查询重写结构
+duplicate removal 与 group aggregate 的交互

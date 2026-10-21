@@ -1,0 +1,87 @@
+https://bugs.mysql.com/bug.php?id=120970&thanks=4
+This is fixed in the upcoming MySQL-9.7 LTS release. Marking this as duplicate of Bug#120429.
+
+DROP DATABASE IF EXISTS repro_mysql714_db33;
+CREATE DATABASE repro_mysql714_db33;
+USE repro_mysql714_db33;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+SET SESSION big_tables = 1;
+SET SESSION internal_tmp_mem_storage_engine = 'TempTable';
+
+CREATE TABLE vp_s (
+    vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    c0       DECIMAL(65, 30) NULL,
+    c1       DECIMAL(65, 30) NULL
+) ENGINE = InnoDB;
+
+INSERT INTO vp_s (c0, c1) VALUES (-934955100, NULL), (1, NULL), (698073542, 0);
+
+ALTER TABLE vp_s ADD UNIQUE KEY i0 (c0 DESC, c1);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 DECIMAL(65,30) NULL) ENGINE = InnoDB;
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c1 DECIMAL(65,30) NULL) ENGINE = InnoDB;
+
+INSERT INTO vp_l SELECT vp_rowid, c0 FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c1 FROM vp_s;
+
+CREATE INDEX l_idx ON vp_l(vp_rowid, c0);
+
+-- 单表查询（covering index → GROUP BY 正确：2 组）
+SELECT DISTINCTROW (IFNULL(NULL, vp_s.c1)) XOR
+       ((CASE vp_s.c0 WHEN vp_s.c0 THEN 1.241251282E9 ELSE vp_s.c1 END) IS NOT NULL) AS ref0
+FROM vp_s
+GROUP BY (IFNULL(NULL, vp_s.c1)) XOR
+         ((CASE vp_s.c0 WHEN vp_s.c0 THEN 1.241251282E9 ELSE vp_s.c1 END) IS NOT NULL);
+
+-- JSON_PACK（JOIN 路径 → GROUP BY 丢失行：仅 1 组）
+SELECT DISTINCTROW (IFNULL(NULL, t.c1)) XOR
+       ((CASE t.c0 WHEN t.c0 THEN 1.241251282E9 ELSE t.c1 END) IS NOT NULL) AS ref0
+FROM (
+    SELECT l.vp_rowid, l.c0, r.c1
+    FROM vp_l l
+    JOIN (SELECT vp_rowid, JSON_OBJECT('vp', vp_rowid) AS payload FROM vp_r) jp
+      ON l.vp_rowid = jp.vp_rowid
+    JOIN vp_r r ON r.vp_rowid = jp.vp_rowid
+) t
+GROUP BY (IFNULL(NULL, t.c1)) XOR
+         ((CASE t.c0 WHEN t.c0 THEN 1.241251282E9 ELSE t.c1 END) IS NOT NULL);
+
+=== 单表 ===
+| NULL |        ← rows 1,2：c1=NULL → NULL XOR 1 = NULL
+|    1 |        ← row 3：c1=0 → 0 XOR 1 = 1 → 正确的第二组
+
+=== JSON_PACK ===
+| NULL |        ← 仅一组：row 3 的 IFNULL XOR 被 GROUP BY 视为 NULL，与 rows 1,2 合并
+
+执行计划
+单表：
+
+-> Table scan on <temporary>
+    -> Temporary table with deduplication
+        -> Covering index scan on vp_s using i0 (c0 DESC, c1)
+
+
+JSON_PACK：
+
+-> Table scan on <temporary>
+    -> Temporary table with deduplication
+        -> Nested loop inner join
+            -> Nested loop inner join
+                -> Covering index scan on l using l_idx
+                -> Single-row covering index lookup on vp_r using PRIMARY
+            -> Single-row index lookup on r using PRIMARY
+
+TempTable 引擎对混合类型 GROUP BY 键的比较缺陷
+查询的环境设置里有两条关键配置：
+
+sql
+SET SESSION big_tables = 1;
+SET SESSION internal_tmp_mem_storage_engine = 'TempTable';
+big_tables = 1 会强制所有内存临时表使用磁盘（或至少降低内存表的使用阈值），但内部仍由 internal_tmp_mem_storage_engine 决定引擎。
+
+
+在这个复现用例中，GROUP BY 表达式的结果类型最终是 BIGINT（因为 XOR 输出整数）。
+但在 JSON_PACK 路径中，由于子查询里出现了 JSON_OBJECT，优化器在创建用于 GROUP BY 的临时表时，对列的类型推断或内部二进制表示可能发生了混乱，使得值 1 在 TempTable 的哈希表或排序比较中被错误地识别为 NULL，从而与真正的 NULL 归为一组。

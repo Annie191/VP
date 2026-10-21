@@ -1,0 +1,138 @@
+https://github.com/databendlabs/databend/issues/20717
+
+DROP DATABASE IF EXISTS repro_databend921_db9_literal;
+CREATE DATABASE repro_databend921_db9_literal;
+USE repro_databend921_db9_literal;
+
+CREATE TABLE source (
+    vp_rowid BIGINT NOT NULL,
+    c0geometry GEOMETRY NULL,
+    c1geometry GEOMETRY NOT NULL,
+    c2decimal DECIMAL(35,2) NULL
+) ENGINE=FUSE;
+
+INSERT INTO source VALUES
+(5,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),CAST('0.00' AS DECIMAL(35,2))),
+(6,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),CAST('0.00' AS DECIMAL(35,2))),
+(7,ST_GEOMETRYFROMWKT('POINT(0 0)'),ST_GEOMETRYFROMWKT('POINT(0 0)'),CAST('0.00' AS DECIMAL(35,2))),
+(8,ST_GEOMETRYFROMWKT('POINT(1 2)'),ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(9,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(10,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(11,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(12,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(13,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(14,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(15,ST_GEOMETRYFROMWKT('POINT(1 2)'),ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(16,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(17,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(18,ST_GEOMETRYFROMWKT('POINT(1 2)'),ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(19,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(20,ST_GEOMETRYFROMWKT('POINT(1 2)'),ST_GEOMETRYFROMWKT('POINT(1 2)'),CAST('1.00' AS DECIMAL(35,2))),
+(21,NULL,ST_GEOMETRYFROMWKT('POINT(2 2)'),CAST('2.00' AS DECIMAL(35,2))),
+(22,ST_GEOMETRYFROMWKT('POINT(2 2)'),ST_GEOMETRYFROMWKT('POINT(2 2)'),CAST('2.00' AS DECIMAL(35,2))),
+(23,NULL,ST_GEOMETRYFROMWKT('POINT(3 3)'),CAST('3.00' AS DECIMAL(35,2))),
+(24,ST_GEOMETRYFROMWKT('POINT(3 3)'),ST_GEOMETRYFROMWKT('POINT(3 3)'),CAST('3.00' AS DECIMAL(35,2))),
+(25,NULL,ST_GEOMETRYFROMWKT('POINT(-1 -1)'),NULL),
+(26,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(27,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(28,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),NULL),
+(29,ST_GEOMETRYFROMWKT('POINT(3 3)'),ST_GEOMETRYFROMWKT('POINT(3 3)'),NULL),
+(30,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(31,NULL,ST_GEOMETRYFROMWKT('POINT(-3 -3)'),NULL),
+(32,NULL,ST_GEOMETRYFROMWKT('POINT(-3 -3)'),NULL),
+(33,ST_GEOMETRYFROMWKT('POINT(1 2)'),ST_GEOMETRYFROMWKT('POINT(1 2)'),NULL),
+(34,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(35,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(36,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),NULL),
+(37,NULL,ST_GEOMETRYFROMWKT('POINT(-3 -3)'),NULL),
+(38,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),NULL),
+(39,ST_GEOMETRYFROMWKT('POINT(1 2)'),ST_GEOMETRYFROMWKT('POINT(1 2)'),NULL),
+(40,ST_GEOMETRYFROMWKT('POINT(0 0)'),ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(41,NULL,ST_GEOMETRYFROMWKT('POINT(-3 -3)'),NULL),
+(42,ST_GEOMETRYFROMWKT('POINT(1 2)'),ST_GEOMETRYFROMWKT('POINT(1 2)'),NULL),
+(43,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(44,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(45,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(46,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(47,NULL,ST_GEOMETRYFROMWKT('POINT(-3 -3)'),NULL),
+(48,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(49,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(50,NULL,ST_GEOMETRYFROMWKT('POINT(2 2)'),NULL),
+(51,ST_GEOMETRYFROMWKT('POINT(1 2)'),ST_GEOMETRYFROMWKT('POINT(1 2)'),NULL),
+(52,ST_GEOMETRYFROMWKT('POINT(1 2)'),ST_GEOMETRYFROMWKT('POINT(1 2)'),NULL),
+(53,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(54,NULL,ST_GEOMETRYFROMWKT('POINT(0 0)'),NULL),
+(55,ST_GEOMETRYFROMWKT('POINT(2 2)'),ST_GEOMETRYFROMWKT('POINT(2 2)'),NULL),
+(56,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),NULL),
+(57,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),NULL),
+(58,NULL,ST_GEOMETRYFROMWKT('POINT(1 2)'),NULL),
+(59,NULL,ST_GEOMETRYFROMWKT('POINT(-1 -1)'),CAST('-1.00' AS DECIMAL(35,2))),
+(60,ST_GEOMETRYFROMWKT('POINT(-1 -1)'),ST_GEOMETRYFROMWKT('POINT(-1 -1)'),NULL),
+(61,ST_GEOMETRYFROMWKT('POINT(-1 -1)'),ST_GEOMETRYFROMWKT('POINT(-1 -1)'),NULL),
+(62,ST_GEOMETRYFROMWKT('POINT(-1 -1)'),ST_GEOMETRYFROMWKT('POINT(-1 -1)'),NULL);
+
+
+
+CREATE TABLE l (
+    vp_rowid BIGINT NOT NULL,
+    c2decimal DECIMAL(35,2) NULL,
+    c0geometry GEOMETRY NULL
+) ENGINE=FUSE;
+
+CREATE TABLE r (
+    vp_rowid BIGINT NOT NULL,
+    c1geometry GEOMETRY NULL
+) ENGINE=FUSE;
+
+ALTER TABLE source CLUSTER BY (vp_rowid);
+ALTER TABLE l CLUSTER BY (c2decimal);
+ALTER TABLE r CLUSTER BY (vp_rowid);
+
+-- Initial materialization, then rebuild the split layout.  The truncate is
+-- significant: it leaves the same kind of FUSE history as the VP setup.
+INSERT INTO l SELECT vp_rowid, c2decimal, c0geometry FROM source ORDER BY vp_rowid DESC;
+INSERT INTO r SELECT vp_rowid, c1geometry FROM source ORDER BY vp_rowid;
+TRUNCATE TABLE l;
+TRUNCATE TABLE r;
+
+-- Preserve the physical history that is required by the 950 nightly failure:
+-- eight reverse-ordered left batches and two right batches, followed by left compaction.
+INSERT INTO l SELECT vp_rowid, c2decimal, c0geometry FROM source WHERE vp_rowid > 54 AND vp_rowid <= 62 ORDER BY vp_rowid DESC;
+INSERT INTO l SELECT vp_rowid, c2decimal, c0geometry FROM source WHERE vp_rowid > 46 AND vp_rowid <= 54 ORDER BY vp_rowid DESC;
+INSERT INTO l SELECT vp_rowid, c2decimal, c0geometry FROM source WHERE vp_rowid > 38 AND vp_rowid <= 46 ORDER BY vp_rowid DESC;
+INSERT INTO l SELECT vp_rowid, c2decimal, c0geometry FROM source WHERE vp_rowid > 30 AND vp_rowid <= 38 ORDER BY vp_rowid DESC;
+INSERT INTO l SELECT vp_rowid, c2decimal, c0geometry FROM source WHERE vp_rowid > 22 AND vp_rowid <= 30 ORDER BY vp_rowid DESC;
+INSERT INTO l SELECT vp_rowid, c2decimal, c0geometry FROM source WHERE vp_rowid > 14 AND vp_rowid <= 22 ORDER BY vp_rowid DESC;
+INSERT INTO l SELECT vp_rowid, c2decimal, c0geometry FROM source WHERE vp_rowid > 6 AND vp_rowid <= 14 ORDER BY vp_rowid DESC;
+INSERT INTO l SELECT vp_rowid, c2decimal, c0geometry FROM source WHERE vp_rowid > 4 AND vp_rowid <= 6 ORDER BY vp_rowid DESC;
+INSERT INTO r SELECT vp_rowid, c1geometry FROM source WHERE MOD(vp_rowid, 2) = 0 ORDER BY vp_rowid;
+INSERT INTO r SELECT vp_rowid, c1geometry FROM source WHERE MOD(vp_rowid, 2) = 1 ORDER BY vp_rowid;
+OPTIMIZE TABLE l COMPACT;
+
+SELECT s.c1geometry,
+       (SELECT MIN(s2.vp_rowid)
+        FROM (SELECT s0.vp_rowid, s0.c0geometry, s0.c1geometry, s0.c2decimal
+              FROM source s0) s2
+        WHERE s2.vp_rowid <= s.vp_rowid)
+FROM source s;
+
+SELECT s.c1geometry,
+       (SELECT MIN(s2.vp_rowid)
+        FROM (SELECT l.vp_rowid, l.c0geometry,
+                     (SELECT r.c1geometry FROM r r WHERE r.vp_rowid = l.vp_rowid) AS c1geometry,
+                     l.c2decimal
+              FROM l l
+              WHERE EXISTS (SELECT 1 FROM r r WHERE r.vp_rowid = l.vp_rowid)) s2
+        WHERE s2.vp_rowid <= s.vp_rowid)
+FROM (SELECT l.vp_rowid, l.c0geometry,
+             (SELECT r.c1geometry FROM r r WHERE r.vp_rowid = l.vp_rowid) AS c1geometry,
+             l.c2decimal
+      FROM l l
+      WHERE EXISTS (SELECT 1 FROM r r WHERE r.vp_rowid = l.vp_rowid)) s;
+
+单表：58 rows in set
+多表：ERROR 2013 (HY000): Lost connection to MySQL server during query
+No connection. Trying to reconnect...
+ERROR 2013 (HY000): Lost connection to MySQL server at 'reading initial communication packet', system error: 2
+ERROR: 
+Can't connect to the server

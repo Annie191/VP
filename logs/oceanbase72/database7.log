@@ -1,0 +1,644 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: OCEANBASE_MYSQL_RANDOM_TABLE_REWRITE
+--Strategy summary: split=SINGLE_RIGHT_ROW_ID_ONLY, reconstruction=ROW_NUMBER_ALIGNMENT, shape=SINGLE_COLUMN, prefix=vp_database7_506_
+--Strategy counts: split={EMPTY_SPLIT=34, SINGLE_REPLICATED=86, SINGLE_RIGHT_ROW_ID_ONLY=86, SINGLE_LEFT_ROW_ID_ONLY=85, EVEN_SPLIT=56, OVERLAPPED_SPLIT=56, SKEWED_SPLIT=56, TYPE_DIRECTED_SPLIT=56}, reconstruction={JOIN=2549, LEFT_RIGHT_JOIN=2553, FULL_OUTER_SIMULATION=2547, SCALAR_SUBQUERY=2550, EXISTS_FILTER=2547, IN_FILTER=2551, NOT_EXISTS_ANTI=2557, DERIVED_TABLE=2534, CTE=2547, VIEW=2553, TEMP_TABLE=2542, AGGREGATE_THEN_MERGE=2546, ROW_NUMBER_ALIGNMENT=2542, JSON_PACK=2548, STRING_PACK=2541, NATURAL_OR_USING=2553, STRAIGHT_JOIN=2539, LATERAL_DERIVED=2540}
+--Database: database7
+--OceanBase version: 5.7.25-OceanBase_CE-v4.4.2.1
+--Base table: t2
+--Base table DDL: CREATE TABLE `t2` (
+--  `c0` float(38,13) unsigned zerofill DEFAULT NULL
+--) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'lz4_1.0' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+-- partition by key(`c0`)
+--(partition `p0`)
+--Base table engine: InnoDB
+--VP source engine: InnoDB
+--VP left engine: InnoDB
+--VP right engine: InnoDB
+--Base row count: 4
+--Base shape: SINGLE_COLUMN
+--Stable row order: NONE
+--Prefix: vp_database7_506_
+--Split strategy: SINGLE_RIGHT_ROW_ID_ONLY
+--Left columns: c0
+--Right columns: 
+--Overlap columns: 
+--Physical foreign key: true
+--Reconstruction strategy: ROW_NUMBER_ALIGNMENT
+--Description: shape=SINGLE_COLUMN, split=SINGLE_RIGHT_ROW_ID_ONLY, reconstruction=ROW_NUMBER_ALIGNMENT
+--Session vars: sql_mode=STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER, time_zone=+00:00, optimizer_switch=, group_concat_max_len=1048576
+--Session SET statements:
+--SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER';
+--SET SESSION time_zone = '+00:00';
+--SET SESSION optimizer_switch = '';
+--SET SESSION group_concat_max_len = 1048576;
+--Setup statements:
+--CREATE TABLE `vp_database7_506_source` (`vp_rowid` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, `c0` FLOAT NULL) ENGINE=InnoDB;
+--INSERT INTO `vp_database7_506_source` (`c0`) SELECT `c0` FROM `t2` LIMIT 256;
+--CREATE TABLE `vp_database7_506_l` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` FLOAT NULL) ENGINE=InnoDB;
+--CREATE TABLE `vp_database7_506_r` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+--INSERT INTO `vp_database7_506_l` (`vp_rowid`, `c0`) SELECT `vp_rowid`, `c0` FROM `vp_database7_506_source`;
+--INSERT INTO `vp_database7_506_r` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database7_506_source`;
+--ALTER TABLE `vp_database7_506_r` ADD CONSTRAINT `vp_database7_506_fk_r_l` FOREIGN KEY (`vp_rowid`) REFERENCES `vp_database7_506_l`(`vp_rowid`);
+--DROP VIEW IF EXISTS `vp_database7_506_v`;
+--CREATE VIEW `vp_database7_506_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM `vp_database7_506_l` l JOIN `vp_database7_506_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database7_506_v`;
+--CREATE VIEW `vp_database7_506_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM `vp_database7_506_l` l JOIN `vp_database7_506_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database7_506_v`;
+--CREATE VIEW `vp_database7_506_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM `vp_database7_506_l` l JOIN `vp_database7_506_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database7_506_v`;
+--CREATE VIEW `vp_database7_506_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM `vp_database7_506_l` l JOIN `vp_database7_506_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database7_506_v`;
+--CREATE VIEW `vp_database7_506_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM `vp_database7_506_l` l JOIN `vp_database7_506_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP TEMPORARY TABLE IF EXISTS `vp_database7_506_joined`;
+--CREATE TEMPORARY TABLE `vp_database7_506_joined` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM `vp_database7_506_l` l JOIN `vp_database7_506_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP TEMPORARY TABLE IF EXISTS `vp_database7_506_joined`;
+--CREATE TEMPORARY TABLE `vp_database7_506_joined` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM `vp_database7_506_l` l JOIN `vp_database7_506_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP TEMPORARY TABLE IF EXISTS `vp_database7_506_joined`;
+--CREATE TEMPORARY TABLE `vp_database7_506_joined` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM `vp_database7_506_l` l JOIN `vp_database7_506_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP TEMPORARY TABLE IF EXISTS `vp_database7_506_joined`;
+--CREATE TEMPORARY TABLE `vp_database7_506_joined` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM `vp_database7_506_l` l JOIN `vp_database7_506_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP TEMPORARY TABLE IF EXISTS `vp_database7_506_joined`;
+--CREATE TEMPORARY TABLE `vp_database7_506_joined` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM `vp_database7_506_l` l JOIN `vp_database7_506_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--VP source snapshot:
+--SELECT `vp_rowid`, `c0` FROM `vp_database7_506_source` ORDER BY `vp_rowid`;
+--[vp_rowid=1, c0=0.0]
+--[vp_rowid=2, c0=0.0]
+--[vp_rowid=3, c0=0.0]
+--[vp_rowid=4, c0=0.0]
+--VP left snapshot:
+--SELECT `vp_rowid`, `c0` FROM `vp_database7_506_l` ORDER BY `vp_rowid`;
+--[vp_rowid=1, c0=0.0]
+--[vp_rowid=2, c0=0.0]
+--[vp_rowid=3, c0=0.0]
+--[vp_rowid=4, c0=0.0]
+--VP right snapshot:
+--SELECT `vp_rowid` FROM `vp_database7_506_r` ORDER BY `vp_rowid`;
+--[vp_rowid=1]
+--[vp_rowid=2]
+--[vp_rowid=3]
+--[vp_rowid=4]
+--Single query: SELECT DISTINCT COUNT(("0.34985713208139557") IN (CAST((NULL) != (vp_database7_506_source.vp_rowid) AS SIGNED))), MIN(vp_database7_506_source.vp_rowid), SUM((concat(vp_database7_506_source.c0,'')) >= (CAST(CAST(0.8192075104048798 AS SIGNED) AS SIGNED))) FROM vp_database7_506_source
+--Split query: SELECT DISTINCT COUNT(("0.34985713208139557") IN (CAST((NULL) != (vp_database7_506_source.vp_rowid) AS SIGNED))), MIN(vp_database7_506_source.vp_rowid), SUM((concat(vp_database7_506_source.c0,'')) >= (CAST(CAST(0.8192075104048798 AS SIGNED) AS SIGNED))) FROM (WITH l AS (SELECT ROW_NUMBER() OVER (ORDER BY `vp_rowid`) AS rn, `vp_rowid`, `c0` FROM `vp_database7_506_l`), r AS (SELECT ROW_NUMBER() OVER (ORDER BY `vp_rowid`) AS rn, `vp_rowid` FROM `vp_database7_506_r`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM l JOIN r ON l.rn = r.rn) `vp_database7_506_source`
+--Single query plan:
+--EXPLAIN SELECT DISTINCT COUNT(("0.34985713208139557") IN (CAST((NULL) != (vp_database7_506_source.vp_rowid) AS SIGNED))), MIN(vp_database7_506_source.vp_rowid), SUM((concat(vp_database7_506_source.c0,'')) >= (CAST(CAST(0.8192075104048798 AS SIGNED) AS SIGNED))) FROM vp_database7_506_source;
+--[Query Plan=====================================================================]
+--[Query Plan=|ID|OPERATOR         |NAME                   |EST.ROWS|EST.TIME(us)|]
+--[Query Plan=--------------------------------------------------------------------]
+--[Query Plan=|0 |SCALAR GROUP BY  |                       |1       |3           |]
+--[Query Plan=|1 |└─TABLE FULL SCAN|vp_database7_506_source|4       |3           |]
+--[Query Plan=====================================================================]
+--[Query Plan=Outputs & filters:]
+--[Query Plan=-------------------------------------]
+--[Query Plan=  0 - output([T_FUN_COUNT_SUM(T_FUN_COUNT(cast('0.34985713208139557', DECIMAL(1, -1)) = cast(cast(NULL != vp_database7_506_source.vp_rowid, BIGINT(0, 0)),]
+--[Query Plan=       DECIMAL(11, 0))))], [T_FUN_MIN(T_FUN_MIN(vp_database7_506_source.vp_rowid))], [T_FUN_SUM(T_FUN_SUM(cast(concat(cast(vp_database7_506_source.c0, VARCHAR(1048576)),]
+--[Query Plan=       ''), DECIMAL(-1, -1)) >= cast(cast(cast(0.8192075104048798, BIGINT(0, 0)), BIGINT(0, 0)), DECIMAL(20, 0))))]), filter(nil), rowset=16]
+--[Query Plan=      group(nil), agg_func([T_FUN_COUNT_SUM(T_FUN_COUNT(cast('0.34985713208139557', DECIMAL(1, -1)) = cast(cast(NULL != vp_database7_506_source.vp_rowid,]
+--[Query Plan=       BIGINT(0, 0)), DECIMAL(11, 0))))], [T_FUN_MIN(T_FUN_MIN(vp_database7_506_source.vp_rowid))], [T_FUN_SUM(T_FUN_SUM(cast(concat(cast(vp_database7_506_source.c0,]
+--[Query Plan=       VARCHAR(1048576)), ''), DECIMAL(-1, -1)) >= cast(cast(cast(0.8192075104048798, BIGINT(0, 0)), BIGINT(0, 0)), DECIMAL(20, 0))))])]
+--[Query Plan=  1 - output([T_FUN_COUNT(cast('0.34985713208139557', DECIMAL(1, -1)) = cast(cast(NULL != vp_database7_506_source.vp_rowid, BIGINT(0, 0)), DECIMAL(11, 0)))],]
+--[Query Plan=       [T_FUN_MIN(vp_database7_506_source.vp_rowid)], [T_FUN_SUM(cast(concat(cast(vp_database7_506_source.c0, VARCHAR(1048576)), ''), DECIMAL(-1, -1)) >= cast(cast(cast(0.8192075104048798,]
+--[Query Plan=       BIGINT(0, 0)), BIGINT(0, 0)), DECIMAL(20, 0)))]), filter(nil), rowset=16]
+--[Query Plan=      access([vp_database7_506_source.vp_rowid], [vp_database7_506_source.c0]), partitions(p0)]
+--[Query Plan=      is_index_back=false, is_global_index=false, ]
+--[Query Plan=      range_key([vp_database7_506_source.vp_rowid]), range(MIN ; MAX)always true, ]
+--[Query Plan=      pushdown_aggregation([T_FUN_COUNT(cast('0.34985713208139557', DECIMAL(1, -1)) = cast(cast(NULL != vp_database7_506_source.vp_rowid, BIGINT(0, 0)),]
+--[Query Plan=       DECIMAL(11, 0)))], [T_FUN_MIN(vp_database7_506_source.vp_rowid)], [T_FUN_SUM(cast(concat(cast(vp_database7_506_source.c0, VARCHAR(1048576)), ''), DECIMAL(-1,]
+--[Query Plan=       -1)) >= cast(cast(cast(0.8192075104048798, BIGINT(0, 0)), BIGINT(0, 0)), DECIMAL(20, 0)))])]
+--Split query plan:
+--EXPLAIN SELECT DISTINCT COUNT(("0.34985713208139557") IN (CAST((NULL) != (vp_database7_506_source.vp_rowid) AS SIGNED))), MIN(vp_database7_506_source.vp_rowid), SUM((concat(vp_database7_506_source.c0,'')) >= (CAST(CAST(0.8192075104048798 AS SIGNED) AS SIGNED))) FROM (WITH l AS (SELECT ROW_NUMBER() OVER (ORDER BY `vp_rowid`) AS rn, `vp_rowid`, `c0` FROM `vp_database7_506_l`), r AS (SELECT ROW_NUMBER() OVER (ORDER BY `vp_rowid`) AS rn, `vp_rowid` FROM `vp_database7_506_r`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0` FROM l JOIN r ON l.rn = r.rn) `vp_database7_506_source`;
+--[Query Plan======================================================================]
+--[Query Plan=|ID|OPERATOR               |NAME              |EST.ROWS|EST.TIME(us)|]
+--[Query Plan=---------------------------------------------------------------------]
+--[Query Plan=|0 |SCALAR GROUP BY        |                  |1       |12          |]
+--[Query Plan=|1 |└─HASH JOIN            |                  |4       |12          |]
+--[Query Plan=|2 |  ├─SUBPLAN SCAN       |r                 |4       |5           |]
+--[Query Plan=|3 |  │ └─WINDOW FUNCTION  |                  |4       |5           |]
+--[Query Plan=|4 |  │   └─TABLE FULL SCAN|vp_database7_506_r|4       |3           |]
+--[Query Plan=|5 |  └─SUBPLAN SCAN       |l                 |4       |6           |]
+--[Query Plan=|6 |    └─WINDOW FUNCTION  |                  |4       |6           |]
+--[Query Plan=|7 |      └─TABLE FULL SCAN|vp_database7_506_l|4       |3           |]
+--[Query Plan======================================================================]
+--[Query Plan=Outputs & filters:]
+--[Query Plan=-------------------------------------]
+--[Query Plan=  0 - output([T_FUN_COUNT(cast('0.34985713208139557', DECIMAL(1, -1)) = cast(cast(NULL != l.vp_rowid, BIGINT(0, 0)), DECIMAL(11, 0)))], [T_FUN_MIN(l.vp_rowid)],]
+--[Query Plan=       [T_FUN_SUM(cast(concat(cast(l.c0, VARCHAR(1048576)), ''), DECIMAL(-1, -1)) >= cast(cast(cast(0.8192075104048798, BIGINT(0, 0)), BIGINT(0, 0)), DECIMAL(20,]
+--[Query Plan=       0)))]), filter(nil), rowset=16]
+--[Query Plan=      group(nil), agg_func([T_FUN_COUNT(cast('0.34985713208139557', DECIMAL(1, -1)) = cast(cast(NULL != l.vp_rowid, BIGINT(0, 0)), DECIMAL(11, 0)))], [T_FUN_MIN(l.vp_rowid)],]
+--[Query Plan=       [T_FUN_SUM(cast(concat(cast(l.c0, VARCHAR(1048576)), ''), DECIMAL(-1, -1)) >= cast(cast(cast(0.8192075104048798, BIGINT(0, 0)), BIGINT(0, 0)), DECIMAL(20,]
+--[Query Plan=       0)))])]
+--[Query Plan=  1 - output([l.vp_rowid], [l.c0]), filter(nil), rowset=16]
+--[Query Plan=      equal_conds([l.rn = r.rn]), other_conds(nil)]
+--[Query Plan=  2 - output([r.rn]), filter(nil), rowset=16]
+--[Query Plan=      access([r.rn])]
+--[Query Plan=  3 - output([T_WIN_FUN_ROW_NUMBER()]), filter(nil), rowset=16]
+--[Query Plan=      win_expr(T_WIN_FUN_ROW_NUMBER()), partition_by(nil), order_by([vp_database7_506_r.vp_rowid, ASC]), window_type(RANGE), upper(UNBOUNDED PRECEDING),]
+--[Query Plan=       lower(UNBOUNDED FOLLOWING)]
+--[Query Plan=  4 - output([vp_database7_506_r.vp_rowid]), filter(nil), rowset=16]
+--[Query Plan=      access([vp_database7_506_r.vp_rowid]), partitions(p0)]
+--[Query Plan=      is_index_back=false, is_global_index=false, ]
+--[Query Plan=      range_key([vp_database7_506_r.vp_rowid]), range(MIN ; MAX)always true]
+--[Query Plan=  5 - output([l.rn], [l.vp_rowid], [l.c0]), filter(nil), rowset=16]
+--[Query Plan=      access([l.rn], [l.vp_rowid], [l.c0])]
+--[Query Plan=  6 - output([T_WIN_FUN_ROW_NUMBER()], [vp_database7_506_l.vp_rowid], [vp_database7_506_l.c0]), filter(nil), rowset=16]
+--[Query Plan=      win_expr(T_WIN_FUN_ROW_NUMBER()), partition_by(nil), order_by([vp_database7_506_l.vp_rowid, ASC]), window_type(RANGE), upper(UNBOUNDED PRECEDING),]
+--[Query Plan=       lower(UNBOUNDED FOLLOWING)]
+--[Query Plan=  7 - output([vp_database7_506_l.vp_rowid], [vp_database7_506_l.c0]), filter(nil), rowset=16]
+--[Query Plan=      access([vp_database7_506_l.vp_rowid], [vp_database7_506_l.c0]), partitions(p0)]
+--[Query Plan=      is_index_back=false, is_global_index=false, ]
+--[Query Plan=      range_key([vp_database7_506_l.vp_rowid]), range(MIN ; MAX)always true]
+--Single result sample: S:1:4;S:1:1;S:1:0; x1
+--Split result sample: S:1:0;S:1:1;S:1:0; x1
+--Only in single: S:1:4;S:1:1;S:1:0; x1
+--Only in split: S:1:0;S:1:1;S:1:0; x1
+--
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.comparePair(OceanBaseVerticalPartitioningOracle.java:1420)
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.check(OceanBaseVerticalPartitioningOracle.java:292)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:468)
+--	at sqlancer.Main$2.run(Main.java:685)
+--	at sqlancer.Main$2.runThread(Main.java:667)
+--	at sqlancer.Main$2.run(Main.java:658)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/07/02 03:01:39
+-- Database: database7
+-- Database version: 5.7.25
+-- seed value: 1782957532590
+DROP DATABASE IF EXISTS database7;
+CREATE DATABASE database7;
+USE database7;
+CREATE TABLE IF NOT EXISTS t0(c0 MEDIUMINT(185) ZEROFILL  COMMENT 'asdf' , c1 FLOAT ZEROFILL  COMMENT 'asdf'  UNIQUE)  PARTITION BY HASH(c1) partitions 19;
+CREATE TABLE t0(c0 DOUBLE(41, 22) ZEROFILL , c1 BIGINT ZEROFILL  UNIQUE KEY COMMENT 'asdf'  , c2 FLOAT ZEROFILL  COMMENT 'asdf'  UNIQUE KEY , c3 FLOAT(30, 14) )  PARTITION BY KEY (c0, c1, c2, c3);
+CREATE TABLE IF NOT EXISTS t0(c0 FLOAT(21, 2) )  PARTITION BY HASH(c0) partitions 10;
+CREATE TABLE IF NOT EXISTS t0(c0 BIGINT(40) ZEROFILL  UNIQUE KEY)  PARTITION BY KEY (c0);
+ALTER TABLE t0 COMPRESSION 'NONE';
+UPDATE `t0` SET `c0`=0.7118353821776483 WHERE (+ (CAST((concat(t0.c0,'')) NOT IN ('') AS SIGNED)));
+ALTER TABLE t0 COMPRESSION 'LZ4_1.0';
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0` QUICK;
+REPLACE INTO `t0`(`c0`) VALUES (1518387810);
+UPDATE `t0` SET `c0`=-1268621154 WHERE (+ ((+ ((+ (''))))));
+REPAIR TABLE `t0` QUICK USE_FRM;
+REPLACE INTO `t0`(`c0`) VALUES (1612484060);
+CHECKSUM TABLE `t0`;
+UPDATE `t0` SET `c0`=1524779661;
+REPAIR TABLE `t0` QUICK EXTENDED USE_FRM;
+INSERT INTO `t0`(`c0`) VALUES (1357275742);
+UPDATE `t0` SET `c0`=-1268621154 WHERE (((- (0.1990592647074857))) < (913496718)) NOT IN ((! ((concat(t0.c0,'')) <= (1.357275742E9))));
+ALTER TABLE t0 ;
+ALTER TABLE t0 ;
+UPDATE `t0` SET `c0`=LEAST((NULL) IN (concat(t0.c0,'')), (concat(t0.c0,'')) = (1524779661), (concat(t0.c0,'')) NOT IN (0.4001551030639081), CAST(concat(t0.c0,'') AS SIGNED));
+ANALYZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+REPLACE INTO `t0`(`c0`) VALUES (-393168801);
+UPDATE `t0` SET `c0`=(((concat(t0.c0,'')) IN (0.8556088344018039)) IS FALSE) XOR (((+ (-1268621154))) IN ("")) WHERE concat(t0.c0,'');
+REPAIR TABLE `t0` QUICK;
+REPLACE INTO `t0`(`c0`) VALUES (-1934853607);
+CHECKSUM TABLE `t0` QUICK;
+ALTER TABLE t0 COMPRESSION 'LZ4_1.0';
+UPDATE `t0` SET `c0`=(! (((concat(t0.c0,'')) XOR (concat(t0.c0,''))) IS UNKNOWN));
+ALTER TABLE t0 ;
+ANALYZE TABLE `t0`;
+UPDATE `t0` SET `c0`=-1619790958;
+CHECKSUM TABLE `t0` QUICK;
+REPAIR TABLE `t0` QUICK EXTENDED;
+CHECKSUM TABLE `t0`;
+UPDATE `t0` SET `c0`=(- (COALESCE(1357275742, NULL))) WHERE  EXISTS (SELECT 1 from dual wHERE FALSE);
+REPAIR TABLE `t0` QUICK EXTENDED USE_FRM;
+ANALYZE TABLE `t0`;
+REPLACE INTO `t0`(`c0`) VALUES (1271270974);
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+ALTER TABLE t0 COMPRESSION 'LZ4_1.0';
+CHECKSUM TABLE `t0` QUICK;
+CHECKSUM TABLE `t0`;
+CREATE TABLE IF NOT EXISTS t1(c0 FLOAT UNSIGNED ZEROFILL )  PARTITION BY HASH(c0) partitions 8;
+CREATE TABLE IF NOT EXISTS t1(c0 FLOAT(46, 22)  COMMENT 'asdf'   NULL, c1 INT(112) , c2 DOUBLE(1, 1) UNSIGNED ZEROFILL  COMMENT 'asdf'   UNIQUE KEY , c3 FLOAT UNSIGNED  COMMENT 'asdf'   )  PARTITION BY KEY (c0, c1);
+CREATE TABLE IF NOT EXISTS t1(c0 VARCHAR(500)  COMMENT 'asdf'  NULL)  PARTITION BY HASH(c0) partitions 6;
+CREATE TABLE IF NOT EXISTS t1(c0 DOUBLE ZEROFILL  UNIQUE KEY)  PARTITION BY HASH(c0) partitions 3;
+CREATE TABLE t1(c0 FLOAT  UNIQUE KEY PRIMARY KEY)  PARTITION BY KEY (c0);
+ALTER TABLE t1 ;
+ANALYZE TABLE `t1`;
+ALTER TABLE t1 COMPRESSION 'LZ4_1.0';
+REPLACE INTO `t1`(`c0`) VALUES (0.015266862537571146);
+INSERT INTO `t1`(`c0`) VALUES (1.271270974E9);
+UPDATE `t1` SET `c0`=0.006884171203294542;
+REPAIR TABLE `t1` QUICK USE_FRM;
+UPDATE `t1` SET `c0`='꟤A''0' WHERE concat(t1.c0,'');
+CHECKSUM TABLE `t1`;
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+REPAIR TABLE `t1` USE_FRM;
+REPAIR TABLE `t1` USE_FRM;
+REPLACE INTO `t1`(`c0`) VALUES (1.7976931348623157E308);
+REPLACE INTO `t1`(`c0`) VALUES (0.015002258365229393);
+ALTER TABLE t1 ;
+CHECKSUM TABLE `t1` QUICK;
+UPDATE `t1` SET `c0`=0.05969472029298584;
+UPDATE `t1` SET `c0`=-1.934853607E9 WHERE -1.268621154E9;
+ALTER TABLE t1 ;
+CHECKSUM TABLE `t1` EXTENDED;
+REPAIR TABLE `t1` USE_FRM;
+CHECKSUM TABLE `t1` QUICK;
+ANALYZE TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED;
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+CHECKSUM TABLE `t1`;
+ANALYZE TABLE `t1`;
+REPAIR TABLE `t1` QUICK;
+CHECKSUM TABLE `t1` EXTENDED;
+CHECKSUM TABLE `t1`;
+ANALYZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+CHECKSUM TABLE `t1`;
+ALTER TABLE t0 ;
+ALTER TABLE t0 ;
+UPDATE  /*+parallel(5) enable_parallel_dml*/ t0 SET c0=872709675;
+UPDATE t0 SET c0=( EXISTS (SELECT 1)) IN (COALESCE(concat(t0.c0,''), 0.31771311658961776)) WHERE 0.015002258365229393;
+UPDATE t0 SET c0=((- ((- (concat(t0.c0,'')))))) IS UNKNOWN;
+UPDATE  /*+parallel(5) enable_parallel_dml*/ t1 SET c0=-1.619790958E9 WHERE  EXISTS (SELECT 1);
+UPDATE  /*+parallel(5) enable_parallel_dml*/ t0 SET c0=(+ ((+ (GREATEST(0.4088228828797973, -1182749940, "0.05969472029298584", NULL))))) WHERE  EXISTS (SELECT 1);
+UPDATE t0 SET c0=1773383380;
+UPDATE t1 SET c0=0.10063709022006118 WHERE  EXISTS (SELECT 1 from dual wHERE FALSE);
+ALTER TABLE t0 ;
+ALTER TABLE t1 ;
+REPLACE INTO t0(c0) VALUES(1271270974);
+CREATE TABLE IF NOT EXISTS t2(c0 FLOAT(43, 7) ZEROFILL  UNIQUE PRIMARY KEY COMMENT 'asdf' , c1 FLOAT(24, 7) ZEROFILL , c2 VARCHAR(500) , c3 VARCHAR(500)  COMMENT 'asdf' )  PARTITION BY HASH(c0) partitions 9;
+CREATE TABLE t2(c0 VARCHAR(500)  NULL, c1 DOUBLE(32, 8) ZEROFILL  COMMENT 'asdf' , c2 BIGINT ZEROFILL   , c3 VARCHAR(500)  COMMENT 'asdf'  NULL, c4 FLOAT(17, 17) UNSIGNED  COMMENT 'asdf' , c5 FLOAT UNSIGNED ZEROFILL  UNIQUE KEY NULL COMMENT 'asdf'  )  PARTITION BY HASH(c2) partitions 4;
+CREATE TABLE IF NOT EXISTS t2(c0 VARCHAR(500) , c1 VARCHAR(500)  NULL)  PARTITION BY KEY (c0);
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c1`=118369276;
+ALTER TABLE t2 COMPRESSION 'NONE';
+UPDATE `t2` SET `c1`="";
+CHECKSUM TABLE `t2` EXTENDED;
+UPDATE `t2` SET `c0`='-626284572' WHERE CAST((0.6557578892416116) AND (('럥') IS NULL) AS SIGNED);
+UPDATE `t2` SET `c0`='1518387810' WHERE t2.c1;
+UPDATE `t2` SET `c0`=t2.c1 WHERE (( EXISTS (SELECT 1)) >= ((- (t2.c1)))) OR ( EXISTS (SELECT 1 from dual wHERE FALSE));
+UPDATE `t2` SET `c1`=(IF(0.7509235740841989, t2.c0, NULL)) IS NOT TRUE;
+UPDATE `t2` SET `c1`=(+ (((-1034041649) NOT IN (1311379889, 0.2849586567557224)) IN ((- (t2.c1))))), `c0`=IFNULL((t2.c0) IN (t2.c0),  EXISTS (SELECT 1 from dual wHERE FALSE)) WHERE CAST((+ (t2.c1)) AS SIGNED);
+UPDATE `t2` SET `c0`="-1312216142", `c1`=(1612484060) IN (CAST(CAST(NULL AS SIGNED) AS SIGNED)) WHERE ((+ (NULL))) IS NOT TRUE;
+UPDATE `t2` SET `c1`=(t2.c1) IS TRUE, `c0`="域U";
+REPLACE INTO `t2`(`c1`, `c0`) VALUES ('-1268621154', '');
+REPLACE INTO `t2`(`c1`) VALUES ("J+L?䪩X_ ");
+ALTER TABLE t2 COMPRESSION 'NONE';
+UPDATE `t2` SET `c1`=((+ (1486510000))) IS FALSE, `c0`='';
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ('''5_', '-510083240');
+REPAIR TABLE `t2` USE_FRM;
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+REPLACE INTO `t2`(`c1`) VALUES ('');
+UPDATE `t2` SET `c1`='H!', `c0`='f';
+ALTER TABLE t2 ;
+ALTER TABLE t2 COMPRESSION 'LZ4_1.0';
+REPAIR TABLE `t2` QUICK USE_FRM;
+INSERT INTO `t2`(`c0`, `c1`) VALUES ("", 'tB赶t');
+REPAIR TABLE `t2` QUICK EXTENDED USE_FRM;
+ALTER TABLE t2 COMPRESSION 'LZ4_1.0';
+REPAIR TABLE `t2` QUICK;
+CHECKSUM TABLE `t2` QUICK;
+UPDATE `t2` SET `c0`=((NOT ((t2.c1) NOT IN (0.9241938928152952)))) NOT IN (t2.c0);
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE t0(c0 FLOAT UNSIGNED ZEROFILL , c1 INT ZEROFILL  COMMENT 'asdf'  )  PARTITION BY KEY (c0, c1);
+UPDATE `t0` SET `c1`=1521859691;
+CHECKSUM TABLE `t0`;
+ANALYZE TABLE `t0`;
+REPAIR TABLE `t0` EXTENDED;
+UPDATE `t0` SET `c1`=-2052145804, `c0`=(NOT (-1934853607));
+REPLACE INTO `t0`(`c0`) VALUES (-7.45055539E8);
+UPDATE `t0` SET `c1`=631675631, `c0`=0.768161240729566 WHERE (((concat(t0.c0,'')) > ("](")) IS NOT FALSE) != (concat(t0.c1,''));
+UPDATE `t0` SET `c1`=-1928811335 WHERE (- (((concat(t0.c0,'')) IS FALSE) IS TRUE));
+UPDATE `t0` SET `c1`=509296355;
+UPDATE `t0` SET `c0`=COALESCE(COALESCE(NULL, 867038917), (0.512801832167333) <= (concat(t0.c1,''))), `c1`=480469214;
+UPDATE `t0` SET `c1`=CAST((- ((concat(t0.c1,'')) NOT IN (concat(t0.c0,'')))) AS SIGNED), `c0`=0.7998741738570521 WHERE concat(t0.c0,'');
+ALTER TABLE t0 ;
+ALTER TABLE t0 ;
+ANALYZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0`;
+UPDATE `t0` SET `c0`=-8.0373626E7 WHERE BIT_COUNT((0.10030332456733737) OR (concat(t0.c0,'')));
+REPLACE INTO `t0`(`c1`, `c0`) VALUES (-1602650738, 0.7638835371257074);
+ANALYZE TABLE `t0`;
+UPDATE `t0` SET `c0`=0.599593543057386, `c1`=( EXISTS (SELECT 1)) != (CAST((- (0.9863297267564117)) AS SIGNED));
+ANALYZE TABLE `t0`;
+REPAIR TABLE `t0` USE_FRM;
+CHECKSUM TABLE `t0`;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0` QUICK;
+REPAIR TABLE `t0`;
+REPLACE INTO `t0`(`c1`, `c0`) VALUES (-1429702919, 0.2002732931723581);
+REPAIR TABLE `t0` QUICK;
+UPDATE `t0` SET `c0`=CAST((NOT (LEAST(concat(t0.c0,''), NULL))) AS SIGNED);
+UPDATE `t0` SET `c1`=(0.9327212585163962) && (IFNULL(concat(t0.c0,''), '-1294487958')) WHERE (LEAST(concat(t0.c1,''), concat(t0.c0,''), 0.025488925113822503, NULL)) || ( EXISTS (SELECT 1 from dual wHERE FALSE));
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+CHECKSUM TABLE `t0` EXTENDED;
+DROP TABLE IF EXISTS `t1`;
+CREATE TABLE t1(c0 DOUBLE(45, 10) UNSIGNED , c1 DECIMAL  NULL UNIQUE KEY COMMENT 'asdf' )  PARTITION BY KEY (c1);
+ALTER TABLE t1 COMPRESSION 'LZ4_1.0';
+ALTER TABLE t1 ;
+ANALYZE TABLE `t1`;
+REPLACE INTO `t1`(`c1`, `c0`) VALUES (0.33759553717832325, 1.836365003E9);
+REPLACE INTO `t1`(`c1`, `c0`) VALUES (0.5868612256462576, 0.6093170765490405);
+CHECKSUM TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED USE_FRM;
+REPAIR TABLE `t1`;
+CHECKSUM TABLE `t1`;
+REPLACE INTO `t1`(`c0`) VALUES (0.33008188542304795);
+CHECKSUM TABLE `t1`;
+CHECKSUM TABLE `t1` QUICK;
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+CHECKSUM TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED;
+CHECKSUM TABLE `t1` QUICK;
+ANALYZE TABLE `t1`;
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+ALTER TABLE t1 COMPRESSION 'NONE';
+UPDATE `t1` SET `c0`=0.6149506500405857 WHERE (((t1.c1) IN (t1.c0, NULL, '')) IS FALSE) IS NOT TRUE;
+REPAIR TABLE `t1` QUICK EXTENDED;
+ANALYZE TABLE `t1`;
+REPLACE INTO `t1`(`c1`) VALUES (1.898711884E9);
+ALTER TABLE t1 ;
+ANALYZE TABLE `t1`;
+REPAIR TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED USE_FRM;
+UPDATE `t1` SET `c1`=t1.c0, `c0`=(((-1686254999) IS NOT FALSE) NOT IN ((NULL) OR ('~'))) IS NOT UNKNOWN WHERE (((t1.c1) NOT IN (t1.c0, '762675279')) IN (t1.c1, NULL)) IN (t1.c1);
+ALTER TABLE t1 COMPRESSION 'LZ4_1.0';
+ANALYZE TABLE `t1`;
+REPLACE INTO `t1`(`c0`, `c1`) VALUES (0.7198692315774442, 0.31771311658961776);
+REPLACE INTO `t1`(`c1`) VALUES (0.6941959977336197);
+ALTER TABLE t1 COMPRESSION 'LZ4_1.0';
+DROP TABLE IF EXISTS `t2`;
+CREATE TABLE t2(c0 TINYINT(249) ZEROFILL    COMMENT 'asdf'  UNIQUE, c1 VARCHAR(500)  COMMENT 'asdf' )  PARTITION BY KEY (c1);
+CREATE TABLE IF NOT EXISTS t2(c0 DOUBLE UNSIGNED ZEROFILL )  PARTITION BY KEY (c0);
+UPDATE `t2` SET `c0`=(+ ((BIT_COUNT(NULL)) XOR ((NOT (concat(t2.c0,'')))))) WHERE IF((NULL) IS NOT TRUE, (concat(t2.c0,'')) AND (0.9384254198877443), (NULL) IS NOT TRUE);
+ALTER TABLE t2 COMPRESSION 'LZ4_1.0';
+ALTER TABLE t2 ;
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c0`=CAST(((concat(t2.c0,'')) = (concat(t2.c0,''))) IS NOT TRUE AS SIGNED);
+REPAIR TABLE `t2` QUICK EXTENDED USE_FRM;
+UPDATE `t2` SET `c0`=0.3574365871933354;
+INSERT INTO `t2`(`c0`) VALUES (0.04037593288942065);
+REPLACE INTO `t2`(`c0`) VALUES (7.8190476E7);
+ANALYZE TABLE `t2`;
+REPLACE INTO `t2`(`c0`) VALUES (0.9497982753712606);
+INSERT INTO `t2`(`c0`) VALUES (0.04677288329232332);
+UPDATE `t2` SET `c0`=0.016456509003635156 WHERE (((concat(t2.c0,'')) IN (NULL, concat(t2.c0,''))) IS TRUE) = ((+ (CAST("rVP]IT" AS SIGNED))));
+ALTER TABLE t2 ;
+CHECKSUM TABLE `t2` EXTENDED;
+CHECKSUM TABLE `t2`;
+UPDATE `t2` SET `c0`=(-826545330) XOR (CAST(("") <= (concat(t2.c0,'')) AS SIGNED)) WHERE  EXISTS (SELECT 1);
+UPDATE `t2` SET `c0`=(NULL) = (COALESCE(0.7625906566115016, concat(t2.c0,''))) WHERE ( EXISTS (SELECT 1 from dual wHERE FALSE)) && (((NULL) < (-1919347447)) NOT IN (0.2840845940418236));
+UPDATE `t2` SET `c0`=0.9497982753712606;
+REPLACE INTO `t2`(`c0`) VALUES (0.5718748518891987);
+UPDATE `t2` SET `c0`=0.3400858218250947 WHERE  EXISTS (SELECT 1);
+CHECKSUM TABLE `t2` EXTENDED;
+CHECKSUM TABLE `t2` QUICK;
+ALTER TABLE t2 ;
+INSERT INTO `t2`(`c0`) VALUES (0.6625426997817658);
+UPDATE `t2` SET `c0`=0.3368502258875995;
+CHECKSUM TABLE `t2`;
+CHECKSUM TABLE `t2`;
+REPAIR TABLE `t2` QUICK;
+UPDATE `t2` SET `c0`=0.655165568153547;
+ALTER TABLE t2 COMPRESSION 'LZ4_1.0';
+CHECKSUM TABLE `t2` QUICK;
+ALTER TABLE t2 COMPRESSION 'LZ4_1.0';
+REPLACE INTO `t2`(`c0`) VALUES (0.7024451641466368);
+DROP TABLE IF EXISTS `t1`;
+CREATE TABLE IF NOT EXISTS t1(c0 BIGINT(19)  )  PARTITION BY HASH(c0) partitions 14;
+INSERT INTO `t1`(`c0`) VALUES (-1861633340);
+ANALYZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+CHECKSUM TABLE `t1`;
+ALTER TABLE t1 ;
+UPDATE `t1` SET `c0`=((0.7361595684167436) > ((0.1571728452448542) != (t1.c0))) IS NOT UNKNOWN;
+CHECKSUM TABLE `t1`;
+ALTER TABLE t1 COMPRESSION 'LZ4_1.0';
+REPAIR TABLE `t1` QUICK EXTENDED;
+REPLACE INTO `t1`(`c0`) VALUES (2116455119);
+CHECKSUM TABLE `t1`;
+ANALYZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+INSERT INTO `t1`(`c0`) VALUES (1128060098);
+INSERT INTO `t1`(`c0`) VALUES (-263320150);
+UPDATE `t1` SET `c0`=-1505505408;
+ANALYZE TABLE `t1`;
+UPDATE `t1` SET `c0`=945380933;
+UPDATE `t1` SET `c0`=CAST(((t1.c0) NOT IN ("fn")) NOT IN (GREATEST(-1.562002504E9, t1.c0)) AS SIGNED);
+REPAIR TABLE `t1` QUICK;
+ALTER TABLE t1 ;
+UPDATE `t1` SET `c0`= EXISTS (SELECT 1 from dual wHERE FALSE);
+ANALYZE TABLE `t1`;
+CHECKSUM TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED USE_FRM;
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+UPDATE `t1` SET `c0`=t1.c0 WHERE (((t1.c0) > (NULL)) IS NOT TRUE) IS UNKNOWN;
+REPLACE INTO `t1`(`c0`) VALUES (1002380030);
+CHECKSUM TABLE `t1` EXTENDED;
+CHECKSUM TABLE `t1`;
+INSERT INTO `t1`(`c0`) VALUES (-608655916);
+CHECKSUM TABLE `t1` EXTENDED;
+CHECKSUM TABLE `t1`;
+REPLACE INTO `t1`(`c0`) VALUES (1003311994);
+CHECKSUM TABLE `t1` EXTENDED;
+INSERT INTO `t1`(`c0`) VALUES (-282503245);
+ANALYZE TABLE `t1`;
+ALTER TABLE t1 COMPRESSION 'LZ4_1.0';
+ANALYZE TABLE `t1`;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE t0(c0 VARCHAR(500)   COMMENT 'asdf' , c1 FLOAT UNSIGNED ZEROFILL  UNIQUE KEY)  PARTITION BY HASH(c1) partitions 4;
+CREATE TABLE IF NOT EXISTS t0(c0 MEDIUMINT(8)  PRIMARY KEY, c1 BIGINT(221)  COMMENT 'asdf' )  PARTITION BY KEY (c0, c1);
+CREATE TABLE t0(c0 DECIMAL(3, 2) UNSIGNED  UNIQUE KEY  , c1 DECIMAL(18, 9) ZEROFILL  , c2 DECIMAL  UNIQUE KEY NULL COMMENT 'asdf' , c3 FLOAT UNSIGNED ZEROFILL )  PARTITION BY HASH(c2) partitions 16;
+CREATE TABLE IF NOT EXISTS t0(c0 FLOAT )  PARTITION BY KEY (c0);
+REPAIR TABLE `t0` USE_FRM;
+REPAIR TABLE `t0` EXTENDED;
+CHECKSUM TABLE `t0` QUICK;
+INSERT INTO `t0`(`c0`) VALUES (0.6234249166937266);
+REPLACE INTO `t0`(`c0`) VALUES (0.35828800656969906);
+ANALYZE TABLE `t0`;
+ALTER TABLE t0 ;
+UPDATE `t0` SET `c0`=-628111679;
+ALTER TABLE t0 COMPRESSION 'NONE';
+ANALYZE TABLE `t0`;
+REPLACE INTO `t0`(`c0`) VALUES (0.19155133983078787);
+REPLACE INTO `t0`(`c0`) VALUES (0.2923368111113036);
+INSERT INTO `t0`(`c0`) VALUES (0.029145393878932446);
+CHECKSUM TABLE `t0` EXTENDED;
+ALTER TABLE t0 COMPRESSION 'NONE';
+REPAIR TABLE `t0` QUICK EXTENDED;
+UPDATE `t0` SET `c0`=BIT_COUNT(CAST(concat(t0.c0,'') AS SIGNED));
+ANALYZE TABLE `t0`;
+REPLACE INTO `t0`(`c0`) VALUES (0.5556298983670859);
+ALTER TABLE t0 COMPRESSION 'NONE';
+INSERT INTO `t0`(`c0`) VALUES (0.4118793372325392);
+REPAIR TABLE `t0`;
+INSERT INTO `t0`(`c0`) VALUES (-1.251449244E9);
+ALTER TABLE t0 COMPRESSION 'LZ4_1.0';
+ALTER TABLE t0 COMPRESSION 'LZ4_1.0';
+ALTER TABLE t0 ;
+REPAIR TABLE `t0` QUICK EXTENDED USE_FRM;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+REPLACE INTO `t0`(`c0`) VALUES (0.005704634483146731);
+INSERT INTO `t0`(`c0`) VALUES (-1.619790958E9);
+UPDATE `t0` SET `c0`=0.6462227906228665;
+UPDATE `t0` SET `c0`=1.919989733E9;
+UPDATE `t0` SET `c0`=0.8852150902066057 WHERE ( EXISTS (SELECT 1)) OR ( EXISTS (SELECT 1 from dual wHERE FALSE));
+CHECKSUM TABLE `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+DROP TABLE IF EXISTS `t1`;
+CREATE TABLE IF NOT EXISTS t1(c0 INT ZEROFILL  COMMENT 'asdf'    UNIQUE, c1 DOUBLE(26, 10) UNSIGNED ZEROFILL )  PARTITION BY KEY (c1, c0);
+CREATE TABLE IF NOT EXISTS t1(c0 DECIMAL ZEROFILL   COMMENT 'asdf' )  PARTITION BY KEY (c0);
+INSERT INTO `t1`(`c0`) VALUES (0.31771311658961776);
+UPDATE `t1` SET `c0`=0.1396277142831458;
+CHECKSUM TABLE `t1`;
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+UPDATE `t1` SET `c0`=((NOT (NULL))) NOT IN (((concat(t1.c0,'')) IN (concat(t1.c0,''))) NOT IN ((+ (NULL)), concat(t1.c0,'')), (-143100144) NOT IN (concat(t1.c0,'')), (LEAST(NULL, concat(t1.c0,''))) NOT IN ((concat(t1.c0,'')) <= (concat(t1.c0,''))));
+CHECKSUM TABLE `t1` EXTENDED;
+REPAIR TABLE `t1` QUICK EXTENDED;
+ANALYZE TABLE `t1`;
+ALTER TABLE t1 COMPRESSION 'NONE';
+REPAIR TABLE `t1` QUICK EXTENDED USE_FRM;
+REPLACE INTO `t1`(`c0`) VALUES (0.2386234723983932);
+REPLACE INTO `t1`(`c0`) VALUES (0.15125028094690485);
+ALTER TABLE t1 COMPRESSION 'NONE';
+ALTER TABLE t1 COMPRESSION 'LZ4_1.0';
+CHECKSUM TABLE `t1`;
+INSERT INTO `t1`(`c0`) VALUES (0.2789911715990978);
+ALTER TABLE t1 ;
+INSERT INTO `t1`(`c0`) VALUES (0.31006718209598394);
+UPDATE `t1` SET `c0`= EXISTS (SELECT 1);
+CHECKSUM TABLE `t1`;
+CHECKSUM TABLE `t1` EXTENDED;
+ALTER TABLE t1 COMPRESSION 'LZ4_1.0';
+ANALYZE TABLE `t1`;
+CHECKSUM TABLE `t1` QUICK;
+INSERT INTO `t1`(`c0`) VALUES (9.39312865E8);
+ANALYZE TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED USE_FRM;
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+REPAIR TABLE `t1` QUICK;
+ALTER TABLE t1 ;
+REPLACE INTO `t1`(`c0`) VALUES (0.7579954654392871);
+ANALYZE TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED;
+DROP TABLE IF EXISTS `t2`;
+CREATE TABLE t2(c0 FLOAT  NULL COMMENT 'asdf'   UNIQUE)  PARTITION BY HASH(c0) partitions 4;
+CREATE TABLE t2(c0 FLOAT UNSIGNED  COMMENT 'asdf'  UNIQUE  , c1 VARCHAR(500)  NULL, c2 FLOAT(17, 14) UNSIGNED ZEROFILL  NULL COMMENT 'asdf'  UNIQUE KEY, c3 FLOAT(31, 14) ZEROFILL  COMMENT 'asdf'  UNIQUE KEY  NULL)  PARTITION BY KEY (c3);
+CREATE TABLE IF NOT EXISTS t2(c0 DOUBLE ZEROFILL  UNIQUE KEY , c1 DOUBLE(26, 14)  NULL, c2 DOUBLE UNSIGNED ZEROFILL  COMMENT 'asdf'  UNIQUE , c3 DECIMAL(50, 15) UNSIGNED  COMMENT 'asdf'  NULL UNIQUE, c4 DOUBLE(45, 7) UNSIGNED   , c5 FLOAT ZEROFILL   UNIQUE KEY COMMENT 'asdf'  NULL)  PARTITION BY HASH(c3) partitions 7;
+CREATE TABLE t2(c0 VARCHAR(500)  COMMENT 'asdf'  , c1 INT , c2 DECIMAL(18, 13)  PRIMARY KEY UNIQUE COMMENT 'asdf' , c3 DECIMAL ZEROFILL  COMMENT 'asdf' )  PARTITION BY KEY (c2);
+ANALYZE TABLE `t2`;
+CHECKSUM TABLE `t2` EXTENDED;
+REPAIR TABLE `t2` USE_FRM;
+ANALYZE TABLE `t2`;
+REPAIR TABLE `t2` QUICK EXTENDED USE_FRM;
+CHECKSUM TABLE `t2`;
+ANALYZE TABLE `t2`;
+INSERT INTO `t2`(`c2`) VALUES (0.13061898233161207);
+ANALYZE TABLE `t2`;
+CHECKSUM TABLE `t2`;
+REPLACE INTO `t2`(`c1`) VALUES (364065756);
+INSERT INTO `t2`(`c2`, `c3`, `c1`, `c0`) VALUES (0.06418415612803974, 1.800876105E9, 1518387810, '-1312216142');
+CHECKSUM TABLE `t2` QUICK;
+ALTER TABLE t2 COMPRESSION 'LZ4_1.0';
+UPDATE `t2` SET `c0`="", `c1`=-2006695092, `c3`=0.03664242883101376 WHERE t2.c1;
+UPDATE `t2` SET `c2`=(LEAST('0.9904100817419043', 1521450233, -1686254999, t2.c2)) IS NOT TRUE, `c1`=2071598654, `c3`=0.1440656658263253 WHERE 1.476428834E9;
+ALTER TABLE t2 ;
+CHECKSUM TABLE `t2` EXTENDED;
+REPLACE INTO `t2`(`c3`, `c2`) VALUES (0.7342533075448339, 0.04632790019447108);
+REPLACE INTO `t2`(`c1`, `c0`) VALUES (280958008, "0.8556088344018039");
+ALTER TABLE t2 ;
+UPDATE `t2` SET `c3`= EXISTS (SELECT 1 from dual wHERE FALSE);
+CHECKSUM TABLE `t2`;
+REPLACE INTO `t2`(`c0`) VALUES ('');
+REPLACE INTO `t2`(`c0`, `c1`, `c2`, `c3`) VALUES ('U_k', 1196807487, 0.27179778101730145, 0.10842000990719536);
+REPLACE INTO `t2`(`c1`, `c2`, `c0`) VALUES (-1042634123, 0.8127684480725467, '^+#7W}');
+CHECKSUM TABLE `t2`;
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c1`=1518387810, `c0`=(- (LEAST(t2.c0, NULL))), `c2`=LEAST((NULL) IN ("", t2.c1), COALESCE(concat(t2.c3,''), 0.3213869586701077));
+CHECKSUM TABLE `t2`;
+INSERT INTO `t2`(`c1`) VALUES (-155221747);
+INSERT INTO `t2`(`c0`, `c1`, `c3`, `c2`) VALUES ('>#<巇1', 938836323, 0.03196738821869616, 1.800876105E9);
+ANALYZE TABLE `t2`;
+REPAIR TABLE `t2` EXTENDED;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE IF NOT EXISTS t0(c0 VARCHAR(500) , c1 FLOAT UNSIGNED  NULL COMMENT 'asdf'  UNIQUE KEY )  PARTITION BY HASH(c0) partitions 3;
+CREATE TABLE IF NOT EXISTS t0(c0 FLOAT  COMMENT 'asdf'  NULL, c1 SMALLINT  COMMENT 'asdf'  NULL UNIQUE KEY )  PARTITION BY KEY (c1, c0);
+CREATE TABLE IF NOT EXISTS t0(c0 MEDIUMINT   , c1 FLOAT UNSIGNED ZEROFILL   NULL COMMENT 'asdf'  UNIQUE KEY)  PARTITION BY KEY (c0, c1);
+CREATE TABLE t0(c0 TINYINT ZEROFILL  COMMENT 'asdf'  PRIMARY KEY, c1 FLOAT(1, 1) UNSIGNED  UNIQUE KEY  COMMENT 'asdf' )  PARTITION BY HASH(c1) partitions 8;
+CREATE TABLE IF NOT EXISTS t0(c0 FLOAT(10, 10) UNSIGNED , c1 FLOAT UNSIGNED   COMMENT 'asdf'   UNIQUE KEY)  PARTITION BY KEY (c0);
+CREATE TABLE IF NOT EXISTS t0(c0 FLOAT(34, 8) UNSIGNED  UNIQUE  COMMENT 'asdf' )  PARTITION BY KEY (c0);
+ALTER TABLE t0 COMPRESSION 'NONE';
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0`;
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0`;
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+REPAIR TABLE `t0` QUICK EXTENDED USE_FRM;
+INSERT INTO `t0`(`c0`) VALUES (0.6826641456325726);
+REPAIR TABLE `t0` EXTENDED;
+ALTER TABLE t0 COMPRESSION 'LZ4_1.0';
+REPAIR TABLE `t0`;
+ALTER TABLE t0 COMPRESSION 'NONE';
+CHECKSUM TABLE `t0`;
+ALTER TABLE t0 ;
+INSERT INTO `t0`(`c0`) VALUES (0.7024370853364975);
+ALTER TABLE t0 ;
+ANALYZE TABLE `t0`;
+UPDATE `t0` SET `c0`= EXISTS (SELECT 1 from dual wHERE FALSE);
+ALTER TABLE t0 COMPRESSION 'LZ4_1.0';
+CHECKSUM TABLE `t0`;
+REPLACE INTO `t0`(`c0`) VALUES (1.809856308E9);
+CHECKSUM TABLE `t0`;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+REPLACE INTO `t0`(`c0`) VALUES (0.4320978541183763);
+INSERT INTO `t0`(`c0`) VALUES (0.009218034094251704);
+ANALYZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0` QUICK;
+UPDATE `t0` SET `c0`=0.18995456726072923 WHERE ((CAST(concat(t0.c0,'') AS SIGNED)) IS TRUE) <= ((CAST(concat(t0.c0,'') AS SIGNED)) IS NOT TRUE);
+CHECKSUM TABLE `t0` EXTENDED;
+REPAIR TABLE `t0` EXTENDED;
+UPDATE `t0` SET `c0`=(((NOT (NULL))) != (concat(t0.c0,''))) IN ((0.7819801401829484) IS NULL, "", concat(t0.c0,''), BIT_COUNT(concat(t0.c0,'')));
+CHECKSUM TABLE `t0` QUICK;
+CHECKSUM TABLE `t0`;
+ANALYZE TABLE `t0`;
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+DROP TABLE IF EXISTS `t2`;
+CREATE TABLE t2(c0 FLOAT ZEROFILL  UNIQUE KEY COMMENT 'asdf'  NULL, c1 FLOAT(25, 13) UNSIGNED ZEROFILL  PRIMARY KEY)  PARTITION BY HASH(c0) partitions 8;
+CREATE TABLE IF NOT EXISTS t2(c0 VARCHAR(500)  COMMENT 'asdf' , c1 DECIMAL  NULL UNIQUE COMMENT 'asdf'  , c2 FLOAT UNSIGNED   NULL UNIQUE, c3 FLOAT(49, 26) UNSIGNED   COMMENT 'asdf'  UNIQUE )  PARTITION BY KEY (c3, c0, c2);
+CREATE TABLE IF NOT EXISTS t2(c0 FLOAT(38, 13) ZEROFILL )  PARTITION BY KEY (c0);
+UPDATE `t2` SET `c0`=0.03433168211444626 WHERE ((- (CAST(0.4299162686888873 AS SIGNED)))) XOR ((+ ((concat(t2.c0,'')) OR (concat(t2.c0,'')))));
+UPDATE `t2` SET `c0`= EXISTS (SELECT 1 from dual wHERE FALSE);
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+REPAIR TABLE `t2`;
+REPAIR TABLE `t2` QUICK;
+UPDATE `t2` SET `c0`=1.77338338E9 WHERE "1169443005";
+UPDATE `t2` SET `c0`=COALESCE(NULL, CAST(concat(t2.c0,'') AS SIGNED)) WHERE  EXISTS (SELECT 1 from dual wHERE FALSE);
+INSERT INTO `t2`(`c0`) VALUES (0.20158351722257795);
+UPDATE `t2` SET `c0`=0.5174472711721964 WHERE (((0.5532985506689119) IS NOT FALSE) IS NULL) IS NOT NULL;
+UPDATE `t2` SET `c0`=0.4296158841574893 WHERE (- ( EXISTS (SELECT 1 from dual wHERE FALSE)));
+ALTER TABLE t2 COMPRESSION 'LZ4_1.0';
+INSERT INTO `t2`(`c0`) VALUES (0.4141812978591255);
+REPAIR TABLE `t2` QUICK EXTENDED USE_FRM;
+REPLACE INTO `t2`(`c0`) VALUES (0.6454529725617926);
+UPDATE `t2` SET `c0`=0.1299676180339625 WHERE NULL;
+REPAIR TABLE `t2` QUICK USE_FRM;
+CHECKSUM TABLE `t2` EXTENDED;
+UPDATE `t2` SET `c0`=0.7620956294291039;
+UPDATE `t2` SET `c0`=0.9154035830099785;
+ALTER TABLE t2 ;
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+CHECKSUM TABLE `t2`;
+UPDATE `t2` SET `c0`=0.8264429042983202 WHERE ('') IS NOT FALSE;
+ANALYZE TABLE `t2`;
+REPAIR TABLE `t2` QUICK EXTENDED;
+REPAIR TABLE `t2`;
+REPLACE INTO `t2`(`c0`) VALUES (0.9065926320719769);
+UPDATE `t2` SET `c0`=(+ (CAST((concat(t2.c0,'')) <= ("") AS SIGNED))) WHERE CAST((('') IS UNKNOWN) IN (COALESCE(concat(t2.c0,''), 1606183439), (334688717) IS NOT TRUE) AS SIGNED);
+ANALYZE TABLE `t2`;
+DROP TABLE IF EXISTS `t1`;

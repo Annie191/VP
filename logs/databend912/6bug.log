@@ -1,0 +1,125 @@
+https://github.com/databendlabs/databend/issues/20591   confirmed
+
+DROP DATABASE IF EXISTS repro_databend912_db7_min;
+CREATE DATABASE repro_databend912_db7_min;
+USE repro_databend912_db7_min;
+
+CREATE TABLE source (
+    vp_rowid BIGINT NOT NULL,
+    c0boolean BOOLEAN,
+    c1int BIGINT
+) ENGINE=FUSE;
+
+INSERT INTO source VALUES
+(1, false, -1),
+(2, false, -2),
+(3, false, -3),
+(4, true,  -4),
+(5, true,  -5),
+(6, true,  -6),
+(7, true,  -7),
+(8, true,  -8),
+(9, true,  -9);
+
+CREATE TABLE part_l (
+    vp_rowid BIGINT NOT NULL,
+    c1int BIGINT
+) ENGINE=MEMORY;
+
+CREATE TABLE part_r (
+    vp_rowid BIGINT NOT NULL,
+    c0boolean BOOLEAN
+) ENGINE=FUSE;
+
+INSERT INTO part_l
+SELECT vp_rowid, c1int FROM source;
+
+INSERT INTO part_r
+SELECT vp_rowid, c0boolean FROM source;
+
+SELECT
+    SUM(c1int),
+    vp_rowid,
+    c1int
+FROM source
+WHERE c0boolean
+GROUP BY vp_rowid, c1int
+ORDER BY vp_rowid, c1int
+LIMIT 3;
+
+SELECT
+    SUM(s.c1int),
+    s.vp_rowid,
+    s.c1int
+FROM (
+    SELECT
+        l.vp_rowid,
+        r.c0boolean,
+        l.c1int
+    FROM part_l l
+    JOIN LATERAL (
+        SELECT *
+        FROM part_r rr
+        WHERE rr.vp_rowid = l.vp_rowid
+    ) r ON TRUE
+) s
+WHERE s.c0boolean
+GROUP BY s.vp_rowid, s.c1int
+ORDER BY s.vp_rowid, s.c1int
+LIMIT 3;
+
+单表结果为 3 行：
+-4  4  -4
+-5  5  -5
+-6  6  -6
+多表结果为空，COUNT(*) 验证：
+single_count = 3
+split_count  = 0
+
+单表查询计划：
+Limit
+└── Sort(Single)
+    └── AggregateFinal
+        └── AggregatePartial
+            └── TableScan source
+                output columns: [vp_rowid, c1int]
+                filters: [is_true(source.c0boolean)]
+                read rows: 9
+                partitions total: 1
+                partitions scanned: 1
+关键点：单表路径直接扫描 source，过滤 c0boolean 后进入聚合，实际返回 3 行。
+LATERAL split 查询计划：
+Limit
+└── Sort(Single)
+    └── EvalScalar
+        └── AggregateFinal
+            └── AggregatePartial
+                └── HashJoin
+                    join type: INNER
+                    build keys: [vp_rowid]
+                    probe keys: [vp_rowid]
+
+                    ├── TableScan(Build) part_r
+                    │   output columns: [vp_rowid]
+                    │   filters: [is_true(part_r.c0boolean)]
+                    │   read rows: 9
+                    │   partitions total: 1
+                    │   partitions scanned: 1
+                    │
+                    └── AggregateFinal(Probe)
+                        └── AggregatePartial
+                            └── TableScan part_l
+                                output columns: [vp_rowid, c1int]
+                                read rows: 9
+                                partitions total: 0
+                                partitions scanned: 0
+                                filters: []
+                                apply join filters: [#0]
+这里最可疑的差异是：
+part_l: partitions total: 0, partitions scanned: 0
+但 part_l 是 MEMORY 表且实际有 9 行。计划估算仍显示预计有 3 行输出，但实际 split 查询返回 0 行。
+实测结果：
+single_count = 3
+split_count  = 0
+
+可能原因：外层聚合被下推到 part_l 的 TableScan，而 part_l 是 MEMORY 表，分区元数据为空，导致 partitions total: 0, partitions scanned: 0，probe 侧实际输入为空。

@@ -1,0 +1,95 @@
+DROP DATABASE IF EXISTS repro_databend917_db11_min;
+CREATE DATABASE repro_databend917_db11_min;
+USE repro_databend917_db11_min;
+
+SET enable_query_result_cache = 0;
+
+CREATE TABLE source (
+    vp_rowid BIGINT NOT NULL,
+    c0varchar VARCHAR NULL
+) ENGINE = FUSE;
+
+CREATE TABLE l (
+    vp_rowid BIGINT NOT NULL,
+    c0varchar VARCHAR NULL
+) ENGINE = MEMORY;
+
+CREATE TABLE r (
+    vp_rowid BIGINT NOT NULL,
+    c0varchar VARCHAR NULL
+) ENGINE = MEMORY;
+
+INSERT INTO source VALUES (1, '');
+
+INSERT INTO l
+SELECT vp_rowid, c0varchar FROM source;
+
+INSERT INTO r
+SELECT vp_rowid, c0varchar FROM source;
+
+SELECT c0varchar, LENGTH(c0varchar) AS len
+FROM source
+WHERE '-1297934617' LIKE c0varchar
+ORDER BY vp_rowid;
+
+SELECT x.c0varchar, LENGTH(x.c0varchar) AS len
+FROM (
+    SELECT l.vp_rowid, l.c0varchar
+    FROM l
+    WHERE EXISTS (
+        SELECT 1
+        FROM r
+        WHERE r.vp_rowid = l.vp_rowid
+    )
+) x
+WHERE '-1297934617' LIKE x.c0varchar
+ORDER BY x.vp_rowid;
+
+单表查询：
+
+c0varchar | len
+----------+----
+          | 0
+
+
+EXISTS_FILTER 多表重构：
+Empty set
+
+
+单表执行计划
+Sort(Single)
+├── output columns: [source.vp_rowid, source.c0varchar]
+├── sort keys: [vp_rowid ASC NULLS LAST]
+└── TableScan
+    ├── table: repro_databend917_db11_min.source
+    ├── output columns: [vp_rowid, c0varchar]
+    ├── read rows: 1
+    ├── partitions total: 1
+    ├── partitions scanned: 1
+    └── push downs:
+        [is_true(like('-1297934617', source.c0varchar))]
+该计划没有独立的 Filter 节点。LIKE 完全在 FUSE TableScan 的 pushdown 路径中执行，并错误地让空字符串行通过。
+多表执行计划
+Sort(Single)
+├── output columns: [l.vp_rowid, l.c0varchar]
+├── sort keys: [vp_rowid ASC NULLS LAST]
+└── HashJoin
+    ├── join type: RIGHT SEMI
+    ├── build keys: [l.vp_rowid]
+    ├── probe keys: [r.vp_rowid]
+    ├── Filter(Build)
+    │   ├── filters:
+    │   │   [is_true(like('-1297934617', x.c0varchar))]
+    │   └── TableScan
+    │       ├── table: repro_databend917_db11_min.l
+    │       ├── output columns: [vp_rowid, c0varchar]
+    │       ├── read rows: 1
+    │       ├── partitions total: 0
+    │       ├── partitions scanned: 0
+    │       └── push downs:
+    │           [is_true(like('-1297934617', l.c0varchar))]
+    └── TableScan(Probe)
+        ├── table: repro_databend917_db11_min.r
+        ├── output columns: [vp_rowid]
+        └── read rows: 1
+MEMORY 左表上保留了独立的 Filter 算子，正确计算表达式并删除该行。

@@ -1,0 +1,20 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120908.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- Single: 返回 2 行\nSELECT DISTINCTROW\n    'single' AS q,\n    ('x') OR (CAST((src.c0) XOR (src.id) AS SIGNED)) AS ref0,\n    (((src.id) < (src.id)) >= ((src.c0) NOT IN (3.35077561E8))) IN (NULL) AS ref1,\n    COUNT(DISTINCT (src.c0) IS NOT TRUE) AS ref2\nFROM src\nGROUP BY\n    (((src.id) < (src.id)) >= ((src.c0) NOT IN (3.35077561E8))) IN (NULL),\n    ('x') OR (CAST((src.c0) XOR (src.id) AS SIGNED))",
+      "ok": true,
+      "rows": [
+        "single\t0\tNULL\t1",
+        "single\t1\tNULL\t1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "-- Single: 返回 2 行\nSELECT DISTINCTROW\n    'single' AS q,\n    ('x') OR (CAST((src.c0) XOR (src.id) AS SIGNED)) AS ref0,\n    (((src.id) < (src.id)) >= ((src.c0) NOT IN (3.35077561E8))) IN (NULL) AS ref1,\n    COUNT(DISTINCT (src.c0) IS NOT TRUE) AS ref2\nFROM src\nGROUP BY\n    (((src.id) < (src.id)) >= ((src.c0) NOT IN (3.35077561E8))) IN (NULL),\n    ('x') OR (CAST((src.c0) XOR (src.id) AS SIGNED));",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

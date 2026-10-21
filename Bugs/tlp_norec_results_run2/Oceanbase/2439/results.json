@@ -1,0 +1,21 @@
+{
+  "database": "Oceanbase",
+  "source": "/home/lwm/sqlancer/Bugs/Oceanbase/2439.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT /*+ PARALLEL(4) */\n  IFNULL(GREATEST(vp_rowid, c0), (-44622653) && c0) AS g\nFROM src\nGROUP BY IFNULL(GREATEST(vp_rowid, c0), (-44622653) && c0)\nWITH ROLLUP\nORDER BY g",
+      "ok": true,
+      "rows": [
+        "1.000000000000000000000000000000",
+        "2.000000000000000000000000000000",
+        "2.000000000000000000000000000000"
+      ],
+      "stderr": "mysql: Character set '45' is not a compiled character set and is not specified in the '/usr/share/mysql/charsets/Index.xml' file\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 12,
+  "target_query": "SELECT /*+ PARALLEL(4) */\n  IFNULL(GREATEST(vp_rowid, c0), (-44622653) && c0) AS g\nFROM src\nGROUP BY IFNULL(GREATEST(vp_rowid, c0), (-44622653) && c0)\nWITH ROLLUP\nORDER BY g;",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

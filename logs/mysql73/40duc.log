@@ -1,0 +1,69 @@
+https://bugs.mysql.com/bug.php?id=120863&thanks=4  a duplicate of Bug#120429 which is fixed in the upcoming MySQL-9.7 LTS release.
+
+DROP DATABASE IF EXISTS repro40;
+CREATE DATABASE repro40;
+USE repro40;
+
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL, c1 FLOAT NULL,
+  c2 DECIMAL(65,30) NULL, c3 DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+INSERT INTO src (c0, c1, c2, c3) VALUES
+  (NULL, 0.0, NULL, NULL), (1327760152, 0.029, NULL, NULL),
+  (NULL, 0.524, 2064196087, 603484058), (NULL, 1.528E9, NULL, NULL);
+CREATE INDEX i8 ON src(c2 DESC, c1, c3, c0);
+
+CREATE TABLE l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c2 DECIMAL(65,30) NULL, c0 DECIMAL(65,30) NULL) ENGINE=InnoDB;
+CREATE TABLE r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c1 FLOAT NULL, c3 DECIMAL(65,30) NULL) ENGINE=InnoDB;
+INSERT INTO l SELECT vp_rowid, c2, c0 FROM src;
+INSERT INTO r SELECT vp_rowid, c1, c3 FROM src;
+
+-- Single: 覆盖索引 → 1, NULL
+SELECT DISTINCT ((c1) <= (IFNULL(NULL, c2))) >= (c1) AS ref0 FROM src;
+
+-- Split: SCALAR_SUBQUERY → NULL
+SELECT DISTINCT ((c1) <= (IFNULL(NULL, c2))) >= (c1) AS ref0
+FROM (
+  SELECT l.vp_rowid, l.c0,
+    (SELECT r.c1 FROM r WHERE r.vp_rowid = l.vp_rowid) AS c1,
+    l.c2, (SELECT r.c3 FROM r WHERE r.vp_rowid = l.vp_rowid) AS c3
+  FROM l
+) AS src;
+
+single: 1, NULL  ✓
+split:  NULL    ❌
+
+覆盖索引 → Temporary table with deduplication ✓，SCALAR_SUBQUERY + Materialize → 丢非 NULL ❌。
+
+对于 src 中的四行，c2 只有第三行非 NULL（2064196087），该行 c1=0.524，其余行 c2 为 NULL，因此 c1 <= c2 结果：
+
+行1: c1=0.0, c2=NULL → NULL
+
+行2: c1=0.029, c2=NULL → NULL
+
+行3: c1=0.524, c2=2064196087 → 1
+
+行4: c1=1.528E9, c2=NULL → NULL
+
+然后 (结果) >= c1：
+
+NULL >= 0.0 → NULL
+
+NULL >= 0.029 → NULL
+
+1 >= 0.524 → 1
+
+NULL >= 1.528E9 → NULL
+
+DISTINCT 得到 1 和 NULL，正确。
+
+分表重构后，c1 由标量子查询从 r 表获取，c2 直接来自 l 表，数据完全一致，应返回相同结果。实际却只返回 NULL，说明 1 这一行被当成了 NULL。
+
+在将标量子查询的结果列写入 DISTINCT 去重临时表时，优化器 错误地继承了该列的“可为 NULL”属性，但丢失了实际非 NULL 值的标识。
+
+对于 c2（直接来自 l 基表），其值正确保持。
+
+但对于 c1（来自标量子查询），临时表在存储该列时，内部元数据将 所有行的 NULL 标志位都置为 1，导致在计算 c1 <= c2 时，无论 c1 原值是多少，一律视为 NULL。
+
+NULL <= c2 永远返回 NULL，后续 NULL >= c1（此时 c1 也被视为 NULL）仍为 NULL，因此所有行表达式求值结果都是 NULL，DISTINCT 自然只剩下一个 NULL。

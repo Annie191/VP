@@ -1,0 +1,79 @@
+https://github.com/cockroachdb/cockroach/issues/173065
+
+DROP DATABASE IF EXISTS repro_cockroachdb803_db6_sqrdiff_plan CASCADE;
+CREATE DATABASE repro_cockroachdb803_db6_sqrdiff_plan;
+USE repro_cockroachdb803_db6_sqrdiff_plan;
+
+SET vectorize = 'off';
+SET distsql = 'always';
+
+CREATE TABLE source (
+    vp_rowid INT8 PRIMARY KEY,
+    c1 DECIMAL NOT NULL
+);
+
+CREATE TABLE vp_l (
+    vp_rowid INT8 PRIMARY KEY,
+    c1 DECIMAL NOT NULL
+);
+
+CREATE TABLE vp_r (
+    vp_rowid INT8 PRIMARY KEY
+);
+
+INSERT INTO source
+SELECT i, 99999999999999999999.9999999999::DECIMAL
+FROM generate_series(1, 11) AS g(i);
+
+INSERT INTO vp_l SELECT vp_rowid, c1 FROM source;
+INSERT INTO vp_r SELECT vp_rowid FROM source;
+
+ALTER TABLE source SPLIT AT VALUES (3), (5), (7), (9);
+ALTER TABLE vp_l SPLIT AT VALUES (3), (5), (7), (9);
+ALTER TABLE vp_r SPLIT AT VALUES (3), (5), (7), (9);
+
+ALTER TABLE source SCATTER;
+ALTER TABLE vp_l SCATTER;
+ALTER TABLE vp_r SCATTER;
+
+SELECT 'single' AS shape, SQRDIFF(c1)
+FROM source;
+
+SELECT 'lateral' AS shape, SQRDIFF(c1)
+FROM vp_l l
+JOIN LATERAL (
+    SELECT *
+    FROM vp_r r
+    WHERE r.vp_rowid = l.vp_rowid
+) r ON TRUE;
+
+single  | -20000000000
+lateral | -30000000000
+
+单表:
+scalar-group-by
+  scan source
+  aggregations
+    sqr-diff(c1)
+
+多表:
+scalar-group-by
+  inner-join (merge)
+    scan vp_r
+    scan vp_l
+  aggregations
+    sqr-diff(c1)
+
+关键问题出在 DECIMAL 类型的高精度数值上：
+
+c1 的数值接近 10²⁰，且带有 10 位小数（scale=10）。
+
+计算 c1² 时，乘积的量级达到 10⁴⁰，同时含有极小的小数部分（10⁻²⁰）。
+
+在分布式局部聚合中，局部 SUM(c1²) 和 SUM(c1) 需要被序列化传输到全局聚合节点。CockroachDB 的行式引擎（vectorize=off）在处理如此量级巨大的 DECIMAL 中间结果时，可能因内部序列化/精度限制（如系数长度截断）导致低位小数丢失。
+
+由于 SUM(c1²) 和 (SUM(c1))² 丢失的尾数不完全对称，大数相减后无法完全抵消，从而产生非零的巨大误差（此处误差在 10¹⁰ 量级，恰好是理论交叉项的量级）。
+
+source、vp_l、vp_r 虽然都按相同边界 SPLIT，但 JOIN 操作迫使优化器选择不同的分布式计划（例如可能在 JOIN 输出端再做部分聚合，而非直接在基表扫描上做）。部分聚合的行数分组不同，导致各自截断的累积误差不同，最终得出 -20000000000 与 -30000000000 的差异。
+
+分布式计算 SQRDIFF(DECIMAL) 时，局部聚合产生的中间 DECIMAL 值因精度/序列化限制被截断，使原本应完全抵消的项产生非零残差。执行计划的不同（单表扫描 vs. Merge Join）改变了部分聚合的边界与组合顺序，从而产生了不同的误差值。 这是分布式聚合中高精度 DECIMAL 运算的典型精度缺陷。

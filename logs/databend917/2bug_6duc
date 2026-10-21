@@ -1,0 +1,70 @@
+DROP DATABASE IF EXISTS repro_databend917_db6_min;
+CREATE DATABASE repro_databend917_db6_min;
+USE repro_databend917_db6_min;
+
+CREATE TABLE source (
+    id BIGINT NOT NULL,
+    m MAP(VARCHAR, BIGINT) NULL,
+    n BIGINT NULL
+) ENGINE = FUSE;
+
+INSERT INTO source VALUES
+    (1, {'a': 1}, 10),
+    (2, NULL,     20);
+
+CREATE TABLE l (
+    id BIGINT NOT NULL,
+    n BIGINT NULL
+) ENGINE = FUSE;
+
+CREATE TABLE r (
+    id BIGINT NOT NULL,
+    m MAP(VARCHAR, BIGINT) NULL
+) ENGINE = FUSE;
+
+INSERT INTO l SELECT id, n FROM source;
+INSERT INTO r SELECT id, m FROM source;
+
+-- 单表查询
+SELECT COUNT(m) FROM source LIMIT 22;
+
+-- EXISTS_FILTER 重构：相关标量子查询取 map，EXISTS 筛选匹配行
+SELECT COUNT(x.m)
+FROM (
+    SELECT l.id,
+           (SELECT r.m FROM r WHERE r.id = l.id) AS m,
+           l.n
+    FROM l
+    WHERE EXISTS (SELECT 1 FROM r WHERE r.id = l.id)
+) x
+LIMIT 22;
+
+EXPLAIN SELECT COUNT(m) FROM source LIMIT 22;
+
+EXPLAIN
+SELECT COUNT(x.m)
+FROM (
+    SELECT l.id,
+           (SELECT r.m FROM r WHERE r.id = l.id) AS m,
+           l.n
+    FROM l
+    WHERE EXISTS (SELECT 1 FROM r WHERE r.id = l.id)
+) x
+LIMIT 22;
+
+COUNT(m) from source: 2
+COUNT(x.m) after EXISTS_FILTER: 1
+
+单表执行计划将 COUNT(m) 折叠成常量，并从 DummyTableScan 返回：
+EvalScalar [COUNT(m), expressions: [2]]
+└── Limit
+    └── DummyTableScan
+拆分查询则执行聚合，并通过两个哈希连接实现相关标量子查询和 EXISTS：
+Limit
+└── AggregateFinal [count(m)]
+    └── AggregatePartial [count(m)]
+        └── EvalScalar [scalar_subquery]
+            └── HashJoin [LEFT SINGLE]       -- 相关 map 子查询
+                └── HashJoin [LEFT SEMI]     -- EXISTS
+                    ├── TableScan(r)
+                    └── TableScan(l)

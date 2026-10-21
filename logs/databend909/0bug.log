@@ -1,0 +1,86 @@
+https://github.com/databendlabs/databend/issues/20477   confirmed
+
+DROP DATABASE IF EXISTS repro_databend925_db12_min;
+CREATE DATABASE repro_databend925_db12_min;
+USE repro_databend925_db12_min;
+
+CREATE TABLE vp_repro_databend925_1274_source (
+    vp_rowid BIGINT NOT NULL,
+    c0boolean BOOLEAN NULL
+) ENGINE = FUSE;
+
+INSERT INTO vp_repro_databend925_1274_source
+SELECT
+    number + 1,
+    number % 2 = 0
+FROM numbers(103);
+
+CREATE TABLE vp_repro_databend925_1274_l (
+    vp_rowid BIGINT NOT NULL
+) ENGINE = FUSE;
+
+CREATE TABLE vp_repro_databend925_1274_r (
+    vp_rowid BIGINT NOT NULL,
+    c0boolean BOOLEAN NULL
+) ENGINE = FUSE;
+
+INSERT INTO vp_repro_databend925_1274_l (vp_rowid)
+SELECT vp_rowid
+FROM vp_repro_databend925_1274_source;
+
+INSERT INTO vp_repro_databend925_1274_r (vp_rowid, c0boolean)
+SELECT vp_rowid, c0boolean
+FROM vp_repro_databend925_1274_source;
+
+SELECT
+    s.vp_rowid,
+    (
+        SELECT MIN(s2.vp_rowid)
+        FROM vp_repro_databend925_1274_source AS s2
+        WHERE s2.vp_rowid <= s.vp_rowid
+    )
+FROM vp_repro_databend925_1274_source AS s;
+
+SELECT
+    s.vp_rowid,
+    (
+        SELECT MIN(s2.vp_rowid)
+        FROM (
+            SELECT
+                l.vp_rowid,
+                (
+                    SELECT r.c0boolean
+                    FROM vp_repro_databend925_1274_r AS r
+                    WHERE r.vp_rowid = l.vp_rowid
+                ) AS c0boolean
+            FROM vp_repro_databend925_1274_l AS l
+            WHERE l.vp_rowid IN (
+                SELECT r.vp_rowid
+                FROM vp_repro_databend925_1274_r AS r
+            )
+        ) AS s2
+        WHERE s2.vp_rowid <= s.vp_rowid
+    )
+FROM vp_repro_databend925_1274_l AS s;
+
+
+查询	实际结果
+源表查询	正常返回 103 行
+分表重建查询	ERROR 2013: Lost connection to MySQL server during query，query 服务退出
+
+目前能够确认：
+IN 子查询
+    +
+相关 scalar subquery
+    +
+派生表
+    +
+外层范围相关 MIN
+是最小的已验证触发组合。
+
+疑似缺陷位置：range_join::RangeJoinState::range_join 中的 unchecked 行索引访问
+
+The current Databend version is:
+v1.2.925-patch-11-ebcd374c34
+Build toolchain:
+rust-1.94.0-nightly-2026-08-26

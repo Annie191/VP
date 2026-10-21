@@ -1,0 +1,193 @@
+
+https://github.com/duckdb/duckdb/issues/25663 
+
+~~~java
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
+
+/**
+ * Stable minimized reproducer for the DuckDB JDBC native crash observed in
+ * hs_err_pid1279455.log from SQLancer's VP split side.
+ *
+ * Shape preserved from the crash context:
+ *   - split-side query
+ *   - disabled_optimizers='filter_pushdown,join_order'
+ *   - RANK() OVER (...) over a reconstructed VP relation
+ *   - right side pre-aggregated by row id and joined back
+ *   - ORDER BY ... LIMIT 0
+ *
+ * Tested with org.duckdb:duckdb_jdbc:1.5.5.1 on OpenJDK 17.
+ */
+public final class DuckDBVpCrash1279455Stable {
+
+    private static String sourceQuery(String sourceTable) {
+        return """
+            SELECT RANK() OVER (ORDER BY vp_rowid, vp_rowid)
+            FROM %s
+            ORDER BY vp_rowid
+            LIMIT 0
+            """.formatted(sourceTable);
+    }
+
+    private static String splitQuery(String leftTable, String rightTable) {
+        return """
+            SELECT RANK() OVER (ORDER BY vp_rowid, vp_rowid)
+            FROM (
+                SELECT l.vp_rowid AS vp_rowid, r.c7 AS c7
+                FROM %s l
+                JOIN (SELECT vp_rowid, COUNT(*) AS vp_count FROM %s GROUP BY vp_rowid) rg
+                  ON l.vp_rowid = rg.vp_rowid
+                JOIN %s r
+                  ON r.vp_rowid = rg.vp_rowid
+            ) vp_source
+            ORDER BY vp_source.vp_rowid
+            LIMIT 0
+            """.formatted(leftTable, rightTable, rightTable);
+    }
+
+    private DuckDBVpCrash1279455Stable() {
+    }
+
+    public static void main(String[] args) throws Exception {
+        int repetitions = args.length == 0 ? 200 : Integer.parseInt(args[0]);
+        String logId = args.length < 2 ? "1279455" : sanitize(args[1]);
+        String mode = args.length < 3 ? "split" : args[2].toLowerCase();
+        if (!mode.equals("source") && !mode.equals("split")) {
+            throw new IllegalArgumentException("mode must be 'source' or 'split'");
+        }
+        boolean sourceOnly = mode.equals("source");
+        Path databaseFile = Path.of("repro_duckdb" + logId + "_db_min.duckdb").toAbsolutePath();
+        String sourceTable = "source_" + logId;
+        String leftTable = "left_" + logId;
+        String rightTable = "right_" + logId;
+        Path tempDirectory = Files.createTempDirectory("duckdb-vp-crash-1279455-");
+        // Start from a fresh, named DuckDB database file so the developer only
+        // needs to compile and run this JDBC file.
+        Files.deleteIfExists(databaseFile);
+        Files.deleteIfExists(Path.of(databaseFile + ".wal"));
+        try (Connection connection = DriverManager.getConnection("jdbc:duckdb:" + databaseFile);
+                Statement statement = connection.createStatement()) {
+            statement.execute("SET threads=1");
+            statement.execute("SET temp_directory='"
+                    + tempDirectory.toAbsolutePath().toString().replace("'", "''") + "'");
+            statement.execute("""
+                    CREATE TABLE %s AS
+                    SELECT i AS vp_rowid,
+                           TIMESTAMP '2000-01-01' + CAST(i AS INTEGER) * INTERVAL '1 second' AS c7
+                    FROM range(100) t(i)
+                    """.formatted(sourceTable));
+            statement.execute("CREATE TABLE " + leftTable + " AS SELECT vp_rowid FROM " + sourceTable);
+            statement.execute("CREATE TABLE " + rightTable + " AS SELECT vp_rowid, c7 FROM " + sourceTable);
+            statement.execute("SET disabled_optimizers='filter_pushdown,join_order'");
+            String splitQuery = splitQuery(leftTable, rightTable);
+            String query = sourceOnly ? sourceQuery(sourceTable) : splitQuery;
+
+            for (int i = 1; i <= repetitions; i++) {
+                try (ResultSet resultSet = statement.executeQuery(query)) {
+                    if (resultSet.next()) {
+                        throw new AssertionError("LIMIT 0 query unexpectedly returned a row");
+                    }
+                }
+                if (i == 1 || i % 10 == 0) {
+                    System.out.println(mode + " repetitions=" + i);
+                }
+            }
+            System.out.println("completed without native crash");
+        }
+    }
+
+    private static String sanitize(String value) {
+        String sanitized = value.replaceAll("[^A-Za-z0-9_]", "_");
+        return sanitized.isEmpty() ? "1279455" : sanitized;
+    }
+}
+~~~
+
+
+DuckDB JDBC 在单线程执行 VP（Vertical Partitioning）形式的查询时，重复执行包含窗口函数、排序和 LIMIT 0 的查询，会在 native 层崩溃，导致整个 JVM 进程收到 SIGSEGV。
+崩溃发生在：
+org.duckdb.DuckDBNative.duckdb_jdbc_execute_pending
+
+
+1. 获取 JDBC 驱动
+使用 DuckDB JDBC：
+org.duckdb:duckdb_jdbc:1.5.5.1
+
+2. 编译复现文件
+
+mkdir -p /tmp/duckdb-vp-repro-classes
+
+javac \
+  -cp target/lib/duckdb_jdbc-1.5.5.1.jar \
+  -d /tmp/duckdb-vp-repro-classes \
+  repro/DuckDBVpCrash1279455Stable.java
+3. 执行 source 模式
+timeout 45s java \
+  -cp '/tmp/duckdb-vp-repro-classes:target/lib/duckdb_jdbc-1.5.5.1.jar' \
+  DuckDBVpCrash1279455Stable 200 1279455 source
+4. 执行 split 模式
+timeout 45s java \
+  -cp '/tmp/duckdb-vp-repro-classes:target/lib/duckdb_jdbc-1.5.5.1.jar' \
+  DuckDBVpCrash1279455Stable 200 1279455 split
+参数含义：
+200       重复执行查询 200 次
+1279455   日志/案例序号，用于生成数据库和表名
+source    执行 source 查询
+split     执行 VP split 查询
+
+复现程序会自动完成：
+- 创建数据库文件；
+- 创建测试表；
+- 插入 100 行确定性数据；
+- 设置 threads=1；
+- 设置：SET disabled_optimizers='filter_pushdown,join_order';
+- 重复执行查询。
+
+实际结果
+source 和 split 模式都会导致 JVM 在 DuckDB native 代码中崩溃：
+SIGSEGV (0xb)
+Problematic frame:
+C [libc.so.6+...]
+典型 Java 调用栈：
+org.duckdb.DuckDBNative.duckdb_jdbc_execute_pending
+org.duckdb.DuckDBPreparedStatement.execute
+org.duckdb.DuckDBPreparedStatement.executeQuery
+DuckDBVpCrash1279455Stable.main
+进程退出码通常为：
+134
+
+预期结果
+查询使用了 LIMIT 0，预期应当：
+正常返回空结果集
+并且 Java 程序正常退出，不应发生：
+SIGSEGV
+Aborted (core dumped)
+JVM native crash
+环境信息
+操作系统：
+Ubuntu 20.04.6 LTS
+
+Java：
+OpenJDK Runtime Environment 17.0.15+6
+OpenJDK 64-Bit Server VM
+
+DuckDB JDBC：
+org.duckdb:duckdb_jdbc:1.5.5.1
+
+JDBC URL：
+jdbc:duckdb:<database-file>
+
+运行线程：
+DuckDB threads=1
+JDBC/Java 主线程单线程运行
+
+DuckDB 设置：
+SET disabled_optimizers='filter_pushdown,join_order';
+
+硬件：
+Intel Xeon Gold 5218R CPU @ 2.10GHz
+

@@ -1,0 +1,190 @@
+#69292 https://github.com/pingcap/tidb/issues/69292 confirmed as a bug.
+
+
+单表查询把 COUNT(CAST(...)) 聚合表达式下推到 TiKV cop 层执行；split/rewrite 后由于 JOIN/IN 结构，表达式在 TiDB root 层 Projection 中执行，再做 COUNT。两边对异常日期/时间 cast 的 NULL 判定不一致，导致 COUNT 结果不同。
+
+
+case 1 
+
+
+DROP DATABASE IF EXISTS repro_tidb615_db12_min;
+CREATE DATABASE repro_tidb615_db12_min;
+USE repro_tidb615_db12_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+
+CREATE TABLE src(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DECIMAL(65,30)
+);
+
+INSERT INTO src(c0) VALUES (0),(1);
+
+CREATE TABLE l(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL(65,30)
+);
+
+CREATE TABLE r(
+  id BIGINT NOT NULL PRIMARY KEY
+);
+
+INSERT INTO l SELECT id, c0 FROM src;
+INSERT INTO r SELECT id FROM src;
+
+-- 单表：返回 2
+SELECT COUNT(
+  CAST(
+    CASE 'x'
+      WHEN id >= id THEN c0
+      ELSE CAST(FALSE AS DATE)
+    END AS DATETIME
+  )
+) AS single_count
+FROM src;
+
+-- split/rewrite：返回 0
+SELECT COUNT(
+  CAST(
+    CASE 'x'
+      WHEN v.id >= v.id THEN v.c0
+      ELSE CAST(FALSE AS DATE)
+    END AS DATETIME
+  )
+) AS split_count
+FROM (
+  SELECT l.id, l.c0
+  FROM l JOIN r ON l.id = r.id
+) AS v;
+
+
+单表查询：WHEN id >= id THEN c0 —— 这里 id >= id 对每一行都是 TRUE（1）。CASE 'x' WHEN 1 THEN ... —— 'x' 字符串与 1 数字比较，MySQL/TiDB 会将字符串转数字，CAST('x' AS SIGNED) = 0，所以 0 = 1 为 FALSE。
+所以实际上：这个 CASE 的 WHEN 条件永远不成立，永远走 ELSE 分支。在 NO_ZERO_DATE 模式下，'0000-00-00' 是非法日期，CAST 应该返回 NULL。
+但实测返回 2，说明 TiKV cop 层认为 CAST(FALSE AS DATE) 是非 NULL（可能是 '0000-00-00' 某种内部表示），然后外层 CAST(... AS DATETIME) 也认为是非 NULL。
+
+Split/Join 查询：逻辑完全等价，只是通过 JOIN 产生了子查询 v。
+实测返回 0，说明 TiDB root 层认为 CAST(FALSE AS DATE) 是 NULL，COUNT 不计数。
+
+实测结果：
+single_count = 2
+split_count  = 0
+
+关键执行计划：
+-- 单表
+HashAgg_11                 root      funcs:count(Column#5)->Column#4
+└─TableReader_12           root      data:HashAgg_5
+  └─HashAgg_5              cop[tikv] funcs:count(cast(case(...), datetime BINARY))->Column#5
+    └─TableFullScan_10     cop[tikv] table:src
+
+-- split/join
+HashAgg_13                 root      funcs:count(Column#7)->Column#6
+└─Projection_58            root      cast(case(...), datetime BINARY)->Column#7
+  └─MergeJoin_18           root      inner join, left key:l.id, right key:r.id
+    ├─TableReader_34       root      table:r
+    └─TableReader_32       root      table:l
+
+
+这里的关键差异是：
+单表：count(cast(case(...), datetime)) 在 cop[tikv] 的 HashAgg_5 里执行
+split：cast(case(...), datetime) 在 root 的 Projection_58 里执行，然后 root HashAgg count
+
+
+case 2
+
+DROP DATABASE IF EXISTS repro_tidb615_db3_min;
+CREATE DATABASE repro_tidb615_db3_min;
+USE repro_tidb615_db3_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+
+CREATE TABLE src(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DOUBLE
+);
+
+INSERT INTO src(c0) VALUES (0),(1),(2);
+
+CREATE TABLE l(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 DOUBLE
+);
+
+CREATE TABLE r(
+  id BIGINT NOT NULL PRIMARY KEY
+);
+
+INSERT INTO l SELECT id, c0 FROM src;
+INSERT INTO r SELECT id FROM src;
+
+-- 单表：返回 1
+SELECT COUNT(
+  CAST(
+    CASE (id IS NULL)
+      WHEN id THEN 1
+      WHEN id THEN 'x'
+      ELSE CAST(c0 AS DATETIME)
+    END AS DATE
+  )
+) AS single_count
+FROM src;
+
+-- split/rewrite：返回 0
+SELECT COUNT(
+  CAST(
+    CASE (v.id IS NULL)
+      WHEN v.id THEN 1
+      WHEN v.id THEN 'x'
+      ELSE CAST(v.c0 AS DATETIME)
+    END AS DATE
+  )
+) AS split_count
+FROM (
+  SELECT l.id, l.c0
+  FROM l
+  WHERE l.id IN (SELECT r.id FROM r)
+) AS v;
+
+
+ 单表查询：CASE 分析：
+CASE (id IS NULL)：id IS NULL 对非空主键永远为 FALSE（0）
+WHEN id THEN 1：0 WHEN 1 THEN ... —— 0 ≠ 1，不匹配
+WHEN id THEN 'x'：同上，不匹配
+走 ELSE CAST(c0 AS DATETIME)
+c0 值为 0, 1, 2：
+CAST(0 AS DATETIME) → 零日期 '0000-00-00'（非法）
+CAST(1 AS DATETIME) → '0000-00-01'（非法？或有效？）
+CAST(2 AS DATETIME) → '0000-00-02'（非法）
+在 NO_ZERO_DATE 模式下，这些都应该是 NULL。
+但实测返回 1，说明 TiKV 认为其中有一个是非 NULL。
+
+Split/IN 查询：实测返回 0，TiDB root 层认为所有 CAST 结果都是 NULL。
+
+
+
+实测结果：
+single_count = 1
+split_count  = 0
+
+
+关键执行计划：
+-- 单表
+HashAgg_11                 root      funcs:count(Column#5)->Column#4
+└─TableReader_12           root      data:HashAgg_5
+  └─HashAgg_5              cop[tikv] funcs:count(cast(case(... cast(cast(src.c0, datetime), var_string) ...), date BINARY))->Column#5
+    └─TableFullScan_10     cop[tikv] table:src
+
+-- split/IN
+HashAgg_17                 root      funcs:count(Column#7)->Column#6
+└─Projection_64            root      cast(case(... cast(cast(l.c0, datetime), var_string) ...), date BINARY)->Column#7
+  └─MergeJoin_23           root      inner join, left key:l.id, right key:r.id
+    ├─TableReader_39       root      table:r
+    └─TableReader_37       root      table:l
+这个最小化后已经不需要原始复杂 WHERE ATAN2(...) NOT LIKE ... 条件；保留 CASE (id IS NULL) WHEN id ... ELSE CAST(c0 AS DATETIME) 这个形态就能触发。
+
+
+| 案例         | 数据类型             | 转换路径                             | TiKV 结果    | TiDB root 结果 |
+| ---------- | ---------------- | -------------------------------- | ---------- | ------------ |
+| CASE1 | `DECIMAL(65,30)` | `FALSE(0)` → `DATE` → `DATETIME` | 非 NULL (2) | NULL (0)     |
+| CASE2  | `DOUBLE`         | `0/1/2` → `DATETIME` → `DATE`    | 1 个非 NULL  | 全 NULL (0)   |

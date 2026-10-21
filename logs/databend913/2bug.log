@@ -1,0 +1,141 @@
+https://github.com/databendlabs/databend/issues/20601  confirmed
+
+DROP DATABASE IF EXISTS repro_databend913_db2_min;
+CREATE DATABASE repro_databend913_db2_min;
+USE repro_databend913_db2_min;
+
+CREATE TABLE source (
+  vp_rowid BIGINT NOT NULL,
+  c0boolean BOOLEAN NULL
+) ENGINE=FUSE;
+
+INSERT INTO source VALUES
+  (1,FALSE),(2,FALSE),(3,FALSE),(4,FALSE),(5,FALSE),
+  (6,FALSE),(7,FALSE),(8,FALSE),(9,FALSE),
+  (10,TRUE),(11,TRUE),(12,TRUE),(13,TRUE),(14,TRUE),
+  (15,TRUE),(16,TRUE),(17,TRUE),(18,TRUE),(19,TRUE),
+  (20,TRUE),(21,TRUE),(22,TRUE),(23,TRUE),(24,TRUE);
+
+CREATE TABLE part_l (
+  vp_rowid BIGINT NOT NULL
+) ENGINE=MEMORY;
+
+CREATE TABLE part_r (
+  vp_rowid BIGINT NOT NULL,
+  c0boolean BOOLEAN NULL
+) ENGINE=FUSE;
+
+INSERT INTO part_l
+SELECT vp_rowid FROM source;
+
+INSERT INTO part_r
+SELECT vp_rowid, c0boolean FROM source;
+
+SELECT COUNT((-(vp_rowid * vp_rowid))), vp_rowid, vp_rowid
+FROM source
+WHERE c0boolean
+GROUP BY vp_rowid, vp_rowid
+ORDER BY vp_rowid, vp_rowid
+LIMIT 21;
+
+SELECT COUNT((-(s.vp_rowid * s.vp_rowid))), s.vp_rowid, s.vp_rowid
+FROM (
+  SELECT l.vp_rowid AS vp_rowid,
+         r.c0boolean AS c0boolean
+  FROM part_l l
+  LEFT JOIN part_r r
+    ON l.vp_rowid = r.vp_rowid
+) s
+WHERE s.c0boolean
+GROUP BY s.vp_rowid, s.vp_rowid
+ORDER BY s.vp_rowid, s.vp_rowid
+LIMIT 21;
+
+单表查询Databend 返回 15 行：
+1  10 10
+1  11 11
+1  12 12
+1  13 13
+1  14 14
+1  15 15
+1  16 16
+1  17 17
+1  18 18
+1  19 19
+1  20 20
+1  21 21
+1  22 22
+1  23 23
+1  24 24
+
+拆分查询Databend 返回 12 行：
+1  10 10
+1  11 11
+1  12 12
+1  13 13
+1  14 14
+1  15 15
+1  16 16
+1  17 17
+1  18 18
+1  19 19
+1  20 20
+1  21 21
+
+差异为：
+单表独有：22, 23, 24
+拆分侧独有：无
+
+注意拆分结果 10..21 正好等于：
+
+text
+前 21 行：vp_rowid = 1..21
+其中 c0boolean = TRUE 的是：10..21
+而 22,23,24 是前 21 行之外的行。
+
+LIMIT 21 是查询里的限制。计划中也出现了：
+
+text
+AggregatePartial
+├── group by: [vp_rowid]
+├── rank limit: 21
+这说明 Databend 对 GROUP BY vp_rowid + ORDER BY vp_rowid + LIMIT 21 使用了 rank limit 21 优化，提前只保留前 21 个分组。
+
+在单表计划里，这个 rank limit 位于 TableScan 过滤之后：
+
+text
+TableScan
+├── push downs:
+│   └── filters: [is_true(source.c0boolean)]
+所以先过滤出 10..24，再 rank limit 21，结果 15 行全部保留。
+
+但拆分计划中，Join build 侧涉及 runtime filter：
+
+text
+HashJoin
+├── build join filters:
+│   └── filter type: bloom,inlist,min_max
+├── AggregateFinal(Build)
+│   └── AggregatePartial(Build)
+│       └── TableScan part_r
+│           ├── push downs:
+│           │   └── filters: [is_true(part_r.c0boolean)]
+└── AggregateFinal(Probe)
+    └── AggregatePartial(Probe)
+        └── TableScan part_l
+            ├── apply join filters: [#0]
+并且 probe 侧 part_l 上应用了：
+
+text
+apply join filters: [#0]
+这就是 runtime filter / join filter。它根据 build 侧 part_r 生成的键集合，去过滤 probe 侧 part_l。
+
+如果 build 侧键集合完整，应该是 10..24。
+但实际 probe 侧只留下 10..21，说明 build 侧 runtime filter 的键集合只包含 10..21。
+
+而 10..21 正好是：
+
+text
+先取前 21 行 1..21
+再过滤 c0boolean = TRUE
+这说明：rank limit 21 在 c0boolean 过滤之前生效，或者 runtime filter 构建使用了被 rank limit 截断的键集合。

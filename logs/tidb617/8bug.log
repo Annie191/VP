@@ -1,0 +1,209 @@
+#69357： https://github.com/pingcap/tidb/issues/69357 confirmed as a bug.
+
+DROP DATABASE IF EXISTS repro_tidb617_db8_min;
+CREATE DATABASE repro_tidb617_db8_min;
+USE repro_tidb617_db8_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+
+CREATE TABLE src(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 BOOLEAN NULL,
+  c1 DATETIME NULL,
+  c2 DECIMAL(65,30) NULL,
+  UNIQUE KEY(c2)
+);
+
+INSERT INTO src(c0,c1,c2) VALUES (0,NULL,0);
+
+CREATE TABLE l(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c2 DECIMAL(65,30) NULL,
+  c0 BOOLEAN NULL
+);
+
+CREATE TABLE r(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c1 DATETIME NULL
+);
+
+INSERT INTO l SELECT id,c2,c0 FROM src;
+INSERT INTO r SELECT id,c1 FROM src;
+
+SELECT
+  id,
+  c0,
+  c1,
+  c2,
+  CASE 0.0670996200630315
+    WHEN (('850389211')=('2019-04-17 06:48:12')) THEN
+      CASE ''
+        WHEN c0 THEN -1819383790
+        WHEN '2025-07-21' THEN c0
+        ELSE c0
+      END
+    ELSE CAST(c2 AS DATETIME)
+  END AS expr,
+  c1 <=> (
+    CASE 0.0670996200630315
+      WHEN (('850389211')=('2019-04-17 06:48:12')) THEN
+        CASE ''
+          WHEN c0 THEN -1819383790
+          WHEN '2025-07-21' THEN c0
+          ELSE c0
+        END
+      ELSE CAST(c2 AS DATETIME)
+    END
+  ) AS pass
+FROM src;
+
+SELECT
+  'single' AS q,
+  AVG(id NOT REGEXP ((((377946620)&c1) IS NOT NULL))) AS a,
+  id,
+  c0
+FROM src
+WHERE c1 <=> (
+  CASE 0.0670996200630315
+    WHEN (('850389211')=('2019-04-17 06:48:12')) THEN
+      CASE ''
+        WHEN c0 THEN -1819383790
+        WHEN '2025-07-21' THEN c0
+        ELSE c0
+      END
+    ELSE CAST(c2 AS DATETIME)
+  END
+)
+GROUP BY id,c0;
+
+SELECT
+  'split' AS q,
+  AVG(id NOT REGEXP ((((377946620)&c1) IS NOT NULL))) AS a,
+  id,
+  c0
+FROM (
+  SELECT l.id, l.c0, r.c1, l.c2
+  FROM l RIGHT JOIN r ON l.id = r.id
+) v
+WHERE c1 <=> (
+  CASE 0.0670996200630315
+    WHEN (('850389211')=('2019-04-17 06:48:12')) THEN
+      CASE ''
+        WHEN c0 THEN -1819383790
+        WHEN '2025-07-21' THEN c0
+        ELSE c0
+      END
+    ELSE CAST(c2 AS DATETIME)
+  END
+)
+GROUP BY id,c0;
+
+二、核心表达式分析
+sql
+SELECT
+  id, c0, c1, c2,
+  CASE 0.0670996200630315
+    WHEN (('850389211')=('2019-04-17 06:48:12')) THEN  -- 条件1: '850389211' = '2019-04-17...' → FALSE
+      CASE ''
+        WHEN c0 THEN -1819383790      -- c0=0, ''=0? 字符串比较
+        WHEN '2025-07-21' THEN c0
+        ELSE c0
+      END
+    ELSE CAST(c2 AS DATETIME)         -- 走 ELSE 分支
+  END AS expr,
+  c1 <=> expr AS pass                 -- NULL-safe 等于
+FROM src;
+逐步拆解：
+表格
+子表达式	求值	结果
+('850389211')=('2019-04-17 06:48:12')	字符串比较	FALSE (0)
+CASE 0.067... WHEN FALSE THEN ... ELSE ...	0.067... != 0	走 ELSE
+CAST(c2 AS DATETIME)	CAST(0 AS DATETIME)	'0000-00-00 00:00:00'
+expr		'0000-00-00 00:00:00'
+c1 <=> expr	NULL <=> '0000-00-00...'	1 (TRUE，NULL-safe 等于)
+验证结果：
+Text
+| id | c0 | c1   | c2   | expr                | pass |
+|  1 |  0 | NULL | 0.00 | 0000-00-00 00:00:00 |    1 |
+pass = 1 表示：c1 <=> expr 为 TRUE
+三、Single 查询（直接查单表）
+sql
+SELECT
+  'single' AS q,
+  AVG(id NOT REGEXP ((((377946620)&c1) IS NOT NULL))) AS a,
+  id, c0
+FROM src
+WHERE c1 <=> (CASE ... ELSE CAST(c2 AS DATETIME) END)  -- 即 WHERE pass=1
+GROUP BY id, c0;
+预期： pass=1 → 条件成立 → 应该返回 1 行
+实际结果：Empty set ❌
+四、Split 查询（RIGHT JOIN）
+sql
+SELECT
+  'split' AS q,
+  AVG(id NOT REGEXP ((((377946620)&c1) IS NOT NULL))) AS a,
+  id, c0
+FROM (
+  SELECT l.id, l.c0, r.c1, l.c2
+  FROM l RIGHT JOIN r ON l.id = r.id
+) v
+WHERE c1 <=> (CASE ... ELSE CAST(c2 AS DATETIME) END)
+GROUP BY id, c0;
+实际结果：返回 1 行 ✓（符合预期）
+Text
+| q     | a      | id | c0 |
+| split | 1.0000 |  1 |  0 |
+五、核心矛盾
+表格
+路径	WHERE 条件	预期	实际
+Single	c1 <=> CAST(c2 AS DATETIME)	返回 1 行	Empty set ❌
+Split	c1 <=> CAST(c2 AS DATETIME)	返回 1 行	返回 1 行 ✓
+同一行数据、相同谓词语义，结果不同！
+六、执行计划对比
+Single 路径（关键）
+Text
+Projection_6              root
+└─TableReader_9           root
+  └─Selection_8           cop[tikv]     ← 谓词下推到 TiKV
+    nulleq(
+      src.c1,
+      cast(cast(cast(src.c2, datetime BINARY), var_string(19)), datetime(6) BINARY)
+    )
+    └─TableFullScan_7     cop[tikv] table:src
+关键：谓词被下推到 cop[tikv]（TiKV 存储层执行）
+注意表达式被改写为：
+sql
+nulleq(
+  src.c1,
+  cast(cast(cast(src.c2, datetime BINARY), var_string(19)), datetime(6) BINARY)
+)
+Split 路径（关键）
+sql
+HashAgg_13                root
+└─Projection_35           root
+  └─Selection_14          root           ← 谓词在 TiDB root 层执行
+    nulleq(
+      r.c1,
+      cast(cast(cast(l.c2, datetime BINARY), var_string(19)), datetime(6) BINARY)
+    )
+    └─IndexHashJoin_20    root
+      right outer join
+      ├─TableReader r
+      └─TableReader l
+关键：谓词保留在 root（TiDB 计算层执行），未下推到 TiKV
+七、根因分析
+7.1 核心问题：谓词下推导致表达式求值不一致
+同一表达式在两层执行结果不同：
+表格
+执行层	表达式	结果
+TiDB root 层	NULL <=> CAST(0 AS DATETIME)	TRUE (1)
+TiKV cop 层	NULL <=> CAST(0 AS DATETIME)	FALSE / 过滤掉行
+7.2 具体差异：多层 CAST 改写
+Single 路径下推后的表达式：
+sql
+cast(cast(cast(src.c2, datetime BINARY), var_string(19)), datetime(6) BINARY)
+三层 CAST 嵌套：
+cast(src.c2, datetime BINARY) — DECIMAL(65,30) → DATETIME → 加 BINARY 标记
+cast(..., var_string(19)) — 转回字符串（19字符）
+cast(..., datetime(6) BINARY) — 再转 DATETIME(6)，加 BINARY

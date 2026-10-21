@@ -1,0 +1,90 @@
+#2419:https://github.com/oceanbase/oceanbase/issues/2419 has been reproduced.
+
+#### GROUP_BY_IFNULL_NOT_IN_PROJECTION_DROPS_IFNULL
+
+
+DROP DATABASE IF EXISTS repro_ob78_db0_min2;
+CREATE DATABASE repro_ob78_db0_min2;
+USE repro_ob78_db0_min2;
+
+SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER';
+SET SESSION time_zone = '+00:00';
+SET SESSION optimizer_switch = '';
+SET SESSION group_concat_max_len = 1048576;
+
+CREATE TABLE vp_s (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DOUBLE NULL,
+  KEY i0(c0)
+) ENGINE=InnoDB;
+
+INSERT INTO vp_s(c0) VALUES (1.0), (NULL);
+
+CREATE TABLE vp_l (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 DOUBLE NULL,
+  KEY i0(c0)
+) ENGINE=InnoDB;
+INSERT INTO vp_l SELECT id, c0 FROM vp_s;
+
+CREATE TABLE vp_r (
+  id BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+INSERT INTO vp_r SELECT id FROM vp_s;
+
+-- Single: wrong, returns NULL
+SELECT
+  IFNULL(('') NOT IN (vp_s.c0), TRUE) AS v
+FROM vp_s FORCE INDEX(i0)
+GROUP BY IFNULL(('') NOT IN (vp_s.c0), TRUE)
+HAVING SUM(c0) IS NOT NULL
+ORDER BY IFNULL(('') NOT IN (vp_s.c0), TRUE);
+
+-- Split: correct, returns 1
+SELECT
+  IFNULL(('') NOT IN (vp_s.c0), TRUE) AS v
+FROM (
+  SELECT l.id, l.c0
+  FROM vp_l l STRAIGHT_JOIN vp_r r ON l.id = r.id
+) vp_s
+GROUP BY IFNULL(('') NOT IN (vp_s.c0), TRUE)
+HAVING SUM(c0) IS NOT NULL
+ORDER BY IFNULL(('') NOT IN (vp_s.c0), TRUE);
+
+single: NULL
+split : 1
+
+Single:
+HASH GROUP BY
+  output([cast('', DOUBLE) != vp_s.c0])
+  group([IFNULL(cast('', DOUBLE) != vp_s.c0, 1)])
+  access([vp_s.c0]) via i0
+
+Split:
+HASH GROUP BY
+  output([cast('', DOUBLE) != l.c0])
+  group([IFNULL(cast('', DOUBLE) != l.c0, 1)])
+  MERGE JOIN by id
+
+GROUP BY IFNULL(nullable_predicate, TRUE)
+SELECT same IFNULL expression
+HASH GROUP BY 输出投影错误复用 nullable_predicate，而不是 group key / IFNULL 后结果
+
+查询语义
+sql
+IFNULL(('') NOT IN (vp_s.c0), TRUE)
+'' 与 DOUBLE 比较时会被转换为数字 0，所以 '' NOT IN (c0) 等价于 0 != c0（或 NOT (0 = c0)）。
+
+当 c0 = 1.0 时，0 != 1.0 为 TRUE，即 1。
+
+当 c0 = NULL 时，0 != NULL 结果为 NULL。
+
+IFNULL(..., TRUE) 将 NULL 转成 TRUE，因此两行数据的分组键都是 TRUE，属于同一组。
+
+HAVING SUM(c0) IS NOT NULL：SUM 忽略 NULL，两行求和为 1.0，不为 NULL，所以该组通过过滤。
+
+最终应返回一行结果 v = 1。
+
+MySQL 优化器在 Hash Group By 中对 SELECT 列表复用 GROUP BY 表达式时，错误地将输出列映射到了表达式内部的 NULLable 子项，而不是整个 IFNULL 表达式或分组键。这导致最终输出的值取决于分组实现中访问到的某一行数据，而不同执行路径下的数据访问顺序不同，所以单表查询返回 NULL，带 JOIN 的拆分查询返回 1。
+
+这是一个 MySQL 优化器的缺陷：Hash Group By 在执行计划中对 SELECT 表达式与 GROUP BY 表达式复用分组结果时，错误地将输出列映射到内部 NULLable 子表达式，而非完整的 IFNULL 表达式或分组键本身。

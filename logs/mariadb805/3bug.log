@@ -1,0 +1,83 @@
+https://jira.mariadb.org/browse/MDEV-40923 ok
+
+DROP DATABASE IF EXISTS repro_mariadb805_db3_min;
+CREATE DATABASE repro_mariadb805_db3_min;
+USE repro_mariadb805_db3_min;
+
+CREATE TABLE source_base (
+    c0 DOUBLE UNSIGNED ZEROFILL DEFAULT NULL
+) ENGINE=MyISAM;
+
+INSERT INTO source_base VALUES (234567890);
+
+CREATE TABLE vp_source LIKE source_base;
+ALTER TABLE vp_source ADD COLUMN vp_rowid BIGINT NOT NULL;
+
+INSERT INTO vp_source (vp_rowid, c0)
+SELECT ROW_NUMBER() OVER (ORDER BY c0), c0
+FROM source_base;
+
+CREATE TABLE vp_left (
+    vp_rowid BIGINT NOT NULL
+) ENGINE=MyISAM;
+
+CREATE TABLE vp_right (
+    vp_rowid BIGINT NOT NULL,
+    c0 DOUBLE UNSIGNED ZEROFILL DEFAULT NULL
+) ENGINE=MyISAM;
+
+INSERT INTO vp_left
+SELECT vp_rowid FROM vp_source;
+
+INSERT INTO vp_right
+SELECT vp_rowid, c0 FROM vp_source;
+
+SELECT 'DIRECT' AS variant,
+       c0,
+       LOCATE(false, c0) AS locate_result,
+       ORD(ORD(c0)) AS value
+FROM vp_source
+WHERE LOCATE(false, c0);
+
+SELECT 'RECONSTRUCTED' AS variant,
+       c0,
+       LOCATE(false, c0) AS locate_result,
+       ORD(ORD(c0)) AS value
+FROM (
+    SELECT l.vp_rowid,
+           (
+               SELECT r.c0
+               FROM vp_right r
+               WHERE r.vp_rowid = l.vp_rowid
+           ) AS c0
+    FROM vp_left l
+) AS reconstructed
+WHERE LOCATE(false, c0);
+
+单表结果：
+variant | c0                       | locate_result | value
+DIRECT  | 0000000000000234567890   | 1             | 52
+
+重构结果：
+variant       | c0        | locate_result | value
+RECONSTRUCTED | 234567890 | 9             | 53
+
+ZEROFILL 属性在查询重写过程中未能一致保留，导致相同数据在不同查询形式下产生不同结果。
+
+直接访问 DOUBLE UNSIGNED ZEROFILL 列时保留前导零；
+scalar subquery 输出到派生表后，ZEROFILL 显示属性丢失；
+ORD(ORD(c0)) 分别读取 '0' 和 '2'，结果变成 52 与 53。
+
+ZEROFILL 列直接读取：
+字符串 = '0000000000000234567890'
+
+ZEROFILL 列经过标量子查询/派生表：
+字符串 = '234567890'
+后续所有依赖字符串表示的函数都受到影响：
+
+表达式	直接查询	重构查询
+c0 显示值	0000000000000234567890	234567890
+LOCATE(false, c0)	1	9
+ORD(ORD(c0))	52	53
+这不是数值存储错误，而是 ZEROFILL 显示元数据在表达式/子查询/派生表传递过程中丢失导致的。
+

@@ -1,0 +1,114 @@
+https://www.postgresql.org/account/submitbug/19653/
+
+-- ============ 建库（日志序号：postgres810 / database3）============
+DROP DATABASE IF EXISTS repro_postgres810_db3_min;
+CREATE DATABASE repro_postgres810_db3_min;
+\c repro_postgres810_db3_min;
+
+-- ============ 会话参数 ============
+SET enable_partitionwise_join = on;
+SET enable_partition_pruning = on;
+SET enable_partitionwise_aggregate = on;
+SET enable_parallel_append = on;
+SET enable_parallel_hash = on;
+SET max_parallel_workers_per_gather = 2;
+SET min_parallel_table_scan_size = 0;
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+
+-- ============ 单表 source ============
+CREATE TABLE m_src(rowid bigint PRIMARY KEY, tsvec tsvector, tsq tsquery);
+INSERT INTO m_src VALUES
+ (1, to_tsvector('english','quick brown fox'), to_tsquery('english','alpha & beta')),
+ (2, to_tsvector('english','quick brown fox'), to_tsquery('english','alpha & beta')),
+ (3, to_tsvector('english','quick brown fox'), to_tsquery('english','alpha & beta'));
+
+-- ============ 左/右分区表（保留原始 l/r 垂直切分结构）============
+CREATE TABLE m_l(rowid bigint PRIMARY KEY, tsvec tsvector) PARTITION BY RANGE (rowid);
+CREATE TABLE m_l_p1 PARTITION OF m_l FOR VALUES FROM (1) TO (10);
+INSERT INTO m_l SELECT rowid, tsvec FROM m_src;
+
+CREATE TABLE m_r(rowid bigint PRIMARY KEY, tsq tsquery) PARTITION BY RANGE (rowid);
+CREATE TABLE m_r_p1 PARTITION OF m_r FOR VALUES FROM (1) TO (10);
+INSERT INTO m_r SELECT rowid, tsq FROM m_src;
+
+-- 关键：只 ANALYZE 左表，右表保持无统计
+ANALYZE m_l;
+
+-- ============ ① 单表查询：正常执行 ============
+SELECT ARRAY['', '']::TEXT[] FROM m_src
+WHERE NOT (m_src.tsvec @@ m_src.tsq)
+GROUP BY ROLLUP (ARRAY['', '']::TEXT[]);
+
+-- ============ ② 多表查询（split 结构）：报错 ============
+SELECT ALL ARRAY['', '']::TEXT[] FROM (
+  SELECT COALESCE(m_l.rowid, m_r.rowid) AS rowid, m_l.tsvec AS tsvec, m_r.tsq AS tsq
+  FROM m_l JOIN m_r ON m_l.rowid = m_r.rowid
+) s
+WHERE NOT (s.tsvec @@ s.tsq)
+GROUP BY ROLLUP (ARRAY['', '']::TEXT[]);
+
+单表 返回 ("", {"",""}) 两行；多表 直接报 ERROR: variable not found in subplan target list。
+
+该错误发生在计划生成阶段，而不是执行阶段。
+查询同时满足以下条件时触发：
+
+使用参数化嵌套循环连接（Nested Loop）；
+
+开启并行查询；
+
+使用 GROUP BY ROLLUP（产生 MixedAggregate 节点）；
+
+内层索引扫描的过滤条件同时引用内外两侧列。
+
+触发条件与关键因素
+1. 右表无统计信息
+只对 m_l 执行了 ANALYZE，而 m_r 没有统计信息。
+这导致优化器错误估计了 m_r 的访问代价，从而选择了参数化嵌套循环（Nested Loop），而不是 Hash Join。
+
+2. 开启并行
+会话参数将并行代价设置为 0，并允许最多 2 个并行 worker。
+这使得计划中出现了 Gather 和并行扫描节点。
+
+3. GROUP BY ROLLUP 产生 MixedAggregate
+ROLLUP 会被展开为多个分组集，优化器使用 MixedAggregate 节点处理。
+这个节点会对其子路径的 targetlist 进行裁剪，只保留自身需要的列（即 ARRAY['','']::TEXT[]）。
+
+4. 参数化 NestLoop 的内层 Filter 引用外侧列
+在参数化 NestLoop 中，内层索引扫描的过滤条件：
+
+text
+Filter: (m_l.tsvec @@ tsq)
+同时引用了：
+
+外侧列 m_l.tsvec
+
+内侧列 m_r.tsq
+
+在内层子计划中，m_l.tsvec 是作为一个参数从外侧传入的。
+因此内层子计划的 targetlist 中必须包含（或能够传递）这个列，否则计划在引用修正阶段会找不到变量。
+
+为什么单表查询不会出错？
+单表查询的计划结构是：
+
+text
+MixedAggregate
+  ->  Gather
+        ->  Parallel Seq Scan on m_src
+              Filter: (NOT (tsvec @@ tsq))
+Parallel Seq Scan 的 targetlist 完整包含了 tsvec 和 tsq 列，因此 MixedAggregate 的裁剪不会影响任何后续节点的引用。
+
+而在多表查询中，计划结构大致为：
+
+text
+MixedAggregate
+  ->  Gather
+        ->  Nested Loop
+              ->  Parallel Seq Scan on m_l_p1
+              ->  Index Scan on m_r_p1
+                    Index Cond: (rowid = m_l.rowid)
+                    Filter: (m_l.tsvec @@ tsq)
+MixedAggregate 为了减少传输列，将子路径 targetlist 裁剪为只包含分组列 ARRAY['','']::TEXT[]。
+但底层嵌套循环的内表 Index Scan 的 Filter 仍然依赖 m_l.tsvec。
+在计划器最后的 setrefs 阶段，检查子计划 targetlist 时找不到该变量，于是抛出错误。
+

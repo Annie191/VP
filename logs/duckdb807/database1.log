@@ -1,0 +1,1087 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=SINGLE_REPLICATED, reconstruction=JOIN, shape=SINGLE_COLUMN, prefix=vp_database1_126_
+--Strategy counts: split={EMPTY_SPLIT=5, SINGLE_REPLICATED=27, SINGLE_RIGHT_ROW_ID_ONLY=26, SINGLE_LEFT_ROW_ID_ONLY=28, EVEN_SPLIT=11, OVERLAPPED_SPLIT=11, SKEWED_SPLIT=10, TYPE_DIRECTED_SPLIT=10}, reconstruction={JOIN=1057, LEFT_RIGHT_JOIN=606, FULL_OUTER_SIMULATION=589, SCALAR_SUBQUERY=600, EXISTS_FILTER=605, IN_FILTER=611, NOT_EXISTS_ANTI=583, DERIVED_TABLE=598, CTE=590, VIEW=601, TEMP_TABLE=590, AGGREGATE_THEN_MERGE=601, ROW_NUMBER_ALIGNMENT=612, JSON_PACK=519, STRING_PACK=521, NATURAL_OR_USING=591, STRAIGHT_JOIN=616, LATERAL_DERIVED=589}
+--Database: database1
+--DuckDB version: v1.5.4
+--Base table: t2
+--Base table DDL: CREATE TABLE t2(c0 VARCHAR, PRIMARY KEY(c0));
+--Base table engine: ROWID
+--VP source engine: ROWID
+--VP left engine: ROWID
+--VP right engine: ROWID
+--Base row count: 9
+--Base shape: SINGLE_COLUMN
+--Stable row order: "c0"
+--Prefix: vp_database1_126_
+--Split strategy: SINGLE_REPLICATED
+--Left columns: {c0}
+--Right columns: {c0}
+--Overlap columns: {c0}
+--Physical foreign key: false
+--Reconstruction strategy: JOIN
+--Description: shape=SINGLE_COLUMN, split=SINGLE_REPLICATED, friendly=GROUP BY ALL
+--Session vars: checkpoint_threshold=<unavailable: Catalog Error: Pragma Function with name checkpoint_threshold does not exist!
+--Did you mean "disable_checkpoint_on_shutdown"?>
+--Session SET statements:
+--PRAGMA checkpoint_threshold='1 byte';
+--Setup statements:
+--CREATE TABLE "vp_database1_126_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE NOCASE NULL);
+--INSERT INTO "vp_database1_126_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t2" ORDER BY "c0" LIMIT 256;
+--CREATE UNIQUE INDEX "vp_database1_126_src_idx_copy_0" ON "vp_database1_126_source"(c0);;
+--CREATE UNIQUE INDEX "vp_database1_126_src_idx_copy_1" ON "vp_database1_126_source"(c0);;
+--CREATE UNIQUE INDEX "vp_database1_126_src_idx_copy_2" ON "vp_database1_126_source"(c0);;
+--CREATE UNIQUE INDEX "vp_database1_126_src_idx_copy_3" ON "vp_database1_126_source"(c0);;
+--CREATE TABLE "vp_database1_126_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE NOCASE NULL);
+--CREATE TABLE "vp_database1_126_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE NOCASE NULL);
+--INSERT INTO "vp_database1_126_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_126_source";
+--INSERT INTO "vp_database1_126_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_126_source";
+--CREATE INDEX "vp_database1_126_src_asym_1824035433" ON "vp_database1_126_source"("c0", "vp_rowid");
+--CREATE INDEX "vp_database1_126_idx_src_1422077676" ON "vp_database1_126_source"("c0", "vp_rowid");
+--CREATE INDEX "vp_database1_126_idx_r_1276419277" ON "vp_database1_126_r"("c0", "vp_rowid");
+--VP source snapshot:
+--SELECT "vp_rowid", "c0" FROM "vp_database1_126_source" ORDER BY "vp_rowid";
+--0 | zz
+--1 | 1970-01-06 06:13:34
+--2 | 0.125
+--3 |  
+--4 | A
+--5 | 0
+--6 | 00:00:00
+--7 | a
+--8 | aa
+--VP left snapshot:
+--SELECT "vp_rowid", "c0" FROM "vp_database1_126_l" ORDER BY "vp_rowid";
+--0 | zz
+--1 | 1970-01-06 06:13:34
+--2 | 0.125
+--3 |  
+--4 | A
+--5 | 0
+--6 | 00:00:00
+--7 | a
+--8 | aa
+--VP right snapshot:
+--SELECT "vp_rowid", "c0" FROM "vp_database1_126_r" ORDER BY "vp_rowid";
+--0 | zz
+--1 | 1970-01-06 06:13:34
+--2 | 0.125
+--3 |  
+--4 | A
+--5 | 0
+--6 | 00:00:00
+--7 | a
+--8 | aa
+--Single query: SELECT "c0", COUNT(*) AS vp_count FROM "vp_database1_126_source" GROUP BY ALL
+--Split query: SELECT "c0", COUNT(*) AS vp_count FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_126_l" l LEFT JOIN "vp_database1_126_r" r ON l."vp_rowid" = r."vp_rowid" UNION ALL SELECT r."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_126_r" r LEFT JOIN "vp_database1_126_l" l ON l."vp_rowid" = r."vp_rowid" WHERE NOT EXISTS (SELECT 1 FROM "vp_database1_126_l" lx WHERE lx."vp_rowid" = r."vp_rowid")) "vp_database1_126_source" GROUP BY "c0"
+--Single query plan:
+--EXPLAIN SELECT "c0", COUNT(*) AS vp_count FROM "vp_database1_126_source" GROUP BY ALL;
+--physical_plan | ┌───────────────────────────┐
+--│       HASH_GROUP_BY       │
+--│    ────────────────────   │
+--│         Groups: #0        │
+--│                           │
+--│        Aggregates:        │
+--│        count_star()       │
+--│                           │
+--│          ~5 rows          │
+--└─────────────┬─────────────┘
+--┌─────────────┴─────────────┐
+--│         PROJECTION        │
+--│    ────────────────────   │
+--│             c0            │
+--│                           │
+--│          ~9 rows          │
+--└─────────────┬─────────────┘
+--┌─────────────┴─────────────┐
+--│          SEQ_SCAN         │
+--│    ────────────────────   │
+--│           Table:          │
+--│        memory.main        │
+--│  .vp_database1_126_source │
+--│                           │
+--│   Type: Sequential Scan   │
+--│      Projections: c0      │
+--│                           │
+--│          ~9 rows          │
+--└───────────────────────────┘
+--
+--Split query plan:
+--EXPLAIN SELECT "c0", COUNT(*) AS vp_count FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_126_l" l LEFT JOIN "vp_database1_126_r" r ON l."vp_rowid" = r."vp_rowid" UNION ALL SELECT r."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_126_r" r LEFT JOIN "vp_database1_126_l" l ON l."vp_rowid" = r."vp_rowid" WHERE NOT EXISTS (SELECT 1 FROM "vp_database1_126_l" lx WHERE lx."vp_rowid" = r."vp_rowid")) "vp_database1_126_source" GROUP BY "c0";
+--physical_plan | ┌───────────────────────────┐
+--│         PROJECTION        │
+--│    ────────────────────   │
+--│             c0            │
+--│          vp_count         │
+--│                           │
+--│          ~5 rows          │
+--└─────────────┬─────────────┘
+--┌─────────────┴─────────────┐
+--│       HASH_GROUP_BY       │
+--│    ────────────────────   │
+--│         Groups: #0        │
+--│                           │
+--│        Aggregates:        │
+--│      __collated_group     │
+--│        count_star()       │
+--│                           │
+--│          ~5 rows          │
+--└─────────────┬─────────────┘
+--┌─────────────┴─────────────┐
+--│         PROJECTION        │
+--│    ────────────────────   │
+--│         lower(c0)         │
+--│             c0            │
+--│                           │
+--│          ~10 rows         │
+--└─────────────┬─────────────┘
+--┌─────────────┴─────────────┐
+--│           UNION           ├───────────────────────────────────────────┐
+--└─────────────┬─────────────┘                                           │
+--┌─────────────┴─────────────┐                             ┌─────────────┴─────────────┐
+--│         PROJECTION        │                             │         HASH_JOIN         │
+--│    ────────────────────   │                             │    ────────────────────   │
+--│             c0            │                             │      Join Type: ANTI      │
+--│                           │                             │                           │
+--│                           │                             │        Conditions:        ├───────────────────────────────────────────┐
+--│                           │                             │  vp_rowid IS NOT DISTINCT │                                           │
+--│                           │                             │        FROM vp_rowid      │                                           │
+--│                           │                             │                           │                                           │
+--│          ~9 rows          │                             │           ~1 row          │                                           │
+--└─────────────┬─────────────┘                             └─────────────┬─────────────┘                                           │
+--┌─────────────┴─────────────┐                             ┌─────────────┴─────────────┐                             ┌─────────────┴─────────────┐
+--│         HASH_JOIN         │                             │         HASH_JOIN         │                             │          SEQ_SCAN         │
+--│    ────────────────────   │                             │    ────────────────────   │                             │    ────────────────────   │
+--│      Join Type: LEFT      │                             │      Join Type: LEFT      │                             │           Table:          │
+--│                           │                             │                           │                             │        memory.main        │
+--│        Conditions:        │                             │        Conditions:        │                             │    .vp_database1_126_l    │
+--│    vp_rowid = vp_rowid    ├──────────────┐              │    vp_rowid = vp_rowid    ├──────────────┐              │                           │
+--│                           │              │              │                           │              │              │   Type: Sequential Scan   │
+--│                           │              │              │                           │              │              │   Projections: vp_rowid   │
+--│                           │              │              │                           │              │              │                           │
+--│          ~9 rows          │              │              │          ~9 rows          │              │              │           ~1 row          │
+--└─────────────┬─────────────┘              │              └─────────────┬─────────────┘              │              └───────────────────────────┘
+--┌─────────────┴─────────────┐┌─────────────┴─────────────┐┌─────────────┴─────────────┐┌─────────────┴─────────────┐
+--│          SEQ_SCAN         ││          SEQ_SCAN         ││          SEQ_SCAN         ││          SEQ_SCAN         │
+--│    ────────────────────   ││    ────────────────────   ││    ────────────────────   ││    ────────────────────   │
+--│           Table:          ││           Table:          ││           Table:          ││           Table:          │
+--│        memory.main        ││        memory.main        ││        memory.main        ││        memory.main        │
+--│    .vp_database1_126_l    ││    .vp_database1_126_r    ││    .vp_database1_126_r    ││    .vp_database1_126_l    │
+--│                           ││                           ││                           ││                           │
+--│   Type: Sequential Scan   ││   Type: Sequential Scan   ││   Type: Sequential Scan   ││   Type: Sequential Scan   │
+--│                           ││   Projections: vp_rowid   ││                           ││   Projections: vp_rowid   │
+--│        Projections:       ││                           ││        Projections:       ││                           │
+--│          vp_rowid         ││                           ││          vp_rowid         ││                           │
+--│             c0            ││                           ││             c0            ││                           │
+--│                           ││                           ││                           ││                           │
+--│          ~9 rows          ││          ~9 rows          ││          ~9 rows          ││          ~9 rows          │
+--└───────────────────────────┘└───────────────────────────┘└───────────────────────────┘└───────────────────────────┘
+--
+--Single result sample: S:1: ;S:1:1; x1, S:1:0;S:1:1; x1, S:5:0.125;S:1:1; x1, S:8:00:00:00;S:1:1; x1, S:19:1970-01-06 06:13:34;S:1:1; x1, S:1:A;S:1:1; x1, S:1:a;S:1:1; x1, S:2:aa;S:1:1; x1, S:2:zz;S:1:1; x1
+--Split result sample: S:1:0;S:1:1; x1, S:5:0.125;S:1:1; x1, S:19:1970-01-06 06:13:34;S:1:1; x1, S:1: ;S:1:1; x1, S:8:00:00:00;S:1:1; x1, S:2:aa;S:1:1; x1, S:2:zz;S:1:1; x1, S:1:A;S:1:2; x1
+--Only in single: S:1:A;S:1:1; x1, S:1:a;S:1:1; x1
+--Only in split: S:1:A;S:1:2; x1
+--
+--	at sqlancer.duckdb.DuckDBVerticalPartitioningOracle.comparePair(DuckDBVerticalPartitioningOracle.java:2624)
+--	at sqlancer.duckdb.DuckDBVerticalPartitioningOracle.check(DuckDBVerticalPartitioningOracle.java:330)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:479)
+--	at sqlancer.Main$2.run(Main.java:696)
+--	at sqlancer.Main$2.runThread(Main.java:678)
+--	at sqlancer.Main$2.run(Main.java:669)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/08/16 00:53:17
+-- Database: database1
+-- Database version: v1.5.4
+-- seed value: 1786841578518
+CREATE TABLE t0(c0 VARCHAR UNIQUE DEFAULT(INTERVAL '0 days'));
+INSERT INTO t0(c0) VALUES (NULL);
+INSERT INTO t0(c0) VALUES (NULL);
+ANALYZE;
+UPDATE t0 SET c0=NULL;
+INSERT INTO t0(c0) VALUES (NULL), (NULL);
+CREATE INDEX i0 ON t0(c0 , rowid );
+CREATE UNIQUE INDEX i0 ON t0(rowid , c0 );
+INSERT INTO "t0"("c0") VALUES ('NaN');
+INSERT INTO t0(c0) VALUES (TIMESTAMP '1970-01-20 00:04:53'), (CAST(0 AS HUGEINT)), (CAST('0.125' AS DECIMAL(18,3)));
+INSERT INTO t0(c0) VALUES (NULL);
+CREATE INDEX i0 ON t0(c0 ASC);
+UPDATE t0 SET c0=CAST('0.125' AS DECIMAL(18,3));
+UPDATE t0 SET c0='\r4&{';
+UPDATE t0 SET c0=DATE '1969-12-29';
+UPDATE t0 SET c0=CAST('0.125' AS DECIMAL(18,3));
+CREATE UNIQUE INDEX i1 ON t0(c0 , rowid );
+INSERT INTO "t0"("c0") VALUES ('0');
+CREATE UNIQUE INDEX i1 ON t0(c0 );
+ANALYZE;
+INSERT INTO t0(c0) VALUES (NULL);
+UPDATE t0 SET c0=NULL;
+INSERT INTO t0(c0) VALUES (NULL);
+CREATE INDEX i2 ON t0(c0 , rowid );
+INSERT INTO t0(c0) VALUES (DEFAULT);
+ANALYZE;
+ANALYZE;
+ANALYZE;
+UPDATE t0 SET c0=INTERVAL '0 days';
+ANALYZE;
+ANALYZE;
+INSERT INTO t0(c0) VALUES (CAST(0 AS HUGEINT));
+ANALYZE;
+INSERT INTO "t0"("c0") VALUES (' ');
+INSERT INTO t0(c0) VALUES (NULL);
+CREATE UNIQUE INDEX i2 ON t0(c0 );
+CREATE UNIQUE INDEX i3 ON t0(c0 , rowid );
+ANALYZE;
+INSERT INTO "t0"("c0") VALUES ('');
+CREATE INDEX i3 ON t0(c0 , rowid );
+CREATE TABLE t1(c0 DATE DEFAULT(INTERVAL '0 days'));
+UPDATE t1 SET c0=CAST(0 AS HUGEINT);
+INSERT INTO t1(c0) VALUES ('\r4&{');
+INSERT INTO t1(c0) VALUES (DATE '1969-12-29'), (BLOB '');
+INSERT INTO t0(c0) VALUES (NULL);
+ANALYZE;
+CREATE UNIQUE INDEX i3 ON t0(c0 , rowid );
+INSERT INTO t0(c0) VALUES (CAST(0 AS HUGEINT)), (NULL);
+INSERT INTO t0(c0) VALUES (0.05903233700738286);
+ANALYZE;
+INSERT INTO t0(c0) VALUES (BLOB '');
+ANALYZE;
+INSERT INTO "t1"("c0") VALUES (NULL);
+ANALYZE;
+CREATE UNIQUE INDEX i3 ON t1(c0 , rowid );
+INSERT INTO t1(c0) VALUES (NULL);
+UPDATE t0 SET c0=NULL;
+INSERT INTO t0(c0) VALUES (INTERVAL '0 days');
+INSERT INTO t0(c0) VALUES (BLOB '');
+CREATE UNIQUE INDEX i3 ON t0(rowid , c0 );
+UPDATE t0 SET c0=INTERVAL '0 days';
+INSERT INTO t0(c0) VALUES (TIMESTAMP '1970-01-03 18:11:51');
+ANALYZE;
+INSERT INTO "t0"("c0") VALUES ('0');
+CREATE UNIQUE INDEX i3 ON t1(c0 ASC);
+INSERT INTO "t1"("c0") VALUES (NULL);
+INSERT INTO "t0"("c0") VALUES ('A');
+INSERT INTO t0(c0) VALUES (-1487121158), (NULL);
+CREATE INDEX i4 ON t0(c0 );
+ANALYZE;
+CREATE INDEX i80 ON t1(c0 , rowid );
+INSERT INTO t0(c0) VALUES (UUID '00000000-0000-0000-0000-000000000000');
+CREATE UNIQUE INDEX i5 ON t1(rowid );
+UPDATE t1 SET c0=NULL;
+CREATE UNIQUE INDEX i5 ON t1(c0 );
+UPDATE t0 SET c0=CAST(0 AS HUGEINT);
+INSERT INTO t1(c0) VALUES (UUID '00000000-0000-0000-0000-000000000000');
+INSERT INTO "t0"("c0") VALUES (' ');
+PRAGMA checkpoint_threshold='1 byte';
+DROP VIEW IF EXISTS "vp_database1_6_v";
+DROP TABLE IF EXISTS "vp_database1_6_joined";
+DROP TABLE IF EXISTS "vp_database1_6_r";
+DROP TABLE IF EXISTS "vp_database1_6_l";
+DROP TABLE IF EXISTS "vp_database1_6_source";
+CREATE TABLE "vp_database1_6_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE C NULL);
+INSERT INTO "vp_database1_6_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t0" ORDER BY "c0" LIMIT 256;
+CREATE INDEX "vp_database1_6_src_idx_copy_0" ON "vp_database1_6_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_6_src_idx_copy_1" ON "vp_database1_6_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_6_src_idx_copy_2" ON "vp_database1_6_source"(c0);
+CREATE INDEX "vp_database1_6_src_idx_copy_3" ON "vp_database1_6_source"(c0);
+ALTER TABLE "vp_database1_6_source" ADD CONSTRAINT "vp_database1_6_src_chk_copy_4" UNIQUE(c0);
+CREATE TABLE "vp_database1_6_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE C NULL);
+CREATE TABLE "vp_database1_6_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY);
+INSERT INTO "vp_database1_6_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_6_source";
+INSERT INTO "vp_database1_6_r" ("vp_rowid") SELECT "vp_rowid" FROM "vp_database1_6_source";
+CREATE INDEX "vp_database1_6_l_asym_173882853" ON "vp_database1_6_l"("vp_rowid", "c0");
+CREATE INDEX "vp_database1_6_idx_src_781919759" ON "vp_database1_6_source"("c0", "vp_rowid");
+ALTER TABLE "vp_database1_6_r" ADD CONSTRAINT "vp_database1_6_fk_r_l" FOREIGN KEY ("vp_rowid") REFERENCES "vp_database1_6_l"("vp_rowid");
+DROP VIEW IF EXISTS "vp_database1_6_v";
+CREATE VIEW "vp_database1_6_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_6_l" l JOIN "vp_database1_6_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_6_v";
+CREATE VIEW "vp_database1_6_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_6_l" l JOIN "vp_database1_6_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_6_v";
+CREATE VIEW "vp_database1_6_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_6_l" l JOIN "vp_database1_6_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_6_v";
+CREATE VIEW "vp_database1_6_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_6_l" l JOIN "vp_database1_6_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_6_v";
+CREATE VIEW "vp_database1_6_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_6_l" l JOIN "vp_database1_6_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_6_joined";
+CREATE TEMP TABLE "vp_database1_6_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_6_l" l JOIN "vp_database1_6_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_6_joined";
+CREATE TEMP TABLE "vp_database1_6_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_6_l" l JOIN "vp_database1_6_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_6_joined";
+CREATE TEMP TABLE "vp_database1_6_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_6_l" l JOIN "vp_database1_6_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_6_joined";
+CREATE TEMP TABLE "vp_database1_6_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_6_l" l JOIN "vp_database1_6_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_6_joined";
+CREATE TEMP TABLE "vp_database1_6_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_6_l" l JOIN "vp_database1_6_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_6_v";
+DROP TABLE IF EXISTS "vp_database1_6_joined";
+DROP TABLE IF EXISTS "vp_database1_6_r";
+DROP TABLE IF EXISTS "vp_database1_6_l";
+DROP TABLE IF EXISTS "vp_database1_6_source";
+DROP VIEW IF EXISTS "vp_database1_11_v";
+DROP TABLE IF EXISTS "vp_database1_11_joined";
+DROP TABLE IF EXISTS "vp_database1_11_r";
+DROP TABLE IF EXISTS "vp_database1_11_l";
+DROP TABLE IF EXISTS "vp_database1_11_source";
+CREATE TABLE "vp_database1_11_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE C NULL);
+INSERT INTO "vp_database1_11_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t0" ORDER BY "c0" LIMIT 256;
+CREATE INDEX "vp_database1_11_src_idx_copy_0" ON "vp_database1_11_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_11_src_idx_copy_1" ON "vp_database1_11_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_11_src_idx_copy_2" ON "vp_database1_11_source"(c0);
+CREATE INDEX "vp_database1_11_src_idx_copy_3" ON "vp_database1_11_source"(c0);
+ALTER TABLE "vp_database1_11_source" ADD CONSTRAINT "vp_database1_11_src_chk_copy_4" UNIQUE(c0);
+CREATE TABLE "vp_database1_11_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE C NULL);
+CREATE TABLE "vp_database1_11_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE C NULL);
+INSERT INTO "vp_database1_11_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_11_source";
+INSERT INTO "vp_database1_11_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_11_source";
+CREATE INDEX "vp_database1_11_l_asym_1641893757" ON "vp_database1_11_l"("vp_rowid", "c0");
+CREATE INDEX "vp_database1_11_r_asym_1641893757" ON "vp_database1_11_r"("c0", "vp_rowid");
+CREATE INDEX "vp_database1_11_idx_l_1927937229" ON "vp_database1_11_l"("c0", "vp_rowid");
+CREATE INDEX "vp_database1_11_idx_r_1641893757" ON "vp_database1_11_r"("vp_rowid", "c0");
+ALTER TABLE "vp_database1_11_r" ADD CONSTRAINT "vp_database1_11_fk_r_l" FOREIGN KEY ("vp_rowid") REFERENCES "vp_database1_11_l"("vp_rowid");
+DROP TABLE IF EXISTS "vp_database1_11_joined";
+CREATE TEMP TABLE "vp_database1_11_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_11_l" l JOIN "vp_database1_11_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_11_joined";
+CREATE TEMP TABLE "vp_database1_11_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_11_l" l JOIN "vp_database1_11_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_11_joined";
+CREATE TEMP TABLE "vp_database1_11_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_11_l" l JOIN "vp_database1_11_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_11_joined";
+CREATE TEMP TABLE "vp_database1_11_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_11_l" l JOIN "vp_database1_11_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_11_joined";
+CREATE TEMP TABLE "vp_database1_11_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_11_l" l JOIN "vp_database1_11_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_11_v";
+CREATE VIEW "vp_database1_11_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_11_l" l JOIN "vp_database1_11_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_11_v";
+CREATE VIEW "vp_database1_11_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_11_l" l JOIN "vp_database1_11_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_11_v";
+CREATE VIEW "vp_database1_11_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_11_l" l JOIN "vp_database1_11_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_11_v";
+CREATE VIEW "vp_database1_11_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_11_l" l JOIN "vp_database1_11_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_11_v";
+CREATE VIEW "vp_database1_11_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_11_l" l JOIN "vp_database1_11_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_11_v";
+DROP TABLE IF EXISTS "vp_database1_11_joined";
+DROP TABLE IF EXISTS "vp_database1_11_r";
+DROP TABLE IF EXISTS "vp_database1_11_l";
+DROP TABLE IF EXISTS "vp_database1_11_source";
+DROP VIEW IF EXISTS "vp_database1_18_v";
+DROP TABLE IF EXISTS "vp_database1_18_joined";
+DROP TABLE IF EXISTS "vp_database1_18_r";
+DROP TABLE IF EXISTS "vp_database1_18_l";
+DROP TABLE IF EXISTS "vp_database1_18_source";
+CREATE TABLE "vp_database1_18_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE NOCASE NULL);
+INSERT INTO "vp_database1_18_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t0" ORDER BY "c0" LIMIT 256;
+CREATE INDEX "vp_database1_18_src_idx_copy_0" ON "vp_database1_18_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_18_src_idx_copy_1" ON "vp_database1_18_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_18_src_idx_copy_2" ON "vp_database1_18_source"(c0);
+CREATE INDEX "vp_database1_18_src_idx_copy_3" ON "vp_database1_18_source"(c0);
+ALTER TABLE "vp_database1_18_source" ADD CONSTRAINT "vp_database1_18_src_chk_copy_4" UNIQUE(c0);
+CREATE TABLE "vp_database1_18_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY);
+CREATE TABLE "vp_database1_18_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE NOCASE NULL);
+INSERT INTO "vp_database1_18_l" ("vp_rowid") SELECT "vp_rowid" FROM "vp_database1_18_source";
+INSERT INTO "vp_database1_18_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_18_source";
+CREATE INDEX "vp_database1_18_src_asym_1277715530" ON "vp_database1_18_source"("c0", "vp_rowid");
+CREATE INDEX "vp_database1_18_r_asym_1487121158" ON "vp_database1_18_r"("c0", "vp_rowid");
+ALTER TABLE "vp_database1_18_r" ADD CONSTRAINT "vp_database1_18_fk_r_l" FOREIGN KEY ("vp_rowid") REFERENCES "vp_database1_18_l"("vp_rowid");
+DROP TABLE IF EXISTS "vp_database1_18_joined";
+CREATE TEMP TABLE "vp_database1_18_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_18_l" l JOIN "vp_database1_18_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_18_joined";
+CREATE TEMP TABLE "vp_database1_18_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_18_l" l JOIN "vp_database1_18_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_18_joined";
+CREATE TEMP TABLE "vp_database1_18_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_18_l" l JOIN "vp_database1_18_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_18_joined";
+CREATE TEMP TABLE "vp_database1_18_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_18_l" l JOIN "vp_database1_18_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_18_joined";
+CREATE TEMP TABLE "vp_database1_18_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_18_l" l JOIN "vp_database1_18_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_18_v";
+CREATE VIEW "vp_database1_18_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_18_l" l JOIN "vp_database1_18_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_18_v";
+CREATE VIEW "vp_database1_18_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_18_l" l JOIN "vp_database1_18_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_18_v";
+CREATE VIEW "vp_database1_18_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_18_l" l JOIN "vp_database1_18_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_18_v";
+CREATE VIEW "vp_database1_18_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_18_l" l JOIN "vp_database1_18_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_18_v";
+CREATE VIEW "vp_database1_18_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_18_l" l JOIN "vp_database1_18_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_18_v";
+DROP TABLE IF EXISTS "vp_database1_18_joined";
+DROP TABLE IF EXISTS "vp_database1_18_r";
+DROP TABLE IF EXISTS "vp_database1_18_l";
+DROP TABLE IF EXISTS "vp_database1_18_source";
+CREATE TABLE t2(c0 VARCHAR DEFAULT(-600730468));
+INSERT INTO "t0"("c0") VALUES ('zz');
+INSERT INTO "t0"("c0") VALUES ('');
+INSERT INTO "t0"("c0") VALUES (' ');
+CREATE UNIQUE INDEX i6 ON t2(rowid );
+CREATE UNIQUE INDEX i6 ON t2(rowid );
+UPDATE t1 SET c0='[V';
+CREATE INDEX i6 ON t2(rowid );
+INSERT INTO t2(c0) VALUES (CAST(0 AS HUGEINT));
+CREATE UNIQUE INDEX i6 ON t1(c0 DESC, rowid );
+INSERT INTO t1(c0) VALUES (DATE '1969-12-25');
+INSERT INTO "t2"("c0") VALUES ('A');
+ANALYZE;
+INSERT INTO t2(c0) VALUES (INTERVAL '0 days');
+ANALYZE;
+CREATE INDEX i62 ON t0(rowid );
+INSERT INTO t2(c0) VALUES (TIME '00:00:00');
+INSERT INTO t0(c0) VALUES (true);
+ANALYZE;
+UPDATE t0 SET c0=NULL;
+CREATE UNIQUE INDEX i6 ON t0(c0 );
+INSERT INTO t1(c0) VALUES (false);
+INSERT INTO t0(c0) VALUES (TIME '00:00:00');
+ANALYZE;
+INSERT INTO t2(c0) VALUES (781919759), (DATE '1970-01-17');
+INSERT INTO t0(c0) VALUES (INTERVAL '0 days');
+ANALYZE;
+INSERT INTO t1(c0) VALUES (1927937229);
+INSERT INTO t2(c0) VALUES (DEFAULT);
+CREATE UNIQUE INDEX i7 ON t2(rowid );
+INSERT INTO t2(c0) VALUES (CAST(0 AS HUGEINT));
+INSERT INTO t0(c0) VALUES (NULL), (NULL);
+CREATE UNIQUE INDEX i7 ON t0(rowid );
+INSERT INTO t0(c0) VALUES (CAST(0 AS HUGEINT));
+ANALYZE;
+INSERT INTO "t2"("c0") VALUES ('a');
+DROP TABLE IF EXISTS "t0";
+PRAGMA checkpoint_threshold='1 byte';
+DROP VIEW IF EXISTS "vp_database1_28_v";
+DROP TABLE IF EXISTS "vp_database1_28_joined";
+DROP TABLE IF EXISTS "vp_database1_28_r";
+DROP TABLE IF EXISTS "vp_database1_28_l";
+DROP TABLE IF EXISTS "vp_database1_28_source";
+CREATE TABLE "vp_database1_28_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" DATE NULL);
+INSERT INTO "vp_database1_28_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t1" ORDER BY "c0" LIMIT 256;
+CREATE UNIQUE INDEX "vp_database1_28_src_idx_copy_0" ON "vp_database1_28_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_28_src_idx_copy_1" ON "vp_database1_28_source"(c0);
+CREATE TABLE "vp_database1_28_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY);
+CREATE TABLE "vp_database1_28_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" DATE NULL);
+INSERT INTO "vp_database1_28_l" ("vp_rowid") SELECT "vp_rowid" FROM "vp_database1_28_source";
+INSERT INTO "vp_database1_28_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_28_source";
+CREATE INDEX "vp_database1_28_r_asym_1277715530" ON "vp_database1_28_r"("c0", "vp_rowid");
+CREATE INDEX "vp_database1_28_idx_r_894776424" ON "vp_database1_28_r"("vp_rowid", "c0");
+DROP TABLE IF EXISTS "vp_database1_28_joined";
+CREATE TEMP TABLE "vp_database1_28_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_28_l" l JOIN "vp_database1_28_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_28_joined";
+CREATE TEMP TABLE "vp_database1_28_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_28_l" l JOIN "vp_database1_28_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_28_joined";
+CREATE TEMP TABLE "vp_database1_28_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_28_l" l JOIN "vp_database1_28_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_28_joined";
+CREATE TEMP TABLE "vp_database1_28_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_28_l" l JOIN "vp_database1_28_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_28_v";
+CREATE VIEW "vp_database1_28_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_28_l" l JOIN "vp_database1_28_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_28_v";
+CREATE VIEW "vp_database1_28_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_28_l" l JOIN "vp_database1_28_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_28_v";
+CREATE VIEW "vp_database1_28_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_28_l" l JOIN "vp_database1_28_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_28_v";
+CREATE VIEW "vp_database1_28_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_28_l" l JOIN "vp_database1_28_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_28_v";
+CREATE VIEW "vp_database1_28_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_28_l" l JOIN "vp_database1_28_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_28_v";
+DROP TABLE IF EXISTS "vp_database1_28_joined";
+DROP TABLE IF EXISTS "vp_database1_28_r";
+DROP TABLE IF EXISTS "vp_database1_28_l";
+DROP TABLE IF EXISTS "vp_database1_28_source";
+DROP VIEW IF EXISTS "vp_database1_35_v";
+DROP TABLE IF EXISTS "vp_database1_35_joined";
+DROP TABLE IF EXISTS "vp_database1_35_r";
+DROP TABLE IF EXISTS "vp_database1_35_l";
+DROP TABLE IF EXISTS "vp_database1_35_source";
+CREATE TABLE "vp_database1_35_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" DATE NULL);
+INSERT INTO "vp_database1_35_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t1" ORDER BY "c0" LIMIT 256;
+CREATE UNIQUE INDEX "vp_database1_35_src_idx_copy_0" ON "vp_database1_35_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_35_src_idx_copy_1" ON "vp_database1_35_source"(c0);
+CREATE TABLE "vp_database1_35_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" DATE NULL);
+CREATE TABLE "vp_database1_35_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" DATE NULL);
+INSERT INTO "vp_database1_35_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_35_source";
+INSERT INTO "vp_database1_35_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_35_source";
+CREATE INDEX "vp_database1_35_l_asym_490501090" ON "vp_database1_35_l"("vp_rowid", "c0");
+CREATE INDEX "vp_database1_35_r_asym_454414824" ON "vp_database1_35_r"("c0", "vp_rowid");
+CREATE INDEX "vp_database1_35_idx_src_238311291" ON "vp_database1_35_source"("vp_rowid", "c0");
+DROP VIEW IF EXISTS "vp_database1_35_v";
+CREATE VIEW "vp_database1_35_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_35_l" l JOIN "vp_database1_35_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_35_v";
+CREATE VIEW "vp_database1_35_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_35_l" l JOIN "vp_database1_35_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_35_v";
+CREATE VIEW "vp_database1_35_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_35_l" l JOIN "vp_database1_35_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_35_v";
+CREATE VIEW "vp_database1_35_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_35_l" l JOIN "vp_database1_35_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_35_v";
+CREATE VIEW "vp_database1_35_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_35_l" l JOIN "vp_database1_35_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_35_joined";
+CREATE TEMP TABLE "vp_database1_35_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_35_l" l JOIN "vp_database1_35_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_35_joined";
+CREATE TEMP TABLE "vp_database1_35_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_35_l" l JOIN "vp_database1_35_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_35_joined";
+CREATE TEMP TABLE "vp_database1_35_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_35_l" l JOIN "vp_database1_35_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_35_joined";
+CREATE TEMP TABLE "vp_database1_35_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_35_l" l JOIN "vp_database1_35_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_35_joined";
+CREATE TEMP TABLE "vp_database1_35_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_35_l" l JOIN "vp_database1_35_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_35_v";
+DROP TABLE IF EXISTS "vp_database1_35_joined";
+DROP TABLE IF EXISTS "vp_database1_35_r";
+DROP TABLE IF EXISTS "vp_database1_35_l";
+DROP TABLE IF EXISTS "vp_database1_35_source";
+DROP VIEW IF EXISTS "vp_database1_42_v";
+DROP TABLE IF EXISTS "vp_database1_42_joined";
+DROP TABLE IF EXISTS "vp_database1_42_r";
+DROP TABLE IF EXISTS "vp_database1_42_l";
+DROP TABLE IF EXISTS "vp_database1_42_source";
+CREATE TABLE "vp_database1_42_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" DATE NULL);
+INSERT INTO "vp_database1_42_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t1" ORDER BY "c0" LIMIT 256;
+CREATE UNIQUE INDEX "vp_database1_42_src_idx_copy_0" ON "vp_database1_42_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_42_src_idx_copy_1" ON "vp_database1_42_source"(c0);
+CREATE TABLE "vp_database1_42_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" DATE NULL);
+CREATE TABLE "vp_database1_42_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY);
+INSERT INTO "vp_database1_42_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_42_source";
+INSERT INTO "vp_database1_42_r" ("vp_rowid") SELECT "vp_rowid" FROM "vp_database1_42_source";
+CREATE INDEX "vp_database1_42_l_asym_2030878947" ON "vp_database1_42_l"("vp_rowid", "c0");
+CREATE INDEX "vp_database1_42_idx_l_1244989024" ON "vp_database1_42_l"("c0");
+ALTER TABLE "vp_database1_42_r" ADD CONSTRAINT "vp_database1_42_fk_r_l" FOREIGN KEY ("vp_rowid") REFERENCES "vp_database1_42_l"("vp_rowid");
+DROP VIEW IF EXISTS "vp_database1_42_v";
+CREATE VIEW "vp_database1_42_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_42_l" l JOIN "vp_database1_42_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_42_v";
+CREATE VIEW "vp_database1_42_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_42_l" l JOIN "vp_database1_42_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_42_v";
+CREATE VIEW "vp_database1_42_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_42_l" l JOIN "vp_database1_42_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_42_v";
+CREATE VIEW "vp_database1_42_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_42_l" l JOIN "vp_database1_42_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_42_v";
+CREATE VIEW "vp_database1_42_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_42_l" l JOIN "vp_database1_42_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_42_joined";
+CREATE TEMP TABLE "vp_database1_42_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_42_l" l JOIN "vp_database1_42_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_42_joined";
+CREATE TEMP TABLE "vp_database1_42_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_42_l" l JOIN "vp_database1_42_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_42_joined";
+CREATE TEMP TABLE "vp_database1_42_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_42_l" l JOIN "vp_database1_42_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_42_joined";
+CREATE TEMP TABLE "vp_database1_42_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_42_l" l JOIN "vp_database1_42_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_42_joined";
+CREATE TEMP TABLE "vp_database1_42_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_42_l" l JOIN "vp_database1_42_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_42_v";
+DROP TABLE IF EXISTS "vp_database1_42_joined";
+DROP TABLE IF EXISTS "vp_database1_42_r";
+DROP TABLE IF EXISTS "vp_database1_42_l";
+DROP TABLE IF EXISTS "vp_database1_42_source";
+CREATE TABLE t0(c0 VARCHAR NOT NULL, PRIMARY KEY(c0));
+INSERT INTO t1(c0) VALUES (-1599378300);
+ANALYZE;
+UPDATE t0 SET c0=0.23804303370245772;
+ANALYZE;
+ANALYZE;
+UPDATE t1 SET c0='\r4&{';
+ANALYZE;
+UPDATE t0 SET c0=TIMESTAMP '1969-12-28 01:35:36';
+ANALYZE;
+INSERT INTO "t0"("c0") VALUES ('A');
+ANALYZE;
+INSERT INTO "t2"("c0") VALUES ('');
+UPDATE t1 SET c0=DATE '1969-12-14';
+INSERT INTO t1(c0) VALUES (CAST('0.125' AS DECIMAL(18,3)));
+ANALYZE;
+INSERT INTO "t0"("c0") VALUES (' ');
+ANALYZE;
+INSERT INTO t1(c0) VALUES (INTERVAL '0 days');
+CREATE UNIQUE INDEX i0 ON t1(rowid , c0 );
+INSERT INTO t2(c0) VALUES (DATE '1969-12-23');
+ANALYZE;
+INSERT INTO "t1"("c0") VALUES (DATE '9999-12-31');
+INSERT INTO "t2"("c0") VALUES ('A');
+UPDATE t2 SET c0=NULL;
+ANALYZE;
+INSERT INTO "t0"("c0") VALUES ('0');
+CREATE UNIQUE INDEX i0 ON t2(rowid , c0 );
+INSERT INTO "t0"("c0") VALUES ('zz');
+INSERT INTO "t2"("c0") VALUES ('0');
+INSERT INTO t1(c0) VALUES (INTERVAL '0 days'), (1307659067);
+INSERT INTO "t2"("c0") VALUES ('NaN');
+CREATE UNIQUE INDEX i0 ON t1(c0 );
+INSERT INTO t0(c0) VALUES (BLOB '');
+ANALYZE;
+INSERT INTO "t1"("c0") VALUES (DATE '9999-12-31');
+ANALYZE;
+DROP TABLE IF EXISTS "t1";
+PRAGMA checkpoint_threshold='1 byte';
+DROP VIEW IF EXISTS "vp_database1_52_v";
+DROP TABLE IF EXISTS "vp_database1_52_joined";
+DROP TABLE IF EXISTS "vp_database1_52_r";
+DROP TABLE IF EXISTS "vp_database1_52_l";
+DROP TABLE IF EXISTS "vp_database1_52_source";
+CREATE TABLE "vp_database1_52_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+INSERT INTO "vp_database1_52_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t2" ORDER BY "c0" LIMIT 256;
+CREATE TABLE "vp_database1_52_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+CREATE TABLE "vp_database1_52_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+INSERT INTO "vp_database1_52_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_52_source";
+INSERT INTO "vp_database1_52_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_52_source";
+CREATE INDEX "vp_database1_52_src_asym_23807378" ON "vp_database1_52_source"("c0", "vp_rowid");
+CREATE INDEX "vp_database1_52_idx_src_698212464" ON "vp_database1_52_source"("vp_rowid", "c0");
+CREATE INDEX "vp_database1_52_idx_l_1595731573" ON "vp_database1_52_l"("vp_rowid", "c0");
+DROP TABLE IF EXISTS "vp_database1_52_joined";
+CREATE TEMP TABLE "vp_database1_52_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_52_l" l JOIN "vp_database1_52_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_52_joined";
+CREATE TEMP TABLE "vp_database1_52_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_52_l" l JOIN "vp_database1_52_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_52_joined";
+CREATE TEMP TABLE "vp_database1_52_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_52_l" l JOIN "vp_database1_52_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_52_joined";
+CREATE TEMP TABLE "vp_database1_52_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_52_l" l JOIN "vp_database1_52_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_52_joined";
+CREATE TEMP TABLE "vp_database1_52_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_52_l" l JOIN "vp_database1_52_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_52_v";
+CREATE VIEW "vp_database1_52_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_52_l" l JOIN "vp_database1_52_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_52_v";
+CREATE VIEW "vp_database1_52_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_52_l" l JOIN "vp_database1_52_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_52_v";
+CREATE VIEW "vp_database1_52_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_52_l" l JOIN "vp_database1_52_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_52_v";
+CREATE VIEW "vp_database1_52_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_52_l" l JOIN "vp_database1_52_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_52_v";
+CREATE VIEW "vp_database1_52_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_52_l" l JOIN "vp_database1_52_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_52_v";
+DROP TABLE IF EXISTS "vp_database1_52_joined";
+DROP TABLE IF EXISTS "vp_database1_52_r";
+DROP TABLE IF EXISTS "vp_database1_52_l";
+DROP TABLE IF EXISTS "vp_database1_52_source";
+DROP VIEW IF EXISTS "vp_database1_57_v";
+DROP TABLE IF EXISTS "vp_database1_57_joined";
+DROP TABLE IF EXISTS "vp_database1_57_r";
+DROP TABLE IF EXISTS "vp_database1_57_l";
+DROP TABLE IF EXISTS "vp_database1_57_source";
+CREATE TABLE "vp_database1_57_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE C NULL);
+INSERT INTO "vp_database1_57_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t2" ORDER BY "c0" LIMIT 256;
+CREATE TABLE "vp_database1_57_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE C NULL);
+CREATE TABLE "vp_database1_57_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY);
+INSERT INTO "vp_database1_57_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_57_source";
+INSERT INTO "vp_database1_57_r" ("vp_rowid") SELECT "vp_rowid" FROM "vp_database1_57_source";
+CREATE INDEX "vp_database1_57_l_asym_173882853" ON "vp_database1_57_l"("vp_rowid", "c0");
+CREATE INDEX "vp_database1_57_idx_l_934723898" ON "vp_database1_57_l"("c0");
+DROP VIEW IF EXISTS "vp_database1_57_v";
+CREATE VIEW "vp_database1_57_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_57_l" l JOIN "vp_database1_57_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_57_v";
+CREATE VIEW "vp_database1_57_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_57_l" l JOIN "vp_database1_57_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_57_v";
+CREATE VIEW "vp_database1_57_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_57_l" l JOIN "vp_database1_57_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_57_v";
+CREATE VIEW "vp_database1_57_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_57_l" l JOIN "vp_database1_57_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_57_v";
+CREATE VIEW "vp_database1_57_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_57_l" l JOIN "vp_database1_57_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_57_joined";
+CREATE TEMP TABLE "vp_database1_57_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_57_l" l JOIN "vp_database1_57_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_57_joined";
+CREATE TEMP TABLE "vp_database1_57_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_57_l" l JOIN "vp_database1_57_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_57_joined";
+CREATE TEMP TABLE "vp_database1_57_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_57_l" l JOIN "vp_database1_57_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_57_joined";
+CREATE TEMP TABLE "vp_database1_57_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_57_l" l JOIN "vp_database1_57_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_57_joined";
+CREATE TEMP TABLE "vp_database1_57_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_57_l" l JOIN "vp_database1_57_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_57_v";
+DROP TABLE IF EXISTS "vp_database1_57_joined";
+DROP TABLE IF EXISTS "vp_database1_57_r";
+DROP TABLE IF EXISTS "vp_database1_57_l";
+DROP TABLE IF EXISTS "vp_database1_57_source";
+DROP VIEW IF EXISTS "vp_database1_66_v";
+DROP TABLE IF EXISTS "vp_database1_66_joined";
+DROP TABLE IF EXISTS "vp_database1_66_r";
+DROP TABLE IF EXISTS "vp_database1_66_l";
+DROP TABLE IF EXISTS "vp_database1_66_source";
+CREATE TABLE "vp_database1_66_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+INSERT INTO "vp_database1_66_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t2" ORDER BY "c0" LIMIT 256;
+CREATE TABLE "vp_database1_66_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY);
+CREATE TABLE "vp_database1_66_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+INSERT INTO "vp_database1_66_l" ("vp_rowid") SELECT "vp_rowid" FROM "vp_database1_66_source";
+INSERT INTO "vp_database1_66_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_66_source";
+CREATE INDEX "vp_database1_66_idx_src_1687072445" ON "vp_database1_66_source"("vp_rowid", "c0");
+CREATE INDEX "vp_database1_66_idx_r_1824035433" ON "vp_database1_66_r"("vp_rowid", "c0");
+ALTER TABLE "vp_database1_66_r" ADD CONSTRAINT "vp_database1_66_fk_r_l" FOREIGN KEY ("vp_rowid") REFERENCES "vp_database1_66_l"("vp_rowid");
+DROP VIEW IF EXISTS "vp_database1_66_v";
+CREATE VIEW "vp_database1_66_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_66_l" l JOIN "vp_database1_66_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_66_v";
+CREATE VIEW "vp_database1_66_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_66_l" l JOIN "vp_database1_66_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_66_v";
+CREATE VIEW "vp_database1_66_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_66_l" l JOIN "vp_database1_66_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_66_v";
+CREATE VIEW "vp_database1_66_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_66_l" l JOIN "vp_database1_66_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_66_v";
+CREATE VIEW "vp_database1_66_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_66_l" l JOIN "vp_database1_66_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_66_joined";
+CREATE TEMP TABLE "vp_database1_66_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_66_l" l JOIN "vp_database1_66_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_66_joined";
+CREATE TEMP TABLE "vp_database1_66_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_66_l" l JOIN "vp_database1_66_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_66_joined";
+CREATE TEMP TABLE "vp_database1_66_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_66_l" l JOIN "vp_database1_66_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_66_joined";
+CREATE TEMP TABLE "vp_database1_66_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_66_l" l JOIN "vp_database1_66_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_66_joined";
+CREATE TEMP TABLE "vp_database1_66_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_66_l" l JOIN "vp_database1_66_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_66_v";
+DROP TABLE IF EXISTS "vp_database1_66_joined";
+DROP TABLE IF EXISTS "vp_database1_66_r";
+DROP TABLE IF EXISTS "vp_database1_66_l";
+DROP TABLE IF EXISTS "vp_database1_66_source";
+CREATE TABLE t1(c0 INTERVAL DEFAULT(TIMESTAMP '1969-12-13 12:09:23'));
+INSERT INTO t2(c0) VALUES (INTERVAL '0 days');
+UPDATE t1 SET c0=1927937229;
+INSERT INTO t0(c0) VALUES (INTERVAL '0 days');
+INSERT INTO t0(c0) VALUES (NULL), (DATE '1969-12-28');
+UPDATE t2 SET c0=false;
+CREATE INDEX i0 ON t2(c0 );
+CREATE INDEX i1 ON t1(rowid );
+INSERT INTO t0(c0) VALUES (CAST('0.125' AS DECIMAL(18,3)));
+CREATE UNIQUE INDEX i1 ON t0(c0 );
+CREATE INDEX i2 ON t2(c0 , rowid );
+INSERT INTO "t2"("c0") VALUES ('0');
+INSERT INTO "t1"("c0") VALUES (NULL);
+CREATE UNIQUE INDEX i2 ON t2(rowid );
+UPDATE t0 SET c0='';
+UPDATE t2 SET c0=(NOT PRINTF(NULL, t2.c0, t2.c0));
+INSERT INTO "t1"("c0") VALUES (NULL);
+INSERT INTO t2(c0) VALUES (BLOB '');
+ANALYZE;
+UPDATE t2 SET c0=CAST('0.125' AS DECIMAL(18,3));
+INSERT INTO t0(c0) VALUES (BLOB '');
+INSERT INTO "t1"("c0") VALUES (NULL);
+ANALYZE;
+ANALYZE;
+INSERT INTO "t0"("c0") VALUES ('NaN');
+INSERT INTO t0(c0) VALUES (UUID '00000000-0000-0000-0000-000000000000');
+INSERT INTO "t1"("c0") VALUES (NULL);
+UPDATE t0 SET c0=false;
+CREATE UNIQUE INDEX i49 ON t0(c0 );
+CREATE UNIQUE INDEX i2 ON t2(rowid , c0 );
+ANALYZE;
+INSERT INTO "t2"("c0") VALUES ('zz');
+UPDATE t2 SET c0=INTERVAL '0 days';
+INSERT INTO "t0"("c0") VALUES ('');
+ANALYZE;
+UPDATE t2 SET c0=DATE '1970-01-21';
+UPDATE t1 SET c0=NULL;
+INSERT INTO "t1"("c0") VALUES (NULL);
+DROP TABLE IF EXISTS "t2";
+PRAGMA checkpoint_threshold='1 byte';
+DROP VIEW IF EXISTS "vp_database1_78_v";
+DROP TABLE IF EXISTS "vp_database1_78_joined";
+DROP TABLE IF EXISTS "vp_database1_78_r";
+DROP TABLE IF EXISTS "vp_database1_78_l";
+DROP TABLE IF EXISTS "vp_database1_78_source";
+CREATE TABLE "vp_database1_78_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" INTERVAL NULL);
+INSERT INTO "vp_database1_78_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t1" LIMIT 256;
+CREATE TABLE "vp_database1_78_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY);
+CREATE TABLE "vp_database1_78_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" INTERVAL NULL);
+INSERT INTO "vp_database1_78_l" ("vp_rowid") SELECT "vp_rowid" FROM "vp_database1_78_source";
+INSERT INTO "vp_database1_78_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_78_source";
+ALTER TABLE "vp_database1_78_r" ADD CONSTRAINT "vp_database1_78_fk_r_l" FOREIGN KEY ("vp_rowid") REFERENCES "vp_database1_78_l"("vp_rowid");
+DROP VIEW IF EXISTS "vp_database1_78_v";
+CREATE VIEW "vp_database1_78_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_78_l" l JOIN "vp_database1_78_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_78_v";
+CREATE VIEW "vp_database1_78_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_78_l" l JOIN "vp_database1_78_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_78_v";
+CREATE VIEW "vp_database1_78_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_78_l" l JOIN "vp_database1_78_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_78_v";
+CREATE VIEW "vp_database1_78_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_78_l" l JOIN "vp_database1_78_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_78_v";
+CREATE VIEW "vp_database1_78_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_78_l" l JOIN "vp_database1_78_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_78_joined";
+CREATE TEMP TABLE "vp_database1_78_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_78_l" l JOIN "vp_database1_78_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_78_joined";
+CREATE TEMP TABLE "vp_database1_78_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_78_l" l JOIN "vp_database1_78_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_78_joined";
+CREATE TEMP TABLE "vp_database1_78_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_78_l" l JOIN "vp_database1_78_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_78_joined";
+CREATE TEMP TABLE "vp_database1_78_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_78_l" l JOIN "vp_database1_78_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_78_joined";
+CREATE TEMP TABLE "vp_database1_78_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_78_l" l JOIN "vp_database1_78_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_78_v";
+DROP TABLE IF EXISTS "vp_database1_78_joined";
+DROP TABLE IF EXISTS "vp_database1_78_r";
+DROP TABLE IF EXISTS "vp_database1_78_l";
+DROP TABLE IF EXISTS "vp_database1_78_source";
+DROP VIEW IF EXISTS "vp_database1_85_v";
+DROP TABLE IF EXISTS "vp_database1_85_joined";
+DROP TABLE IF EXISTS "vp_database1_85_r";
+DROP TABLE IF EXISTS "vp_database1_85_l";
+DROP TABLE IF EXISTS "vp_database1_85_source";
+CREATE TABLE "vp_database1_85_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" INTERVAL NULL);
+INSERT INTO "vp_database1_85_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t1" LIMIT 256;
+CREATE TABLE "vp_database1_85_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" INTERVAL NULL);
+CREATE TABLE "vp_database1_85_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" INTERVAL NULL);
+INSERT INTO "vp_database1_85_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_85_source";
+INSERT INTO "vp_database1_85_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_85_source";
+ALTER TABLE "vp_database1_85_r" ADD CONSTRAINT "vp_database1_85_fk_r_l" FOREIGN KEY ("vp_rowid") REFERENCES "vp_database1_85_l"("vp_rowid");
+DROP TABLE IF EXISTS "vp_database1_85_joined";
+CREATE TEMP TABLE "vp_database1_85_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_85_l" l JOIN "vp_database1_85_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_85_joined";
+CREATE TEMP TABLE "vp_database1_85_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_85_l" l JOIN "vp_database1_85_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_85_joined";
+CREATE TEMP TABLE "vp_database1_85_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_85_l" l JOIN "vp_database1_85_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_85_joined";
+CREATE TEMP TABLE "vp_database1_85_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_85_l" l JOIN "vp_database1_85_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_85_joined";
+CREATE TEMP TABLE "vp_database1_85_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_85_l" l JOIN "vp_database1_85_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_85_v";
+CREATE VIEW "vp_database1_85_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_85_l" l JOIN "vp_database1_85_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_85_v";
+CREATE VIEW "vp_database1_85_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_85_l" l JOIN "vp_database1_85_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_85_v";
+CREATE VIEW "vp_database1_85_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_85_l" l JOIN "vp_database1_85_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_85_v";
+CREATE VIEW "vp_database1_85_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_85_l" l JOIN "vp_database1_85_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_85_v";
+CREATE VIEW "vp_database1_85_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_85_l" l JOIN "vp_database1_85_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_85_v";
+DROP TABLE IF EXISTS "vp_database1_85_joined";
+DROP TABLE IF EXISTS "vp_database1_85_r";
+DROP TABLE IF EXISTS "vp_database1_85_l";
+DROP TABLE IF EXISTS "vp_database1_85_source";
+DROP VIEW IF EXISTS "vp_database1_91_v";
+DROP TABLE IF EXISTS "vp_database1_91_joined";
+DROP TABLE IF EXISTS "vp_database1_91_r";
+DROP TABLE IF EXISTS "vp_database1_91_l";
+DROP TABLE IF EXISTS "vp_database1_91_source";
+CREATE TABLE "vp_database1_91_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" INTERVAL NULL);
+INSERT INTO "vp_database1_91_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t1" LIMIT 256;
+CREATE TABLE "vp_database1_91_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" INTERVAL NULL);
+CREATE TABLE "vp_database1_91_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY);
+INSERT INTO "vp_database1_91_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_91_source";
+INSERT INTO "vp_database1_91_r" ("vp_rowid") SELECT "vp_rowid" FROM "vp_database1_91_source";
+DROP VIEW IF EXISTS "vp_database1_91_v";
+CREATE VIEW "vp_database1_91_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_91_l" l JOIN "vp_database1_91_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_91_v";
+CREATE VIEW "vp_database1_91_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_91_l" l JOIN "vp_database1_91_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_91_v";
+CREATE VIEW "vp_database1_91_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_91_l" l JOIN "vp_database1_91_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_91_v";
+CREATE VIEW "vp_database1_91_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_91_l" l JOIN "vp_database1_91_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_91_v";
+CREATE VIEW "vp_database1_91_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_91_l" l JOIN "vp_database1_91_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_91_joined";
+CREATE TEMP TABLE "vp_database1_91_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_91_l" l JOIN "vp_database1_91_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_91_joined";
+CREATE TEMP TABLE "vp_database1_91_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_91_l" l JOIN "vp_database1_91_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_91_joined";
+CREATE TEMP TABLE "vp_database1_91_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_91_l" l JOIN "vp_database1_91_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_91_joined";
+CREATE TEMP TABLE "vp_database1_91_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_91_l" l JOIN "vp_database1_91_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_91_joined";
+CREATE TEMP TABLE "vp_database1_91_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_91_l" l JOIN "vp_database1_91_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_91_v";
+DROP TABLE IF EXISTS "vp_database1_91_joined";
+DROP TABLE IF EXISTS "vp_database1_91_r";
+DROP TABLE IF EXISTS "vp_database1_91_l";
+DROP TABLE IF EXISTS "vp_database1_91_source";
+CREATE TABLE t2(c0 VARCHAR, PRIMARY KEY(c0));
+INSERT INTO "t2"("c0") VALUES ('zz');
+UPDATE t0 SET c0=NULL;
+ANALYZE;
+INSERT INTO t0(c0) VALUES (DEFAULT);
+CREATE UNIQUE INDEX i0 ON t2(c0 );
+INSERT INTO t0(c0) VALUES (DATE '1969-12-28'), (TIME '00:00:00');
+INSERT INTO "t1"("c0") VALUES (NULL);
+INSERT INTO "t0"("c0") VALUES ('A');
+INSERT INTO "t2"("c0") VALUES ('zz');
+CREATE INDEX i2 ON t1(rowid );
+CREATE INDEX i2 ON t1(rowid );
+ANALYZE;
+INSERT INTO t2(c0) VALUES (TIMESTAMP '1970-01-06 06:13:34'), (CAST('0.125' AS DECIMAL(18,3)));
+INSERT INTO t1(c0) VALUES (false);
+CREATE INDEX i2 ON t1(rowid );
+INSERT INTO "t0"("c0") VALUES ('');
+ANALYZE;
+CREATE UNIQUE INDEX i2 ON t2(c0 );
+INSERT INTO "t1"("c0") VALUES (NULL);
+CREATE UNIQUE INDEX i3 ON t1(rowid );
+INSERT INTO "t2"("c0") VALUES (' ');
+ANALYZE;
+UPDATE t2 SET c0='怶';
+ANALYZE;
+ANALYZE;
+INSERT INTO "t2"("c0") VALUES ('A');
+INSERT INTO "t2"("c0") VALUES ('0');
+UPDATE t2 SET c0=TIME '00:00:00';
+UPDATE t2 SET c0=false;
+CREATE UNIQUE INDEX i3 ON t0(c0 );
+INSERT INTO t1(c0) VALUES (DEFAULT), (DATE '1969-12-10');
+UPDATE t0 SET c0=INTERVAL '0 days';
+INSERT INTO t1(c0) VALUES (-1058428447), (TIMESTAMP '1970-01-17 11:01:17');
+DROP TABLE IF EXISTS "t1";
+PRAGMA checkpoint_threshold='1 byte';
+DROP VIEW IF EXISTS "vp_database1_102_v";
+DROP TABLE IF EXISTS "vp_database1_102_joined";
+DROP TABLE IF EXISTS "vp_database1_102_r";
+DROP TABLE IF EXISTS "vp_database1_102_l";
+DROP TABLE IF EXISTS "vp_database1_102_source";
+CREATE TABLE "vp_database1_102_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+INSERT INTO "vp_database1_102_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t0" ORDER BY "c0" LIMIT 256;
+CREATE UNIQUE INDEX "vp_database1_102_src_idx_copy_0" ON "vp_database1_102_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_102_src_idx_copy_1" ON "vp_database1_102_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_102_src_idx_copy_2" ON "vp_database1_102_source"(c0);
+CREATE TABLE "vp_database1_102_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+CREATE TABLE "vp_database1_102_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+INSERT INTO "vp_database1_102_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_102_source";
+INSERT INTO "vp_database1_102_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_102_source";
+CREATE INDEX "vp_database1_102_l_asym_745034877" ON "vp_database1_102_l"("vp_rowid", "c0");
+CREATE INDEX "vp_database1_102_idx_src_1175188099" ON "vp_database1_102_source"("vp_rowid", "c0");
+CREATE INDEX "vp_database1_102_idx_r_1595731573" ON "vp_database1_102_r"("vp_rowid", "c0");
+DROP VIEW IF EXISTS "vp_database1_102_v";
+CREATE VIEW "vp_database1_102_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_102_l" l JOIN "vp_database1_102_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_102_v";
+CREATE VIEW "vp_database1_102_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_102_l" l JOIN "vp_database1_102_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_102_v";
+CREATE VIEW "vp_database1_102_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_102_l" l JOIN "vp_database1_102_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_102_v";
+CREATE VIEW "vp_database1_102_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_102_l" l JOIN "vp_database1_102_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_102_v";
+CREATE VIEW "vp_database1_102_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_102_l" l JOIN "vp_database1_102_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_102_joined";
+CREATE TEMP TABLE "vp_database1_102_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_102_l" l JOIN "vp_database1_102_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_102_joined";
+CREATE TEMP TABLE "vp_database1_102_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_102_l" l JOIN "vp_database1_102_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_102_joined";
+CREATE TEMP TABLE "vp_database1_102_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_102_l" l JOIN "vp_database1_102_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_102_joined";
+CREATE TEMP TABLE "vp_database1_102_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_102_l" l JOIN "vp_database1_102_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_102_joined";
+CREATE TEMP TABLE "vp_database1_102_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_102_l" l JOIN "vp_database1_102_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_102_v";
+DROP TABLE IF EXISTS "vp_database1_102_joined";
+DROP TABLE IF EXISTS "vp_database1_102_r";
+DROP TABLE IF EXISTS "vp_database1_102_l";
+DROP TABLE IF EXISTS "vp_database1_102_source";
+DROP VIEW IF EXISTS "vp_database1_110_v";
+DROP TABLE IF EXISTS "vp_database1_110_joined";
+DROP TABLE IF EXISTS "vp_database1_110_r";
+DROP TABLE IF EXISTS "vp_database1_110_l";
+DROP TABLE IF EXISTS "vp_database1_110_source";
+CREATE TABLE "vp_database1_110_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+INSERT INTO "vp_database1_110_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t0" ORDER BY "c0" LIMIT 256;
+CREATE UNIQUE INDEX "vp_database1_110_src_idx_copy_0" ON "vp_database1_110_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_110_src_idx_copy_1" ON "vp_database1_110_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_110_src_idx_copy_2" ON "vp_database1_110_source"(c0);
+CREATE TABLE "vp_database1_110_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY);
+CREATE TABLE "vp_database1_110_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+INSERT INTO "vp_database1_110_l" ("vp_rowid") SELECT "vp_rowid" FROM "vp_database1_110_source";
+INSERT INTO "vp_database1_110_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_110_source";
+CREATE INDEX "vp_database1_110_r_asym_1553079205" ON "vp_database1_110_r"("c0", "vp_rowid");
+DROP VIEW IF EXISTS "vp_database1_110_v";
+CREATE VIEW "vp_database1_110_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_110_l" l JOIN "vp_database1_110_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_110_v";
+CREATE VIEW "vp_database1_110_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_110_l" l JOIN "vp_database1_110_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_110_v";
+CREATE VIEW "vp_database1_110_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_110_l" l JOIN "vp_database1_110_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_110_v";
+CREATE VIEW "vp_database1_110_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_110_l" l JOIN "vp_database1_110_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_110_v";
+CREATE VIEW "vp_database1_110_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_110_l" l JOIN "vp_database1_110_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_110_joined";
+CREATE TEMP TABLE "vp_database1_110_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_110_l" l JOIN "vp_database1_110_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_110_joined";
+CREATE TEMP TABLE "vp_database1_110_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_110_l" l JOIN "vp_database1_110_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_110_joined";
+CREATE TEMP TABLE "vp_database1_110_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_110_l" l JOIN "vp_database1_110_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_110_joined";
+CREATE TEMP TABLE "vp_database1_110_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_110_l" l JOIN "vp_database1_110_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_110_joined";
+CREATE TEMP TABLE "vp_database1_110_joined" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0" FROM "vp_database1_110_l" l JOIN "vp_database1_110_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_110_v";
+DROP TABLE IF EXISTS "vp_database1_110_joined";
+DROP TABLE IF EXISTS "vp_database1_110_r";
+DROP TABLE IF EXISTS "vp_database1_110_l";
+DROP TABLE IF EXISTS "vp_database1_110_source";
+DROP VIEW IF EXISTS "vp_database1_116_v";
+DROP TABLE IF EXISTS "vp_database1_116_joined";
+DROP TABLE IF EXISTS "vp_database1_116_r";
+DROP TABLE IF EXISTS "vp_database1_116_l";
+DROP TABLE IF EXISTS "vp_database1_116_source";
+CREATE TABLE "vp_database1_116_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+INSERT INTO "vp_database1_116_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t0" ORDER BY "c0" LIMIT 256;
+CREATE UNIQUE INDEX "vp_database1_116_src_idx_copy_0" ON "vp_database1_116_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_116_src_idx_copy_1" ON "vp_database1_116_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_116_src_idx_copy_2" ON "vp_database1_116_source"(c0);
+CREATE TABLE "vp_database1_116_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR NULL);
+CREATE TABLE "vp_database1_116_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY);
+INSERT INTO "vp_database1_116_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_116_source";
+INSERT INTO "vp_database1_116_r" ("vp_rowid") SELECT "vp_rowid" FROM "vp_database1_116_source";
+CREATE INDEX "vp_database1_116_src_asym_745034877" ON "vp_database1_116_source"("c0", "vp_rowid");
+CREATE INDEX "vp_database1_116_l_asym_698212464" ON "vp_database1_116_l"("vp_rowid", "c0");
+CREATE INDEX "vp_database1_116_idx_l_648329356" ON "vp_database1_116_l"("c0");
+DROP TABLE IF EXISTS "vp_database1_116_joined";
+CREATE TEMP TABLE "vp_database1_116_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_116_l" l JOIN "vp_database1_116_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_116_joined";
+CREATE TEMP TABLE "vp_database1_116_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_116_l" l JOIN "vp_database1_116_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_116_joined";
+CREATE TEMP TABLE "vp_database1_116_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_116_l" l JOIN "vp_database1_116_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_116_joined";
+CREATE TEMP TABLE "vp_database1_116_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_116_l" l JOIN "vp_database1_116_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database1_116_joined";
+CREATE TEMP TABLE "vp_database1_116_joined" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_116_l" l JOIN "vp_database1_116_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_116_v";
+CREATE VIEW "vp_database1_116_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_116_l" l JOIN "vp_database1_116_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_116_v";
+CREATE VIEW "vp_database1_116_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_116_l" l JOIN "vp_database1_116_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_116_v";
+CREATE VIEW "vp_database1_116_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_116_l" l JOIN "vp_database1_116_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_116_v";
+CREATE VIEW "vp_database1_116_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_116_l" l JOIN "vp_database1_116_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_116_v";
+CREATE VIEW "vp_database1_116_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0" FROM "vp_database1_116_l" l JOIN "vp_database1_116_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database1_116_v";
+DROP TABLE IF EXISTS "vp_database1_116_joined";
+DROP TABLE IF EXISTS "vp_database1_116_r";
+DROP TABLE IF EXISTS "vp_database1_116_l";
+DROP TABLE IF EXISTS "vp_database1_116_source";
+CREATE TABLE t1(c0 DOUBLE CHECK((c0 IN (c0))) DEFAULT(UUID '00000000-0000-0000-0000-000000000000'), PRIMARY KEY(c0));
+ANALYZE;
+ANALYZE;
+INSERT INTO "t2"("c0") VALUES ('0');
+INSERT INTO t2(c0) VALUES (NULL);
+INSERT INTO t0(c0) VALUES (true);
+ANALYZE;
+ANALYZE;
+INSERT INTO "t1"("c0") VALUES ('+Inf');
+ANALYZE;
+CREATE UNIQUE INDEX i4 ON t2(c0 );
+INSERT INTO "t0"("c0") VALUES ('');
+ANALYZE;
+CREATE UNIQUE INDEX i5 ON t0(c0 );
+INSERT INTO "t0"("c0") VALUES ('NaN');
+ANALYZE;
+INSERT INTO t0(c0) VALUES (CAST(0 AS HUGEINT));
+CREATE UNIQUE INDEX i6 ON t2(c0 );
+INSERT INTO t0(c0) VALUES (NULL);
+CREATE UNIQUE INDEX i7 ON t1(c0 );
+ANALYZE;
+INSERT INTO t2(c0) VALUES (INTERVAL '0 days');
+INSERT INTO "t2"("c0") VALUES ('a');
+INSERT INTO "t1"("c0") VALUES (1e308);
+ANALYZE;
+UPDATE t0 SET c0=TIME '00:00:00';
+CREATE INDEX i8 ON t1(c0 ASC);
+CREATE INDEX i9 ON t0(c0 );
+ANALYZE;
+INSERT INTO t1(c0) VALUES (INTERVAL '0 days');
+INSERT INTO t2(c0) VALUES ('a~eTqRb'), (TIME '00:00:00');
+ANALYZE;
+INSERT INTO "t2"("c0") VALUES ('aa');
+DROP TABLE IF EXISTS "t0";
+PRAGMA checkpoint_threshold='1 byte';
+DROP VIEW IF EXISTS "vp_database1_126_v";
+DROP TABLE IF EXISTS "vp_database1_126_joined";
+DROP TABLE IF EXISTS "vp_database1_126_r";
+DROP TABLE IF EXISTS "vp_database1_126_l";
+DROP TABLE IF EXISTS "vp_database1_126_source";
+CREATE TABLE "vp_database1_126_source" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE NOCASE NULL);
+INSERT INTO "vp_database1_126_source" ("vp_rowid", "c0") SELECT rowid, "c0" FROM "t2" ORDER BY "c0" LIMIT 256;
+CREATE UNIQUE INDEX "vp_database1_126_src_idx_copy_0" ON "vp_database1_126_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_126_src_idx_copy_1" ON "vp_database1_126_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_126_src_idx_copy_2" ON "vp_database1_126_source"(c0);
+CREATE UNIQUE INDEX "vp_database1_126_src_idx_copy_3" ON "vp_database1_126_source"(c0);
+CREATE TABLE "vp_database1_126_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE NOCASE NULL);
+CREATE TABLE "vp_database1_126_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" VARCHAR COLLATE NOCASE NULL);
+INSERT INTO "vp_database1_126_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_126_source";
+INSERT INTO "vp_database1_126_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database1_126_source";
+CREATE INDEX "vp_database1_126_src_asym_1824035433" ON "vp_database1_126_source"("c0", "vp_rowid");
+CREATE INDEX "vp_database1_126_idx_src_1422077676" ON "vp_database1_126_source"("c0", "vp_rowid");
+CREATE INDEX "vp_database1_126_idx_r_1276419277" ON "vp_database1_126_r"("c0", "vp_rowid");

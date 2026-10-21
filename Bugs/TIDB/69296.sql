@@ -1,0 +1,59 @@
+DROP DATABASE IF EXISTS repro_tidb615_db1_min;
+CREATE DATABASE repro_tidb615_db1_min;
+USE repro_tidb615_db1_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+
+CREATE TABLE src(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c2 TEXT NULL,
+  c4 BIGINT NULL
+);
+
+INSERT INTO src VALUES
+  (5, '', 0),
+  (6, '-541333355', 9223372036854775807);
+
+CREATE TABLE l(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c4 BIGINT NULL
+);
+
+CREATE TABLE r(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c2 TEXT NULL
+);
+
+INSERT INTO l SELECT id, c4 FROM src;
+INSERT INTO r SELECT id, c2 FROM src;
+
+-- 单表：返回 0000-00-00
+SELECT MAX(
+  CAST(
+    CASE c2
+      WHEN id THEN id | c4
+      ELSE CAST(c4 AS DATETIME)
+    END AS DATE
+  )
+) AS single_max
+FROM src
+ORDER BY id;
+
+-- split/scalar subquery：返回 NULL
+SELECT MAX(
+  CAST(
+    CASE v.c2
+      WHEN v.id THEN v.id | v.c4
+      ELSE CAST(v.c4 AS DATETIME)
+    END AS DATE
+  )
+) AS split_max
+FROM (
+  SELECT
+    l.id,
+    (SELECT r.c2 FROM r WHERE r.id = l.id) AS c2,
+    l.c4
+  FROM l
+) v
+ORDER BY v.id;

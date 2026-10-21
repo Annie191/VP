@@ -1,0 +1,167 @@
+https://github.com/oceanbase/oceanbase/issues/2421 has been reproduced.
+
+#### ROLLUP_EXPRESSION_EXPANSION_NULL_RECOMPUTE_DIFF
+
+DROP DATABASE IF EXISTS repro_ob_712_2_min;
+CREATE DATABASE repro_ob_712_2_min;
+USE repro_ob_712_2_min;
+
+SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER';
+SET SESSION time_zone = '+00:00';
+SET SESSION optimizer_switch = '';
+SET SESSION group_concat_max_len = 1048576;
+
+CREATE TABLE src (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c1 FLOAT NULL,
+  KEY i_c1(c1, id)
+);
+
+INSERT INTO src(c1) VALUES (0.0), (NULL);
+
+CREATE TABLE l (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c1 FLOAT NULL,
+  KEY i_l(id, c1)
+);
+
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY
+);
+
+INSERT INTO l SELECT id, c1 FROM src;
+INSERT INTO r SELECT id FROM src;
+
+CREATE VIEW v AS
+SELECT l.id, l.c1
+FROM l JOIN r ON l.id = r.id;
+
+-- Single table: 走 c1 索引顺序
+SELECT 'single' AS q,
+       (-1) <= CAST((concat(src.c1, '')) && NULL AS SIGNED) AS e
+FROM src FORCE INDEX(i_c1)
+GROUP BY (-1) <= CAST((concat(src.c1, '')) && NULL AS SIGNED)
+WITH ROLLUP
+ORDER BY (-1) <= CAST((concat(src.c1, '')) && NULL AS SIGNED)
+LIMIT 3;
+
+-- Split/reconstructed: 走 join/view
+SELECT 'split' AS q,
+       (-1) <= CAST((concat(v.c1, '')) && NULL AS SIGNED) AS e
+FROM v
+GROUP BY (-1) <= CAST((concat(v.c1, '')) && NULL AS SIGNED)
+WITH ROLLUP
+ORDER BY (-1) <= CAST((concat(v.c1, '')) && NULL AS SIGNED)
+LIMIT 3;
+
+single:
+q       e
+single  NULL
+single  NULL
+single  1
+
+split:
+q      e
+split  1
+split  NULL
+split  1
+
+single:
+0 TOP-N SORT
+1 └─HASH GROUP BY
+2   └─EXPANSION
+3     └─TABLE FULL SCAN src(i_c1)
+
+range_key([src.c1], [src.id])
+
+split:
+0 TOP-N SORT
+1 └─HASH GROUP BY
+2   └─EXPANSION
+3     └─SUBPLAN SCAN v
+4       └─MERGE JOIN
+5         ├─TABLE FULL SCAN r
+6         └─TABLE FULL SCAN l(i_l)
+
+range_key([r.id])
+range_key([l.id], [l.c1])
+
+
+关键表达式：
+
+sql
+(-1) <= CAST((concat(v.c1, '')) && NULL AS SIGNED) AS e
+concat(c1, '')
+
+c1 = 0.0 → 返回字符串 '0'
+
+c1 IS NULL → 返回 NULL （SQL 标准）
+
+X && NULL（逻辑 AND）
+
+若 X = 0 → 0 AND NULL = 0（MySQL 特殊规则）
+
+若 X IS NULL → NULL AND NULL = NULL
+
+CAST(... AS SIGNED)
+
+0 → 0； NULL → NULL
+
+-1 <= 0 → 1； -1 <= NULL → NULL
+
+因此，数据行（c1=0.0 和 c1 IS NULL）的 e 值应为：
+
+c1	e
+0.0	1
+NULL	NULL
+GROUP BY e WITH ROLLUP 预期产生三行：
+
+e = 1 （组内一行）
+
+e = NULL （组内一行，即 c1 IS NULL 的数据行）
+
+e = NULL （超聚合行，总计）
+
+ORDER BY e 默认升序，NULL 排在前，因此正确顺序为：NULL, NULL, 1 ✅
+这正是 Single 查询的输出。
+
+2. Split 查询为什么错？
+Split 查询的实际输出是 1, NULL, 1，说明：
+
+原始数据的 e 值变成了两行 1（没有 NULL 组）
+
+总计行照常产生 NULL
+
+这相当于对于 c1 IS NULL 的行，表达式 concat(c1, '') && NULL 求值得到了 0 而不是 NULL，进而 e 变成了 1。
+
+2.1 错误的等价转换
+concat(NULL, '') 被错误优化为返回空字符串 ''（而非 NULL），则：
+
+'' 在数值上下文中转为 0
+
+0 && NULL → 0
+
+-1 <= 0 → 1
+
+-- 第 1 条：单表扫描
+SELECT *
+FROM (
+  SELECT 'single' AS q,
+         (-1) <= CAST((CONCAT(src.c1, '')) && NULL AS SIGNED) AS e
+  FROM src FORCE INDEX(i_c1)
+  GROUP BY (-1) <= CAST((CONCAT(src.c1, '')) && NULL AS SIGNED)
+  WITH ROLLUP
+) AS t
+ORDER BY e
+LIMIT 3;
+-- 第 2 条：通过视图 JOIN 路径
+SELECT *
+FROM (
+  SELECT 'split' AS q,
+         (-1) <= CAST((CONCAT(v.c1, '')) && NULL AS SIGNED) AS e
+  FROM v
+  GROUP BY (-1) <= CAST((CONCAT(v.c1, '')) && NULL AS SIGNED)
+  WITH ROLLUP
+) AS t
+ORDER BY e
+LIMIT 3;

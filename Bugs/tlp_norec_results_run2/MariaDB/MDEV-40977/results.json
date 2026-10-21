@@ -1,0 +1,72 @@
+{
+  "database": "MariaDB",
+  "source": "/home/lwm/sqlancer/Bugs/MariaDB/MDEV-40977.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "-- 单表直接计算：实际返回 0\nSELECT ((1503381287 << v) AND -553173254) AS result\nFROM source_t",
+      "ok": true,
+      "rows": [
+        "0"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "/* 单表直接计算：实际返回 0 */ SELECT ((1503381287 << v) AND -553173254) AS result FROM source_t",
+      "ok": true,
+      "rows": [
+        "0"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "/* 单表直接计算：实际返回 0 */ SELECT ((1503381287 << v) AND -553173254) AS result FROM source_t WHERE TRUE UNION ALL /* 单表直接计算：实际返回 0 */ SELECT ((1503381287 << v) AND -553173254) AS result FROM source_t WHERE NOT TRUE UNION ALL /* 单表直接计算：实际返回 0 */ SELECT ((1503381287 << v) AND -553173254) AS result FROM source_t WHERE TRUE IS NULL",
+      "ok": true,
+      "rows": [
+        "0"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "/* 单表直接计算：实际返回 0 */ SELECT COUNT(*) FROM source_t",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "/* 单表直接计算：实际返回 0 */ SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM source_t",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "-- 单表直接计算：实际返回 0\nSELECT ((1503381287 << v) AND -553173254) AS result\nFROM source_t;",
+  "variants": {
+    "tlp_base": "/* 单表直接计算：实际返回 0 */ SELECT ((1503381287 << v) AND -553173254) AS result FROM source_t",
+    "tlp_part_true": "/* 单表直接计算：实际返回 0 */ SELECT ((1503381287 << v) AND -553173254) AS result FROM source_t WHERE TRUE",
+    "tlp_part_false": "/* 单表直接计算：实际返回 0 */ SELECT ((1503381287 << v) AND -553173254) AS result FROM source_t WHERE NOT TRUE",
+    "tlp_part_unknown": "/* 单表直接计算：实际返回 0 */ SELECT ((1503381287 << v) AND -553173254) AS result FROM source_t WHERE TRUE IS NULL",
+    "tlp_union": "/* 单表直接计算：实际返回 0 */ SELECT ((1503381287 << v) AND -553173254) AS result FROM source_t WHERE TRUE UNION ALL /* 单表直接计算：实际返回 0 */ SELECT ((1503381287 << v) AND -553173254) AS result FROM source_t WHERE NOT TRUE UNION ALL /* 单表直接计算：实际返回 0 */ SELECT ((1503381287 << v) AND -553173254) AS result FROM source_t WHERE TRUE IS NULL",
+    "norec_optimized": "/* 单表直接计算：实际返回 0 */ SELECT COUNT(*) FROM source_t",
+    "norec_unoptimized": "/* 单表直接计算：实际返回 0 */ SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM source_t",
+    "predicate": "TRUE"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": false,
+  "norec_checked": true,
+  "norec_inconsistent": false,
+  "notes": [
+    "NoREC comparison normalizes empty aggregate NULL to 0."
+  ]
+}

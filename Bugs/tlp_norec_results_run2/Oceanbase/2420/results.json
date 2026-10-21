@@ -1,0 +1,72 @@
+{
+  "database": "Oceanbase",
+  "source": "/home/lwm/sqlancer/Bugs/Oceanbase/2420.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "-- Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0）\nSELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) FROM vp_s WHERE 1",
+      "ok": true,
+      "rows": [
+        "4"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "/* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) FROM vp_s",
+      "ok": true,
+      "rows": [
+        "4"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "SELECT SUM(agg0) FROM (/* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) AS agg0 FROM vp_s WHERE 1 UNION ALL /* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) AS agg0 FROM vp_s WHERE NOT 1 UNION ALL /* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) AS agg0 FROM vp_s WHERE 1 IS NULL) AS tlp_parts",
+      "ok": true,
+      "rows": [
+        "4"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "/* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT(*) FROM vp_s WHERE 1",
+      "ok": true,
+      "rows": [
+        "4"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "/* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT SUM(CASE WHEN 1 THEN 1 ELSE NULL END) FROM vp_s",
+      "ok": true,
+      "rows": [
+        "4"
+      ],
+      "stderr": "",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 10,
+  "target_query": "-- Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0）\nSELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) FROM vp_s WHERE 1;",
+  "variants": {
+    "tlp_base": "/* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) FROM vp_s",
+    "tlp_part_true": "/* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) FROM vp_s WHERE 1",
+    "tlp_part_false": "/* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) FROM vp_s WHERE NOT 1",
+    "tlp_part_unknown": "/* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) FROM vp_s WHERE 1 IS NULL",
+    "tlp_union": "SELECT SUM(agg0) FROM (/* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) AS agg0 FROM vp_s WHERE 1 UNION ALL /* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) AS agg0 FROM vp_s WHERE NOT 1 UNION ALL /* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) AS agg0 FROM vp_s WHERE 1 IS NULL) AS tlp_parts",
+    "norec_optimized": "/* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT COUNT(*) FROM vp_s WHERE 1",
+    "norec_unoptimized": "/* Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0） */ SELECT SUM(CASE WHEN 1 THEN 1 ELSE NULL END) FROM vp_s",
+    "predicate": "1"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": false,
+  "norec_checked": true,
+  "norec_inconsistent": false,
+  "notes": [
+    "NoREC comparison normalizes empty aggregate NULL to 0."
+  ]
+}

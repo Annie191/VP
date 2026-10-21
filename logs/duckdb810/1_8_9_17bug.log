@@ -1,0 +1,109 @@
+https://github.com/duckdb/duckdb/issues/24810 ok
+
+DROP TABLE IF EXISTS repro_duckdb_db1_interval_r;
+DROP TABLE IF EXISTS repro_duckdb_db1_interval_l;
+DROP TABLE IF EXISTS repro_duckdb_db1_interval_source;
+
+CREATE TABLE repro_duckdb_db1_interval_source (
+    vp_rowid BIGINT,
+    c0 INTERVAL
+);
+
+INSERT INTO repro_duckdb_db1_interval_source VALUES
+    (0, INTERVAL '580063 hours 44 minutes 54 seconds');
+
+CREATE TABLE repro_duckdb_db1_interval_l (
+    vp_rowid BIGINT
+);
+
+INSERT INTO repro_duckdb_db1_interval_l
+SELECT vp_rowid
+FROM repro_duckdb_db1_interval_source;
+
+CREATE TABLE repro_duckdb_db1_interval_r (
+    vp_rowid BIGINT,
+    c0 INTERVAL
+);
+
+INSERT INTO repro_duckdb_db1_interval_r
+SELECT vp_rowid, c0
+FROM repro_duckdb_db1_interval_source;
+
+COPY repro_duckdb_db1_interval_r
+TO 'repro_duckdb_db1_interval_r.parquet'
+(FORMAT PARQUET, COMPRESSION ZSTD);
+
+SELECT vp_rowid, c0
+FROM repro_duckdb_db1_interval_source
+ORDER BY vp_rowid;
+
+SELECT l.vp_rowid, p.c0
+FROM repro_duckdb_db1_interval_l l
+JOIN read_parquet('repro_duckdb_db1_interval_r.parquet') p
+  USING (vp_rowid)
+ORDER BY l.vp_rowid;
+
+Source:  0 | 580063:44:54
+VP:      0 | 243:09:48.144
+
+Parquet 的 INTERVAL 逻辑类型物理存储为 fixed_len_byte_array(12)，内部包含三个独立的 uint32 字段：
+
+text
+months       uint32
+days         uint32
+milliseconds uint32
+其中 milliseconds 字段是 uint32，最大值为：
+
+text
+2^32 - 1 = 4,294,967,295
+DuckDB 写 Parquet 时，显然没有把超出一日的毫秒部分正确拆分到 days 字段，而是将整个 INTERVAL 的总毫秒数直接放进了 milliseconds 字段，导致 uint32 溢出。
+
+对本案例：
+
+text
+580063:44:54
+= 580063 × 3600 + 44 × 60 + 54
+= 2,088,229,494 秒
+= 2,088,229,494,000 毫秒
+该值远超 uint32 上限，写入 milliseconds 字段时发生取模：
+
+text
+2,088,229,494,000 mod 4,294,967,296
+= 875,388,144 毫秒
+而：
+
+text
+875,388,144 ms
+= 875,388.144 s
+= 243:09:48.144
+这与实际 Parquet 重构结果完全一致：
+
+text
+243:09:48.144
+因此可以确认：
+DuckDB 在写 Parquet INTERVAL 时，未正确将 INTERVAL 拆分为 days + milliseconds，而是把总毫秒数强制塞入 uint32 的 milliseconds 字段，导致溢出和数据损坏。
+
+4. 正确表示示例
+Parquet 的 days 字段是 uint32，上限约为：
+
+text
+2^32 - 1 天 ≈ 11,758,846 年
+因此本案例的 580063:44:54 完全可以用 Parquet 表示。
+
+正确拆分方式应为：
+
+text
+580063:44:54
+= 24169 天 + 07:44:54
+即：
+
+text
+days         = 24169
+milliseconds = 07:44:54 对应的毫秒数 = 27,894,000
+该 milliseconds 值：
+
+text
+27,894,000 < 4,294,967,295
+不会溢出。
+
+所以问题不是 Parquet 格式限制，而是 DuckDB 的 Parquet 写入实现错误。

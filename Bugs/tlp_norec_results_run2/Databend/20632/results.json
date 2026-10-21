@@ -1,0 +1,72 @@
+{
+  "database": "Databend",
+  "source": "/home/lwm/sqlancer/Bugs/Databend/20632.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "SELECT a, s, a\nFROM src\nWHERE ((s IS NULL) <> (a IS NULL))\n  AND ('' LIKE s)\n  AND ('' LIKE s)",
+      "ok": true,
+      "rows": [],
+      "stderr": "",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "SELECT a, s, a FROM src",
+      "ok": true,
+      "rows": [
+        "[1,2]\tNULL\t[1,2]",
+        "NULL\tabc\tNULL",
+        "[]\t\t[]"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) UNION ALL SELECT a, s, a FROM src WHERE NOT ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) UNION ALL SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) IS NULL",
+      "ok": true,
+      "rows": [
+        "[]\t\t[]"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "SELECT COUNT(*) FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s)",
+      "ok": true,
+      "rows": [
+        "0"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "SELECT SUM(CASE WHEN ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) THEN 1 ELSE NULL END) FROM src",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "SELECT a, s, a\nFROM src\nWHERE ((s IS NULL) <> (a IS NULL))\n  AND ('' LIKE s)\n  AND ('' LIKE s);",
+  "variants": {
+    "tlp_base": "SELECT a, s, a FROM src",
+    "tlp_part_true": "SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s)",
+    "tlp_part_false": "SELECT a, s, a FROM src WHERE NOT ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s)",
+    "tlp_part_unknown": "SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) IS NULL",
+    "tlp_union": "SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) UNION ALL SELECT a, s, a FROM src WHERE NOT ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) UNION ALL SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) IS NULL",
+    "norec_optimized": "SELECT COUNT(*) FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s)",
+    "norec_unoptimized": "SELECT SUM(CASE WHEN ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) THEN 1 ELSE NULL END) FROM src",
+    "predicate": "((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s)"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": true,
+  "norec_checked": true,
+  "norec_inconsistent": false,
+  "notes": [
+    "NoREC comparison normalizes empty aggregate NULL to 0."
+  ]
+}

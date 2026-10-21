@@ -1,0 +1,174 @@
+https://bugs.mysql.com/bug.php?id=120735&thanks=4    not a bug
+
+核心不是投影表达式本身，投影恒为 NULL；真正差异在 WHERE c0 IN (EXISTS(SELECT 1), -(CAST(NULL AS SIGNED))) 的过滤行数。
+最小复现案例
+
+DROP DATABASE IF EXISTS repro_mysql620_17;
+CREATE DATABASE repro_mysql620_17;
+USE repro_mysql620_17;
+
+SET SESSION sql_mode =
+  'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+
+SET SESSION time_zone = '+00:00';
+
+CREATE TABLE s (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL,
+  KEY idx_c0(c0 DESC)
+) ENGINE=InnoDB;
+
+INSERT INTO s(c0) VALUES
+  (0), (0),
+  (1), (1), (1), (1),
+  (2), (NULL), (3);
+
+CREATE TABLE l (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+
+INSERT INTO l SELECT vp_rowid, c0 FROM s;
+INSERT INTO r SELECT vp_rowid, c0 FROM s;
+
+ALTER TABLE r
+  ADD CONSTRAINT fk_r_l
+  FOREIGN KEY (vp_rowid) REFERENCES l(vp_rowid);
+
+SELECT
+  GREATEST(
+    EXISTS (SELECT 1 WHERE FALSE),
+    CASE 'T\t'
+      WHEN 0.48091024131969884 THEN s.vp_rowid
+      ELSE NULL
+    END
+  ) AS ref0
+FROM s
+WHERE c0 IN (EXISTS (SELECT 1), -(CAST(NULL AS SIGNED)))
+ORDER BY vp_rowid
+LIMIT 6;
+
+SELECT
+  GREATEST(
+    EXISTS (SELECT 1 WHERE FALSE),
+    CASE 'T\t'
+      WHEN 0.48091024131969884 THEN d.vp_rowid
+      ELSE NULL
+    END
+  ) AS ref0
+FROM (
+  WITH
+  lcte AS (
+    SELECT
+      ROW_NUMBER() OVER (ORDER BY vp_rowid) AS rn,
+      vp_rowid,
+      c0
+    FROM l
+  ),
+  rcte AS (
+    SELECT
+      ROW_NUMBER() OVER (ORDER BY vp_rowid) AS rn,
+      vp_rowid,
+      c0
+    FROM r
+  )
+  SELECT
+    lcte.vp_rowid,
+    lcte.c0
+  FROM lcte
+  JOIN rcte ON lcte.rn = rcte.rn
+) AS d
+WHERE c0 IN (EXISTS (SELECT 1), -(CAST(NULL AS SIGNED)))
+ORDER BY vp_rowid
+LIMIT 6;
+
+
+Single query：返回 4 行
+实测结果：
++------+
+| ref0 |
++------+
+| NULL |
+| NULL |
+| NULL |
+| NULL |
++------+
+Split query：保留 SQLancer ROW_NUMBER_ALIGNMENT，返回 6 行
+实测结果：
++------+
+| ref0 |
++------+
+| NULL |
+| NULL |
+| NULL |
+| NULL |
+| NULL |
+| NULL |
++------+
+
+single_count = 4
+split_count  = 6
+执行计划：Single
+
+关键计划：
+-> Limit: 6 row(s)
+    -> Sort: s.vp_rowid
+        -> Filter: (s.c0 in (exists(select #3), <cache>(-(cast(NULL as signed)))))
+            -> Covering index range scan on s using idx_c0 over
+               (c0 = 1.000000000000000000000000000000)
+重点是这里：
+Covering index range scan on s using idx_c0 over (c0 = 1...)
+Single 查询只走了 c0 = 1 的索引范围，所以只返回 4 行。
+执行计划：Split
+
+关键计划：
+-> Limit: 6 row(s)
+    -> Nested loop inner join
+        -> Sort: vp_rowid
+            -> Filter: (lcte.c0 in (exists(select #6), <cache>(-(cast(NULL as signed)))))
+                -> Table scan on lcte
+                    -> Materialize CTE lcte
+                        -> Window aggregate: row_number() OVER (ORDER BY l.vp_rowid)
+                            -> Sort: l.vp_rowid
+                                -> Table scan on l
+        -> Index lookup on rcte using <auto_key0> (rn = lcte.rn)
+            -> Materialize CTE rcte
+                -> Window aggregate: row_number() OVER (ORDER BY r.vp_rowid)
+                    -> Sort: r.vp_rowid
+                        -> Table scan on r
+Split 查询物化 lcte/rcte 后，对 lcte 做表扫过滤，没有走 c0 = 1 的范围扫描，所以把 c0 = 0 的两行也返回了。
+我还检查了逐行谓词结果：
+SELECT
+  vp_rowid,
+  c0,
+  c0 IN (EXISTS (SELECT 1), -(CAST(NULL AS SIGNED))) AS pred
+FROM s
+ORDER BY vp_rowid;
+实测：
+vp_rowid  c0    pred
+1         0     1
+2         0     1
+3         1     1
+4         1     1
+5         1     1
+6         1     1
+7         2     0
+8         NULL  NULL
+9         3     0
+所以按逐行求值，c0=0 和 c0=1 都满足谓词，总共应该是 6 行。Split 的表扫结果是 6 行；Single 的索引范围扫描只取 c0=1，漏掉了两个 c0=0。
+结论
+
+DECIMAL 列上的 IN 谓词
+c0 IN (EXISTS(SELECT 1), -(CAST(NULL AS SIGNED)))
+
+在直接基表查询中触发 idx_c0 范围扫描时，
+优化器把范围错误收缩成 c0 = 1，
+漏掉了逐行求值为 TRUE 的 c0 = 0。
+
+VP 的 ROW_NUMBER_ALIGNMENT 重构物化 CTE 后改走表扫，
+因此返回了 c0 = 0 和 c0 = 1 共 6 行。

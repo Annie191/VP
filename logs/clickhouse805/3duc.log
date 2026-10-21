@@ -1,0 +1,79 @@
+https://github.com/clickhouse/clickhouse/issues/115289 duc
+
+DROP DATABASE IF EXISTS ch_vp_not_found_repro2;
+CREATE DATABASE ch_vp_not_found_repro2;
+USE ch_vp_not_found_repro2;
+
+-- VP source/base table
+CREATE TABLE vp_base (
+    vp_rowid UInt64,
+    a Int32,
+    b UInt8,
+    c String
+) ENGINE = MergeTree
+ORDER BY vp_rowid;
+
+-- VP left vertical partition
+CREATE TABLE vp_left (
+    vp_rowid UInt64,
+    a Int32,
+    b UInt8
+) ENGINE = MergeTree
+ORDER BY vp_rowid;
+
+-- VP right vertical partition
+CREATE TABLE vp_right (
+    vp_rowid UInt64,
+    c String
+) ENGINE = MergeTree
+ORDER BY vp_rowid;
+
+INSERT INTO vp_base VALUES (1, 10, 1, 'x');
+
+INSERT INTO vp_left
+SELECT vp_rowid, a, b FROM vp_base;
+
+INSERT INTO vp_right
+SELECT vp_rowid, c FROM vp_base;
+
+SELECT a
+FROM vp_base AS s
+WHERE s.b != 255
+ORDER BY s.vp_rowid
+LIMIT 1
+SETTINGS optimize_move_to_prewhere = 0;
+
+SELECT s.a
+FROM (
+    SELECT
+        l.vp_rowid AS vp_rowid,
+        l.a AS a,
+        l.b AS b,
+        r.c AS c
+    FROM vp_left AS l
+    LEFT JOIN vp_right AS r
+        ON l.vp_rowid = r.vp_rowid
+) AS s
+WHERE s.b != 255
+ORDER BY s.vp_rowid
+LIMIT 1
+SETTINGS optimize_move_to_prewhere = 0;
+
+单表 original 查询，正常返回 10
+
+VP reconstructed 多表查询，稳定触发错误：
+Code: 10. DB::Exception: Not found column notEquals(__table2.b, 255_UInt8):
+in block __table2.vp_rowid UInt64 UInt64(size = 0), a Int32 Int32(size = 0).
+(NOT_FOUND_COLUMN_IN_BLOCK)
+
+验证过触发条件：
+默认 setting：正常返回 10
+SETTINGS optimize_move_to_prewhere = 1：正常返回 10
+SETTINGS optimize_move_to_prewhere = 0：稳定触发 NOT_FOUND_COLUMN_IN_BLOCK
+去掉 LEFT JOIN：不触发
+去掉 ORDER BY 或 LIMIT：不触发
+
+这是一个典型的 ClickHouse 优化器缺陷：在禁用 optimize_move_to_prewhere 后，谓词没有被移动到 PREWHERE，但列裁剪逻辑仍按“谓词已下推到表扫描层”处理，导致 JOIN 后过滤列未被包含在输入 block 中。
+
+
+ClickHouse 服务器版本：26.7.1.1315

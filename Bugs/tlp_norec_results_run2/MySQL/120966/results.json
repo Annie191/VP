@@ -1,0 +1,19 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120966.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 单表查询（covering index → IN 转 = 走索引 → 错误命中 c0=1）\nSELECT DISTINCT NULL AS ref0 FROM vp_s\nWHERE (LEAST(0.8543270419078102, '2F')) IN (vp_s.c0)\nGROUP BY NULL",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 14,
+  "target_query": "-- 单表查询（covering index → IN 转 = 走索引 → 错误命中 c0=1）\nSELECT DISTINCT NULL AS ref0 FROM vp_s\nWHERE (LEAST(0.8543270419078102, '2F')) IN (vp_s.c0)\nGROUP BY NULL;",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

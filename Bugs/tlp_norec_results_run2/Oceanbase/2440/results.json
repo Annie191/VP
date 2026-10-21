@@ -1,0 +1,8 @@
+{
+  "database": "Oceanbase",
+  "source": "/home/lwm/sqlancer/Bugs/Oceanbase/2440.sql",
+  "status": "no_single_table_query",
+  "queries": {},
+  "errors": [],
+  "target_statement_index": null
+}

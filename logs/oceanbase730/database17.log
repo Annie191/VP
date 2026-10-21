@@ -1,0 +1,612 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: OCEANBASE_MYSQL_RANDOM_TABLE_REWRITE
+--Strategy summary: split=OVERLAPPED_SPLIT, reconstruction=TEMP_TABLE, shape=MULTI_COLUMN, prefix=vp_database17_439_
+--Strategy counts: split={EMPTY_SPLIT=0, SINGLE_REPLICATED=84, SINGLE_RIGHT_ROW_ID_ONLY=84, SINGLE_LEFT_ROW_ID_ONLY=87, EVEN_SPLIT=44, OVERLAPPED_SPLIT=46, SKEWED_SPLIT=44, TYPE_DIRECTED_SPLIT=44}, reconstruction={JOIN=2775, LEFT_RIGHT_JOIN=2795, FULL_OUTER_SIMULATION=2783, SCALAR_SUBQUERY=2793, EXISTS_FILTER=2785, IN_FILTER=2796, NOT_EXISTS_ANTI=2805, DERIVED_TABLE=2774, CTE=2777, VIEW=2816, TEMP_TABLE=2747, AGGREGATE_THEN_MERGE=2755, ROW_NUMBER_ALIGNMENT=2800, JSON_PACK=2804, STRING_PACK=2770, NATURAL_OR_USING=2773, STRAIGHT_JOIN=2819, LATERAL_DERIVED=2739}
+--Database: database17
+--OceanBase version: 5.7.25-OceanBase_CE-v4.4.2.1
+--OceanBase VP capabilities: engineClause=true, createIndex=true, temporaryTable=true, foreignKey=true, checkConstraint=true, rollup=true, windowFunction=true, jsonObject=true, groupConcat=true, lateralDerived=true, hashPartition=true, columnGroup=true, columnGroupAll=true, columnGroupEach=true, columnGroupAllEach=true, columnStoreReadHint=true, columnStoreReadHintAll=false, columnStoreReadHintEach=true, columnStoreReadHintAllEach=true, collations=[utf8mb4_bin, utf8mb4_general_ci, utf8mb4_0900_ai_ci], sessionVariables={sql_mode=true, time_zone=true, sql_auto_is_null=true, character_set_connection=true, collation_connection=true, group_concat_max_len=true, tmp_table_size=true, max_heap_table_size=true, join_buffer_size=true, sort_buffer_size=true, read_buffer_size=true, read_rnd_buffer_size=true, optimizer_switch=true, ob_enable_aggregation_pushdown=true, unique_checks=true, foreign_key_checks=true}
+--VP pushdown mode: neutralize
+--OB storage profile: default
+--OB storage phase: DEFAULT
+--OB partition profile: hash
+--OB partition count: 8
+--OB parallel degree: 4
+--OB column store profile: none
+--OB column store source hint: 
+--OB column store split inner hint: 
+--OB SQL semantics profile: fuzz
+--OB SQL semantics selected: name=collation-utf8mb4_general_ci, sqlMode=DEFAULT, characterSetConnection=utf8mb4, collationConnection=utf8mb4_general_ci
+--Base table: t1
+--Base table DDL: CREATE TABLE `t1` (
+--  `c0` varchar(500) DEFAULT NULL,
+--  `c1` varchar(500) DEFAULT NULL COMMENT 'asdf'
+--) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+-- partition by key(`c0`, `c1`)
+--(partition `p0`)
+--Base table engine: InnoDB
+--VP source engine: InnoDB
+--VP left engine: InnoDB
+--VP right engine: InnoDB
+--Base row count: 17
+--Base shape: MULTI_COLUMN
+--Stable row order: `c0`, `c1`
+--Prefix: vp_database17_439_
+--Split strategy: OVERLAPPED_SPLIT
+--Left columns: c1, c0
+--Right columns: c0
+--Overlap columns: c0
+--Physical foreign key: false
+--Reconstruction strategy: TEMP_TABLE
+--Description: shape=MULTI_COLUMN, split=OVERLAPPED_SPLIT, reconstruction=TEMP_TABLE
+--Session vars: sql_mode=STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER, time_zone=+00:00, optimizer_switch=, ob_enable_aggregation_pushdown=0, character_set_connection=utf8mb4, collation_connection=utf8mb4_general_ci, group_concat_max_len=1048576
+--Session SET statements:
+--SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER';
+--SET SESSION time_zone = '+00:00';
+--SET NAMES utf8mb4 COLLATE utf8mb4_general_ci;
+--SET SESSION optimizer_switch = '';
+--SET SESSION ob_enable_aggregation_pushdown = 0;
+--SET SESSION group_concat_max_len = 1048576;
+--Setup statements:
+--CREATE TABLE `vp_database17_439_source` (`vp_rowid` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, `c0` VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL, `c1` VARCHAR(500) NULL) ENGINE=InnoDB PARTITION BY HASH(`vp_rowid`) PARTITIONS 8;
+--INSERT INTO `vp_database17_439_source` (`c0`, `c1`) SELECT `c0`, `c1` FROM `t1` ORDER BY `c0`, `c1` LIMIT 256;
+--CREATE TABLE `vp_database17_439_l` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c1` VARCHAR(500) NULL, `c0` VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL) ENGINE=InnoDB PARTITION BY HASH(`vp_rowid`) PARTITIONS 8;
+--CREATE TABLE `vp_database17_439_r` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL) ENGINE=InnoDB PARTITION BY HASH(`vp_rowid`) PARTITIONS 8;
+--INSERT INTO `vp_database17_439_l` (`vp_rowid`, `c1`, `c0`) SELECT `vp_rowid`, `c1`, `c0` FROM `vp_database17_439_source`;
+--INSERT INTO `vp_database17_439_r` (`vp_rowid`, `c0`) SELECT `vp_rowid`, `c0` FROM `vp_database17_439_source`;
+--DROP TEMPORARY TABLE IF EXISTS `vp_database17_439_joined`;
+--CREATE TEMPORARY TABLE `vp_database17_439_joined` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL, `c1` VARCHAR(500) NULL);
+--INSERT INTO `vp_database17_439_joined` (`vp_rowid`, `c0`, `c1`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, l.`c1` AS `c1` FROM `vp_database17_439_l` l JOIN `vp_database17_439_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP TEMPORARY TABLE IF EXISTS `vp_database17_439_joined`;
+--CREATE TEMPORARY TABLE `vp_database17_439_joined` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` VARCHAR(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NULL, `c1` VARCHAR(500) NULL);
+--INSERT INTO `vp_database17_439_joined` (`vp_rowid`, `c0`, `c1`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, l.`c1` AS `c1` FROM `vp_database17_439_l` l JOIN `vp_database17_439_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--VP source snapshot:
+--SELECT `vp_rowid`, `c0`, `c1` FROM `vp_database17_439_source` ORDER BY `vp_rowid`;
+--[vp_rowid=1, c0=2024-02-29, c1=null]
+--[vp_rowid=2, c0=2024-02-29, c1=0000-00-00]
+--[vp_rowid=3, c0=2024-02-29, c1=0000-00-00]
+--[vp_rowid=4, c0=2024-02-29, c1=0000-00-00]
+--[vp_rowid=5, c0=2024-02-29, c1=0000-00-00]
+--[vp_rowid=6, c0=2024-02-29, c1=0000-00-00]
+--[vp_rowid=7, c0=2024-02-29, c1=0000-00-00]
+--[vp_rowid=8, c0=2024-02-29, c1=0000-00-00]
+--[vp_rowid=9, c0=2024-02-29, c1=0000-00-00]
+--[vp_rowid=10, c0=2024-02-29, c1=0000-00-00]
+--[vp_rowid=11, c0=2024-02-29, c1=0000-00-00]
+--[vp_rowid=12, c0=2024-02-29, c1=0000-00-00]
+--VP left snapshot:
+--SELECT `vp_rowid`, `c1`, `c0` FROM `vp_database17_439_l` ORDER BY `vp_rowid`;
+--[vp_rowid=1, c1=null, c0=2024-02-29]
+--[vp_rowid=2, c1=0000-00-00, c0=2024-02-29]
+--[vp_rowid=3, c1=0000-00-00, c0=2024-02-29]
+--[vp_rowid=4, c1=0000-00-00, c0=2024-02-29]
+--[vp_rowid=5, c1=0000-00-00, c0=2024-02-29]
+--[vp_rowid=6, c1=0000-00-00, c0=2024-02-29]
+--[vp_rowid=7, c1=0000-00-00, c0=2024-02-29]
+--[vp_rowid=8, c1=0000-00-00, c0=2024-02-29]
+--[vp_rowid=9, c1=0000-00-00, c0=2024-02-29]
+--[vp_rowid=10, c1=0000-00-00, c0=2024-02-29]
+--[vp_rowid=11, c1=0000-00-00, c0=2024-02-29]
+--[vp_rowid=12, c1=0000-00-00, c0=2024-02-29]
+--VP right snapshot:
+--SELECT `vp_rowid`, `c0` FROM `vp_database17_439_r` ORDER BY `vp_rowid`;
+--[vp_rowid=1, c0=2024-02-29]
+--[vp_rowid=2, c0=2024-02-29]
+--[vp_rowid=3, c0=2024-02-29]
+--[vp_rowid=4, c0=2024-02-29]
+--[vp_rowid=5, c0=2024-02-29]
+--[vp_rowid=6, c0=2024-02-29]
+--[vp_rowid=7, c0=2024-02-29]
+--[vp_rowid=8, c0=2024-02-29]
+--[vp_rowid=9, c0=2024-02-29]
+--[vp_rowid=10, c0=2024-02-29]
+--[vp_rowid=11, c0=2024-02-29]
+--[vp_rowid=12, c0=2024-02-29]
+--Single query: SELECT /*+ PARALLEL(4) */ DISTINCT BIT_OR(CAST(`vp_rowid` AS SIGNED)), (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED)) FROM `vp_database17_439_source` GROUP BY (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED)) WITH ROLLUP ORDER BY (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED))
+--Split query: SELECT /*+ PARALLEL(4) */ DISTINCT BIT_OR(CAST(`vp_rowid` AS SIGNED)), (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED)) FROM `vp_database17_439_joined` `vp_database17_439_source` GROUP BY (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED)) WITH ROLLUP ORDER BY (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED))
+--Pushdown aggregation labels: single=absent, split=absent
+--Single query plan:
+--EXPLAIN SELECT /*+ PARALLEL(4) */ DISTINCT BIT_OR(CAST(`vp_rowid` AS SIGNED)), (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED)) FROM `vp_database17_439_source` GROUP BY (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED)) WITH ROLLUP ORDER BY (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED));
+--[Query Plan==============================================================================================]
+--[Query Plan=|ID|OPERATOR                                 |NAME                    |EST.ROWS|EST.TIME(us)|]
+--[Query Plan=---------------------------------------------------------------------------------------------]
+--[Query Plan=|0 |PX COORDINATOR MERGE SORT                |                        |17      |149         |]
+--[Query Plan=|1 |└─EXCHANGE OUT DISTR                     |:EX10002                |17      |119         |]
+--[Query Plan=|2 |  └─SORT                                 |                        |17      |103         |]
+--[Query Plan=|3 |    └─HASH DISTINCT                      |                        |17      |101         |]
+--[Query Plan=|4 |      └─EXCHANGE IN DISTR                |                        |17      |99          |]
+--[Query Plan=|5 |        └─EXCHANGE OUT DISTR (HASH)      |:EX10001                |17      |91          |]
+--[Query Plan=|6 |          └─HASH GROUP BY                |                        |17      |74          |]
+--[Query Plan=|7 |            └─EXCHANGE IN DISTR          |                        |51      |71          |]
+--[Query Plan=|8 |              └─EXCHANGE OUT DISTR (HASH)|:EX10000                |51      |51          |]
+--[Query Plan=|9 |                └─EXPANSION              |                        |51      |5           |]
+--[Query Plan=|10|                  └─PX BLOCK ITERATOR    |                        |17      |5           |]
+--[Query Plan=|11|                    └─TABLE FULL SCAN    |vp_database17_439_source|17      |5           |]
+--[Query Plan==============================================================================================]
+--[Query Plan=Outputs & filters:]
+--[Query Plan=-------------------------------------]
+--[Query Plan=  0 - output([INTERNAL_FUNCTION(T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0))), -1318652726 = -699639156 < 0.6713568672708383 OR ]
+--[Query Plan=      cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid, cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1,]
+--[Query Plan=       DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0)))]), filter(nil), rowset=256]
+--[Query Plan=      sort_keys([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid,]
+--[Query Plan=       ASC], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0)), ASC])]
+--[Query Plan=  1 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [INTERNAL_FUNCTION(T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0))), -1318652726 = -699639156 ]
+--[Query Plan=      < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid, cast(vp_database17_439_source.vp_rowid, ]
+--[Query Plan=      DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0,]
+--[Query Plan=       0)))]), filter(nil), rowset=256]
+--[Query Plan=      dop=4]
+--[Query Plan=  2 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 ]
+--[Query Plan=      OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != ]
+--[Query Plan=      cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))]), filter(nil), rowset=256]
+--[Query Plan=      sort_keys([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid,]
+--[Query Plan=       ASC], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0)), ASC])]
+--[Query Plan=  3 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 ]
+--[Query Plan=      OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != ]
+--[Query Plan=      cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))]), filter(nil), rowset=256]
+--[Query Plan=      distinct([T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0,]
+--[Query Plan=       DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1,]
+--[Query Plan=       -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))])]
+--[Query Plan=  4 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 ]
+--[Query Plan=      OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != ]
+--[Query Plan=      cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))]), filter(nil), rowset=256]
+--[Query Plan=  5 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 ]
+--[Query Plan=      OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != ]
+--[Query Plan=      cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))]), filter(nil), rowset=256]
+--[Query Plan=      (#keys=3, [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0,]
+--[Query Plan=       DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1,]
+--[Query Plan=       -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))]), dop=4]
+--[Query Plan=  6 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 ]
+--[Query Plan=      >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [cast(vp_database17_439_source.c0, DOUBLE(-1, -1))], [cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1))], [cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp]
+--[Query Plan=      _rowid, BIGINT(0, 0)))]), filter(nil), rowset=256]
+--[Query Plan=      group([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0,]
+--[Query Plan=       0))], [GROUPING_ID]), agg_func([T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))])]
+--[Query Plan=  7 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 ]
+--[Query Plan=      >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [cast(vp_database17_439_source.c0, DOUBLE(-1, -1))], [cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1))], [cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=  8 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 ]
+--[Query Plan=      >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [cast(vp_database17_439_source.c0, DOUBLE(-1, -1))], [cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1))], [cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=      (#keys=3, [-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid],]
+--[Query Plan=       [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [GROUPING_ID]), dop=4]
+--[Query Plan=  9 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 ]
+--[Query Plan=      >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [cast(vp_database17_439_source.c0, DOUBLE(-1, -1))], [cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1))], [cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=      repeat(3)[(NULL,NULL),(-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid,]
+--[Query Plan=      NULL),(-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid,cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0,]
+--[Query Plan=       0)))]]
+--[Query Plan= 10 - output([vp_database17_439_source.vp_rowid], [vp_database17_439_source.c0], [vp_database17_439_source.c1]), filter(nil), rowset=256]
+--[Query Plan= 11 - output([vp_database17_439_source.vp_rowid], [vp_database17_439_source.c0], [vp_database17_439_source.c1]), filter(nil), rowset=256]
+--[Query Plan=      access([vp_database17_439_source.vp_rowid], [vp_database17_439_source.c0], [vp_database17_439_source.c1]), partitions(p[0-7])]
+--[Query Plan=      is_index_back=false, is_global_index=false, ]
+--[Query Plan=      range_key([vp_database17_439_source.vp_rowid]), range(MIN ; MAX)always true]
+--Split query plan:
+--EXPLAIN SELECT /*+ PARALLEL(4) */ DISTINCT BIT_OR(CAST(`vp_rowid` AS SIGNED)), (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED)) FROM `vp_database17_439_joined` `vp_database17_439_source` GROUP BY (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED)) WITH ROLLUP ORDER BY (((-1318652726) IN (-699639156)) < ((0.6713568672708383) || (vp_database17_439_source.c0))) <= (vp_database17_439_source.vp_rowid), (((vp_database17_439_source.vp_rowid) != (vp_database17_439_source.c1)) > (-756730088)) >= (CAST((vp_database17_439_source.c0) IS FALSE AS SIGNED));
+--[Query Plan==============================================================================================]
+--[Query Plan=|ID|OPERATOR                                 |NAME                    |EST.ROWS|EST.TIME(us)|]
+--[Query Plan=---------------------------------------------------------------------------------------------]
+--[Query Plan=|0 |PX COORDINATOR MERGE SORT                |                        |17      |145         |]
+--[Query Plan=|1 |└─EXCHANGE OUT DISTR                     |:EX10002                |17      |116         |]
+--[Query Plan=|2 |  └─SORT                                 |                        |17      |99          |]
+--[Query Plan=|3 |    └─HASH DISTINCT                      |                        |17      |97          |]
+--[Query Plan=|4 |      └─EXCHANGE IN DISTR                |                        |17      |95          |]
+--[Query Plan=|5 |        └─EXCHANGE OUT DISTR (HASH)      |:EX10001                |17      |87          |]
+--[Query Plan=|6 |          └─HASH GROUP BY                |                        |17      |71          |]
+--[Query Plan=|7 |            └─EXCHANGE IN DISTR          |                        |51      |67          |]
+--[Query Plan=|8 |              └─EXCHANGE OUT DISTR (HASH)|:EX10000                |51      |47          |]
+--[Query Plan=|9 |                └─EXPANSION              |                        |51      |1           |]
+--[Query Plan=|10|                  └─PX BLOCK ITERATOR    |                        |17      |1           |]
+--[Query Plan=|11|                    └─TABLE FULL SCAN    |vp_database17_439_source|17      |1           |]
+--[Query Plan==============================================================================================]
+--[Query Plan=Outputs & filters:]
+--[Query Plan=-------------------------------------]
+--[Query Plan=  0 - output([INTERNAL_FUNCTION(T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0))), -1318652726 = -699639156 < 0.6713568672708383 OR ]
+--[Query Plan=      cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid, cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1,]
+--[Query Plan=       DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0)))]), filter(nil), rowset=256]
+--[Query Plan=      sort_keys([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid,]
+--[Query Plan=       ASC], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0)), ASC])]
+--[Query Plan=  1 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [INTERNAL_FUNCTION(T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0))), -1318652726 = -699639156 ]
+--[Query Plan=      < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid, cast(vp_database17_439_source.vp_rowid, ]
+--[Query Plan=      DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0,]
+--[Query Plan=       0)))]), filter(nil), rowset=256]
+--[Query Plan=      dop=4]
+--[Query Plan=  2 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 ]
+--[Query Plan=      OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != ]
+--[Query Plan=      cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))]), filter(nil), rowset=256]
+--[Query Plan=      sort_keys([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid,]
+--[Query Plan=       ASC], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0)), ASC])]
+--[Query Plan=  3 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 ]
+--[Query Plan=      OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != ]
+--[Query Plan=      cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))]), filter(nil), rowset=256]
+--[Query Plan=      distinct([T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0,]
+--[Query Plan=       DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1,]
+--[Query Plan=       -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))])]
+--[Query Plan=  4 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 ]
+--[Query Plan=      OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != ]
+--[Query Plan=      cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))]), filter(nil), rowset=256]
+--[Query Plan=  5 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 ]
+--[Query Plan=      OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != ]
+--[Query Plan=      cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))]), filter(nil), rowset=256]
+--[Query Plan=      (#keys=3, [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))], [-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0,]
+--[Query Plan=       DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1,]
+--[Query Plan=       -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))]), dop=4]
+--[Query Plan=  6 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 ]
+--[Query Plan=      >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [cast(vp_database17_439_source.c0, DOUBLE(-1, -1))], [cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1))], [cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp]
+--[Query Plan=      _rowid, BIGINT(0, 0)))]), filter(nil), rowset=256]
+--[Query Plan=      group([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0,]
+--[Query Plan=       0))], [GROUPING_ID]), agg_func([T_FUN_SYS_BIT_OR(cast(vp_database17_439_source.vp_rowid, BIGINT(0, 0)))])]
+--[Query Plan=  7 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 ]
+--[Query Plan=      >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [cast(vp_database17_439_source.c0, DOUBLE(-1, -1))], [cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1))], [cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=  8 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 ]
+--[Query Plan=      >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [cast(vp_database17_439_source.c0, DOUBLE(-1, -1))], [cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1))], [cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=      (#keys=3, [-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid],]
+--[Query Plan=       [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0,]
+--[Query Plan=       DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [GROUPING_ID]), dop=4]
+--[Query Plan=  9 - output([-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid], ]
+--[Query Plan=      [vp_database17_439_source.vp_rowid], [cast(vp_database17_439_source.vp_rowid, DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 ]
+--[Query Plan=      >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [cast(vp_database17_439_source.c0, DOUBLE(-1, -1))], [cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1))], [cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0, 0))], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=      repeat(3)[(NULL,NULL),(-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid,]
+--[Query Plan=      NULL),(-1318652726 = -699639156 < 0.6713568672708383 OR cast(vp_database17_439_source.c0, DOUBLE(-1, -1)) <= vp_database17_439_source.vp_rowid,cast(vp_database17_439_source.vp_rowid,]
+--[Query Plan=       DECIMAL(20, 0)) != cast(vp_database17_439_source.c1, DECIMAL(-1, -1)) > -756730088 >= cast(cast(vp_database17_439_source.c0, DECIMAL(10, 0)) IS 0, BIGINT(0,]
+--[Query Plan=       0)))]]
+--[Query Plan= 10 - output([vp_database17_439_source.vp_rowid], [vp_database17_439_source.c0], [vp_database17_439_source.c1]), filter(nil), rowset=256]
+--[Query Plan=      asc]
+--[Query Plan= 11 - output([vp_database17_439_source.vp_rowid], [vp_database17_439_source.c0], [vp_database17_439_source.c1]), filter(nil), rowset=256]
+--[Query Plan=      access([vp_database17_439_source.vp_rowid], [vp_database17_439_source.c0], [vp_database17_439_source.c1]), partitions(p0)]
+--[Query Plan=      is_index_back=false, is_global_index=false, ]
+--[Query Plan=      range_key([vp_database17_439_source.vp_rowid]), range(MIN ; MAX)always true]
+--Single result sample: S:1:1;S:1:1;N; x1, S:2:31;S:1:1;S:1:1; x1
+--Split result sample: S:2:31;S:1:1;N; x1, S:1:1;S:1:1;N; x1, S:2:31;S:1:1;S:1:1; x1
+--Only in single: 
+--Only in split: S:2:31;S:1:1;N; x1
+--
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.comparePair(OceanBaseVerticalPartitioningOracle.java:2334)
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.comparePair(OceanBaseVerticalPartitioningOracle.java:2295)
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.checkSplitWithDefaultStorageProfile(OceanBaseVerticalPartitioningOracle.java:527)
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.check(OceanBaseVerticalPartitioningOracle.java:503)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:479)
+--	at sqlancer.Main$2.run(Main.java:696)
+--	at sqlancer.Main$2.runThread(Main.java:678)
+--	at sqlancer.Main$2.run(Main.java:669)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/07/30 10:53:32
+-- Database: database17
+-- Database version: 5.7.25
+-- seed value: 1785395468113
+DROP DATABASE IF EXISTS database17;
+CREATE DATABASE database17;
+USE database17;
+CREATE TABLE t0(c0 VARCHAR(500)  NULL COMMENT 'asdf' )  PARTITION BY HASH(c0) partitions 6;
+CREATE TABLE IF NOT EXISTS t0(c0 TINYINT(144) , c1 FLOAT UNSIGNED ZEROFILL  PRIMARY KEY)  PARTITION BY HASH(c0) partitions 13;
+CREATE TABLE t0(c0 VARCHAR(500) )  PARTITION BY KEY (c0);
+INSERT INTO `t0`(`c0`) VALUES ('');
+INSERT INTO `t0`(`c0`) VALUES ('-0');
+REPLACE INTO `t0`(`c0`) VALUES ("");
+REPLACE INTO `t0`(`c0`) VALUES ('');
+REPLACE INTO `t0`(`c0`) VALUES ("]kP᠇s#᠇");
+REPLACE INTO `t0`(`c0`) VALUES ('é');
+INSERT INTO `t0`(`c0`) VALUES ('');
+REPLACE INTO `t0`(`c0`) VALUES ('㼫');
+REPLACE INTO `t0`(`c0`) VALUES ('');
+INSERT INTO `t0`(`c0`) VALUES ("]kP᠇s#᠇");
+INSERT INTO `t0`(`c0`) VALUES (' ');
+INSERT INTO `t0`(`c0`) VALUES ('ß');
+REPLACE INTO `t0`(`c0`) VALUES ('2024-02-29');
+INSERT INTO `t0`(`c0`) VALUES ('1e309');
+REPLACE INTO `t0`(`c0`) VALUES ('0000-00-00');
+REPLACE INTO `t0`(`c0`) VALUES ('ß');
+INSERT INTO `t0`(`c0`) VALUES ('-0');
+UPDATE `t0` SET `c0`='变';
+INSERT INTO `t0`(`c0`) VALUES ("");
+OPTIMIZE TABLE `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+UPDATE `t0` SET `c0`='-0' WHERE (CAST(COALESCE(-2.23930361E8, t0.c0) AS SIGNED)) AND (GREATEST(t0.c0, t0.c0, -1953751952, 0.09004211237553383));
+REPLACE INTO `t0`(`c0`) VALUES ("0.09004211237553383");
+ANALYZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+OPTIMIZE TABLE `t0`;
+REPAIR TABLE `t0` USE_FRM;
+REPAIR TABLE `t0` QUICK EXTENDED;
+INSERT INTO `t0`(`c0`) VALUES ('2038-01-19');
+INSERT INTO `t0`(`c0`) VALUES ('2038-01-19');
+REPAIR TABLE `t0` QUICK;
+INSERT INTO `t0`(`c0`) VALUES ("&");
+OPTIMIZE TABLE `t0`;
+REPLACE INTO `t0`(`c0`) VALUES ('-0');
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+REPLACE INTO `t0`(`c0`) VALUES ('');
+OPTIMIZE TABLE `t0`;
+CREATE TABLE IF NOT EXISTS t1(c0 VARCHAR(500)  NULL COMMENT 'asdf' , c1 DECIMAL(14, 14) UNSIGNED  UNIQUE KEY NULL COMMENT 'asdf'  , c2 VARCHAR(500)  COMMENT 'asdf' , c3 DOUBLE(31, 24) ZEROFILL   UNIQUE KEY  COMMENT 'asdf' )  PARTITION BY KEY (c1);
+CREATE TABLE IF NOT EXISTS t1(c0 FLOAT(5, 5) , c1 DECIMAL(46, 5)  UNIQUE   COMMENT 'asdf' )  PARTITION BY KEY (c1);
+REPLACE INTO `t1`(`c0`, `c1`) VALUES (0.8260606190341109, 0);
+INSERT INTO `t1`(`c0`) VALUES (0.000000000000000000000000000001);
+REPLACE INTO `t1`(`c0`) VALUES (0.7971882469817406);
+REPLACE INTO `t1`(`c1`, `c0`) VALUES (0.04904645015296527, 0.885828442602296);
+REPLACE INTO `t1`(`c1`, `c0`) VALUES (0.000000000000000000000000000001, 0.43394165145957075);
+INSERT INTO `t1`(`c0`, `c1`) VALUES (0.509976632479916, 99999999999999999999.9999999999);
+INSERT INTO `t1`(`c0`, `c1`) VALUES (-0.0, 0.9156634654590116);
+INSERT INTO `t1`(`c1`, `c0`) VALUES (0, 1e308);
+INSERT INTO `t1`(`c0`) VALUES (-1.743587258E9);
+REPLACE INTO `t1`(`c0`) VALUES (0.5775433658810587);
+INSERT INTO `t1`(`c0`) VALUES (0.000000000000000000000000000001);
+INSERT INTO `t1`(`c1`) VALUES (-1);
+INSERT INTO `t1`(`c1`) VALUES (0.9527784379177205);
+REPLACE INTO `t1`(`c0`, `c1`) VALUES (0.8260606190341109, -1);
+INSERT INTO `t1`(`c1`, `c0`) VALUES (0, 0.000000000000000000000000000001);
+REPLACE INTO `t1`(`c1`, `c0`) VALUES (0.8426906001352472, -1.743587258E9);
+REPLACE INTO `t1`(`c1`, `c0`) VALUES (0.0000000001, -1.953751952E9);
+CHECKSUM TABLE `t1`;
+CHECKSUM TABLE `t1`;
+REPAIR TABLE `t1` USE_FRM;
+OPTIMIZE TABLE `t1`;
+CREATE INDEX i0 ON `t1`(`c1` ASC);
+UPDATE `t1` SET `c1`=-2.23930361E8 WHERE (( EXISTS (SELECT 1)) IN (GREATEST(concat(t1.c0,''), t1.c1, 0.20412346237437262, NULL))) || ((GREATEST(NULL, -2000592443, t1.c1, concat(t1.c0,''))) XOR ( EXISTS (SELECT 1 from dual wHERE FALSE)));
+CREATE INDEX i54 ON `t1`(`c0` DESC, `c1`);
+UPDATE `t1` SET `c1`=-99999999999999999999.9999999999 WHERE IFNULL((! (t1.c1)), COALESCE(t1.c1, 0.5829814062166181));
+CREATE INDEX i1 ON `t1`(`c0` DESC);
+CHECKSUM TABLE `t1`;
+UPDATE `t1` SET `c1`=0.38030583617581415, `c0`=0 WHERE (t1.c1) IS UNKNOWN;
+REPLACE INTO `t1`(`c1`) VALUES (0.4550072205417407);
+DROP INDEX i1 ON `t1`;
+DROP INDEX i0 ON `t1`;
+UPDATE `t1` SET `c0`=GREATEST('', concat(t1.c0,'')), `c1`=( EXISTS (SELECT 1)) <= ((- (CAST(1375989604 AS SIGNED)))) WHERE (((! (concat(t1.c0,'')))) <= (4.91913080614359E-4)) IN ((- ("U\r6")));
+REPLACE INTO `t1`(`c1`) VALUES (-1.953751952E9);
+UPDATE `t1` SET `c1`=(CAST((concat(t1.c0,'')) OR (NULL) AS SIGNED)) > ((CAST(NULL AS SIGNED)) NOT IN ((t1.c1) IS FALSE)), `c0`=(+ (t1.c1));
+CREATE INDEX i0 ON `t1`(`c0` DESC, `c1` DESC);
+OPTIMIZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED USE_FRM;
+CREATE INDEX i1 ON `t1`(`c1` ASC, `c0` DESC);
+UPDATE `t1` SET `c0`=0.509976632479916, `c1`=0;
+DROP INDEX i54 ON `t1`;
+ANALYZE TABLE `t1`;
+CHECKSUM TABLE `t1` QUICK;
+REPAIR TABLE `t1` USE_FRM;
+CREATE INDEX i17 ON `t1`(`c0` DESC);
+OPTIMIZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+CREATE TABLE IF NOT EXISTS t2(c0 FLOAT(50, 7) ZEROFILL  NULL)  PARTITION BY KEY (c0);
+INSERT INTO `t2`(`c0`) VALUES (1e308);
+INSERT INTO `t2`(`c0`) VALUES (0.1086438561390386);
+REPLACE INTO `t2`(`c0`) VALUES (-1e308);
+INSERT INTO `t2`(`c0`) VALUES (5.74851772E8);
+REPLACE INTO `t2`(`c0`) VALUES (-1.272294522E9);
+INSERT INTO `t2`(`c0`) VALUES (0.2724674937483277);
+REPLACE INTO `t2`(`c0`) VALUES (0.26006259168997514);
+INSERT INTO `t2`(`c0`) VALUES (-1e308);
+INSERT INTO `t2`(`c0`) VALUES (-1.73396611E9);
+INSERT INTO `t2`(`c0`) VALUES (0.13612646588645672);
+REPLACE INTO `t2`(`c0`) VALUES (0.48852596902753886);
+REPLACE INTO `t2`(`c0`) VALUES (1.44918891E8);
+INSERT INTO `t2`(`c0`) VALUES (1.000781495E9);
+INSERT INTO `t2`(`c0`) VALUES (1e308);
+REPLACE INTO `t2`(`c0`) VALUES (-2.02362599E8);
+INSERT INTO `t2`(`c0`) VALUES (0.0000000000000001);
+CHECKSUM TABLE `t2` EXTENDED;
+CREATE INDEX i2 ON `t2`(`c0`);
+INSERT INTO `t2`(`c0`) VALUES (0.0000000000000001);
+CHECKSUM TABLE `t2`;
+REPAIR TABLE `t2`;
+DROP INDEX i2 ON `t2`;
+CHECKSUM TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+REPAIR TABLE `t2` QUICK USE_FRM;
+CHECKSUM TABLE `t2`;
+CREATE INDEX i2 ON `t2`(`c0` DESC);
+DROP INDEX i2 ON `t2`;
+UPDATE `t2` SET `c0`=(+ ((+ ((concat(t2.c0,'')) > (concat(t2.c0,''))))));
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c0`=-1e308;
+REPLACE INTO `t2`(`c0`) VALUES (7.3376566E8);
+CREATE INDEX i2 ON `t2`(`c0` ASC);
+INSERT INTO `t2`(`c0`) VALUES (0.01839817101709218);
+ANALYZE TABLE `t2`;
+CHECKSUM TABLE `t2`;
+DROP INDEX i2 ON `t2`;
+REPAIR TABLE `t2` QUICK USE_FRM;
+CHECKSUM TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+UPDATE `t2` SET `c0`=1e308 WHERE "n,D,7k>";
+OPTIMIZE TABLE `t2`;
+UPDATE `t2` SET `c0`=0.0000000000000001;
+CHECKSUM TABLE `t2` QUICK;
+UPDATE `t2` SET `c0`=0.000000000000000000000000000001;
+OPTIMIZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+CHECKSUM TABLE `t2` EXTENDED;
+OPTIMIZE TABLE `t2`;
+REPAIR TABLE `t2` USE_FRM;
+ANALYZE TABLE `t2`;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE IF NOT EXISTS t0(c0 DECIMAL(16, 9) UNSIGNED ZEROFILL , c1 VARCHAR(500)  NULL, c2 DOUBLE UNSIGNED ZEROFILL  UNIQUE KEY COMMENT 'asdf' , c3 DECIMAL(41, 29) UNSIGNED  UNIQUE KEY)  PARTITION BY KEY (c1);
+CREATE TABLE IF NOT EXISTS t0(c0 FLOAT(9, 9)   UNIQUE, c1 VARCHAR(500)  NULL COMMENT 'asdf' , c2 VARCHAR(500) , c3 VARCHAR(500) )  PARTITION BY KEY (c1);
+CREATE TABLE IF NOT EXISTS t0(c0 VARCHAR(500) , c1 DOUBLE UNSIGNED   COMMENT 'asdf' , c2 VARCHAR(500) , c3 BIGINT(121) ZEROFILL   NULL)  PARTITION BY HASH(c3) partitions 17;
+INSERT INTO `t0`(`c0`, `c1`, `c3`) VALUES ('', 0.8240732453588474, 158319829);
+REPLACE INTO `t0`(`c2`, `c3`, `c0`, `c1`) VALUES ("nebV&5,", -756730088, "-1572772641", 0);
+REPLACE INTO `t0`(`c1`, `c3`, `c0`, `c2`) VALUES (-6.0116048E8, 0, 'é', 'é');
+REPLACE INTO `t0`(`c0`) VALUES ('2024-02-29');
+REPLACE INTO `t0`(`c0`, `c2`) VALUES ('1e500', ',]DY');
+INSERT INTO `t0`(`c1`) VALUES (0.9338858698494441);
+REPLACE INTO `t0`(`c2`, `c3`, `c1`, `c0`) VALUES ('2024-02-29', 1188556944, -1.318652726E9, '0');
+REPLACE INTO `t0`(`c3`, `c2`, `c1`) VALUES (1319485434, "gD벳%P", 1.994294823E9);
+REPLACE INTO `t0`(`c2`, `c0`, `c3`) VALUES ('3J', "", 1528425169);
+REPLACE INTO `t0`(`c3`, `c1`) VALUES (188857525, 0.9117282955465065);
+INSERT INTO `t0`(`c0`, `c2`, `c1`, `c3`) VALUES ('ß', '变', 0.03401733731249157, 1265914724);
+INSERT INTO `t0`(`c2`) VALUES ('ß');
+INSERT INTO `t0`(`c3`, `c1`) VALUES (-2095576673, 0.8859303967673954);
+INSERT INTO `t0`(`c0`, `c2`, `c3`, `c1`) VALUES ('0.3478015082566721', ",", 340860754, 1.660085365E9);
+REPLACE INTO `t0`(`c2`) VALUES ('2038-01-19');
+INSERT INTO `t0`(`c0`, `c1`) VALUES ('s%', 0.41073649137006474);
+REPLACE INTO `t0`(`c2`, `c1`) VALUES (' ', 0.35448935261530246);
+OPTIMIZE TABLE `t0`;
+UPDATE `t0` SET `c1`=-1e308;
+INSERT INTO `t0`(`c1`) VALUES (0.0000000000000001);
+ANALYZE TABLE `t0`;
+REPLACE INTO `t0`(`c2`) VALUES ('  ');
+CHECKSUM TABLE `t0` EXTENDED;
+CHECKSUM TABLE `t0` EXTENDED;
+ANALYZE TABLE `t0`;
+REPLACE INTO `t0`(`c1`) VALUES (-1.102287471E9);
+INSERT INTO `t0`(`c0`, `c3`) VALUES ('588546400', 1325718300);
+REPAIR TABLE `t0` QUICK EXTENDED;
+ANALYZE TABLE `t0`;
+CREATE INDEX i2 ON `t0`(`c1`, `c3` DESC);
+ANALYZE TABLE `t0`;
+REPAIR TABLE `t0` QUICK;
+CREATE INDEX i3 ON `t0`(`c3`);
+CREATE INDEX i4 ON `t0`(`c1`);
+REPLACE INTO `t0`(`c0`) VALUES ('0000-00-00');
+DROP INDEX i2 ON `t0`;
+CHECKSUM TABLE `t0` QUICK;
+REPLACE INTO `t0`(`c1`, `c2`, `c0`) VALUES (1.311996354E9, "", '0');
+OPTIMIZE TABLE `t0`;
+REPAIR TABLE `t0` QUICK USE_FRM;
+OPTIMIZE TABLE `t0`;
+DROP INDEX i4 ON `t0`;
+UPDATE `t0` SET `c3`=-2147483648, `c2`='9999-12-31', `c1`=-284893606 WHERE (CAST((concat(t0.c3,'')) IS NOT FALSE AS SIGNED)) IS NOT TRUE;
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+ANALYZE TABLE `t0`;
+CREATE INDEX i2 ON `t0`(`c1`, `c3` ASC);
+OPTIMIZE TABLE `t0`;
+DROP TABLE IF EXISTS `t2`;
+CREATE TABLE IF NOT EXISTS t2(c0 DOUBLE ZEROFILL  UNIQUE KEY NULL  COMMENT 'asdf' )  PARTITION BY HASH(c0) partitions 3;
+CREATE TABLE t2(c0 VARCHAR(500) , c1 BIGINT )  PARTITION BY KEY (c1);
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ("-1258032392", -601160480);
+REPLACE INTO `t2`(`c1`) VALUES (-432944096);
+REPLACE INTO `t2`(`c1`) VALUES (9223372036854775807);
+REPLACE INTO `t2`(`c1`) VALUES (-2147483648);
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ("<-", -1023774024);
+REPLACE INTO `t2`(`c1`) VALUES (727364171);
+INSERT INTO `t2`(`c0`, `c1`) VALUES ('KNN怜ὴ', 0);
+INSERT INTO `t2`(`c0`) VALUES ('00');
+INSERT INTO `t2`(`c0`) VALUES ("Nrnr>N");
+INSERT INTO `t2`(`c0`) VALUES ('Ta袜2*k%');
+INSERT INTO `t2`(`c0`, `c1`) VALUES ("࿂+", -1655332799);
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ("r", 18446744073709551615);
+INSERT INTO `t2`(`c0`, `c1`) VALUES ("", 1);
+REPLACE INTO `t2`(`c0`) VALUES ("]n");
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ('8', -0);
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ("51U>s", -9223372036854775808);
+CREATE INDEX i4 ON `t2`(`c1` DESC);
+OPTIMIZE TABLE `t2`;
+UPDATE `t2` SET `c0`=t2.c1, `c1`=1 WHERE 1094435825;
+DROP INDEX i4 ON `t2`;
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ('0.09004211237553383', -2147483648);
+REPAIR TABLE `t2` QUICK EXTENDED USE_FRM;
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c0`='1e309', `c1`=-1;
+CREATE INDEX i4 ON `t2`(`c1` ASC);
+REPAIR TABLE `t2`;
+ANALYZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+INSERT INTO `t2`(`c1`, `c0`) VALUES (42351264, '');
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+DROP INDEX i4 ON `t2`;
+OPTIMIZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+REPAIR TABLE `t2`;
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c0`='\r!c.b]<';
+INSERT INTO `t2`(`c1`) VALUES (-1274094487);
+CHECKSUM TABLE `t2`;
+UPDATE `t2` SET `c1`=9223372036854775807, `c0`=CAST((t2.c1) >= ((0.4198818424851747) NOT IN (t2.c0)) AS SIGNED) WHERE t2.c0;
+UPDATE `t2` SET `c0`=CAST(t2.c0 AS SIGNED);
+UPDATE `t2` SET `c0`=' ' WHERE t2.c1;
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+DROP TABLE IF EXISTS `t1`;
+CREATE TABLE t1(c0 SMALLINT ZEROFILL  PRIMARY KEY COMMENT 'asdf'  UNIQUE KEY NOT NULL, c1 FLOAT(51, 20) ZEROFILL    UNIQUE COMMENT 'asdf' )  PARTITION BY HASH(c1) partitions 1;
+CREATE TABLE t1(c0 DECIMAL  COMMENT 'asdf' )  PARTITION BY HASH(c0) partitions 3;
+CREATE TABLE IF NOT EXISTS t1(c0 VARCHAR(500)  , c1 VARCHAR(500)  NULL COMMENT 'asdf' )  PARTITION BY KEY (c0, c1);
+REPLACE INTO `t1`(`c0`) VALUES ('2038-01-19');
+INSERT INTO `t1`(`c0`, `c1`) VALUES ("(M<柿G?(ug", "");
+REPLACE INTO `t1`(`c0`, `c1`) VALUES ('  ', '%,');
+INSERT INTO `t1`(`c0`, `c1`) VALUES ('', "");
+INSERT INTO `t1`(`c1`) VALUES ('oH');
+REPLACE INTO `t1`(`c0`, `c1`) VALUES ("0.8855447718939976", "*g");
+INSERT INTO `t1`(`c1`, `c0`) VALUES ("WabJX5}X#", '');
+REPLACE INTO `t1`(`c1`, `c0`) VALUES ('It ?hhRH', ' ');
+INSERT INTO `t1`(`c0`, `c1`) VALUES ("", ")F");
+INSERT INTO `t1`(`c0`) VALUES ('g^+B+');
+REPLACE INTO `t1`(`c0`, `c1`) VALUES ('3q*', 'é');
+INSERT INTO `t1`(`c1`, `c0`) VALUES ('变', '0.09179611867309068');
+REPLACE INTO `t1`(`c1`) VALUES ('1970-01-01');
+INSERT INTO `t1`(`c1`, `c0`) VALUES ('4c%133mw', "^历(T");
+REPLACE INTO `t1`(`c0`) VALUES ("<h9ndl");
+INSERT INTO `t1`(`c1`, `c0`) VALUES ('  ', "+#p<");
+UPDATE `t1` SET `c0`=t1.c0, `c1`='0000-00-00';
+CHECKSUM TABLE `t1`;
+OPTIMIZE TABLE `t1`;
+OPTIMIZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+REPAIR TABLE `t1` QUICK;
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+ANALYZE TABLE `t1`;
+REPLACE INTO `t1`(`c0`) VALUES ('变');
+UPDATE `t1` SET `c0`=((0.1923441674184152) NOT IN (CAST(t1.c0 AS SIGNED))) || (NULL) WHERE (((0.38067586714959767) || (t1.c1)) IS NOT UNKNOWN) NOT IN (t1.c1);
+CHECKSUM TABLE `t1`;
+OPTIMIZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+REPAIR TABLE `t1` EXTENDED;
+CHECKSUM TABLE `t1`;
+ANALYZE TABLE `t1`;
+OPTIMIZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED;
+OPTIMIZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+UPDATE `t1` SET `c0`='2024-02-29';
+REPAIR TABLE `t1` QUICK;
+DROP TABLE IF EXISTS `t2`;

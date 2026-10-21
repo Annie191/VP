@@ -1,0 +1,38 @@
+https://github.com/cockroachdb/cockroach/issues/173046
+
+DROP DATABASE IF EXISTS repro_cockroachdb731_db4_tiny CASCADE;
+CREATE DATABASE repro_cockroachdb731_db4_tiny;
+USE repro_cockroachdb731_db4_tiny;
+
+CREATE TABLE t (a TIMETZ[]);
+CREATE INVERTED INDEX t_a_inverted ON t (a);
+
+SELECT 1
+FROM t
+WHERE a @> ARRAY[NULL::TIMETZ]::TIMETZ[];
+
+ERROR: internal error: expected inverted index scan to have a constraint
+
+EXPLAIN (OPT) 不报错，但显示问题计划：
+
+project
+ ├── scan t@t_a_inverted,inverted
+ └── projections
+     └── 1
+
+该 inverted scan 没有约束，执行器随后断言失败。对照验证：
+
+-- 不含 NULL 的 containment 正常执行
+SELECT 1 FROM t
+WHERE a @> ARRAY[TIMETZ '00:00:00+00']::TIMETZ[];
+
+-- 删除 inverted index 后，原 NULL predicate 也正常执行
+DROP INDEX t_a_inverted;
+SELECT 1 FROM t
+WHERE a @> ARRAY[NULL::TIMETZ]::TIMETZ[];
+
+SELECT 1
+FROM t
+WHERE a <@ ARRAY[NULL::TIMETZ]::TIMETZ[];
+
+触发条件是：TIMETZ[] inverted index 与右侧包含 NULL 的数组 containment 谓词组合。即使表为空也触发，属于纯优化/执行计划内核缺陷。

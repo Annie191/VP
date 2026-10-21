@@ -1,0 +1,145 @@
+--java.lang.AssertionError: VP resource outcome asymmetry confirmed by two retries: context=profile:derived_merge_on direct=(conn=805972) Out of sort memory, consider increasing server sort buffer size  rewritten=SUCCESS
+--Direct query: SELECT * FROM (SELECT `c0` AS `vp_expr_0`, CASE WHEN `c1` IS NULL THEN '' ELSE RTRIM(`c1`) END AS `vp_expr_1`, `c2` IS NULL AS `vp_expr_2`, CAST(`c3` AS CHAR) AS `vp_expr_3` FROM `vp_mariadb_database8_48_source`) q ORDER BY 1
+--Rewritten query: SELECT * FROM (SELECT `c0` AS `vp_expr_0`, CASE WHEN `c1` IS NULL THEN '' ELSE RTRIM(`c1`) END AS `vp_expr_1`, `c2` IS NULL AS `vp_expr_2`, CAST(`c3` AS CHAR) AS `vp_expr_3` FROM (SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, r.`c1` AS `c1`, l.`c2` AS `c2`, r.`c3` AS `c3` FROM `vp_mariadb_database8_48_left` l JOIN `vp_mariadb_database8_48_right` r ON l.`vp_rowid` = r.`vp_rowid`) AS `vp_mariadb_database8_48_source`) q ORDER BY 1
+--	at sqlancer.mariadb.oracle.MariaDBVerticalPartitioningOracle.handleResourceOutcomes(MariaDBVerticalPartitioningOracle.java:2152)
+--	at sqlancer.mariadb.oracle.MariaDBVerticalPartitioningOracle.runOptimizerProfileChecks(MariaDBVerticalPartitioningOracle.java:3749)
+--	at sqlancer.mariadb.oracle.MariaDBVerticalPartitioningOracle.compare(MariaDBVerticalPartitioningOracle.java:1808)
+--	at sqlancer.mariadb.oracle.MariaDBVerticalPartitioningOracle.check(MariaDBVerticalPartitioningOracle.java:343)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:487)
+--	at sqlancer.Main$2.run(Main.java:708)
+--	at sqlancer.Main$2.runThread(Main.java:690)
+--	at sqlancer.Main$2.run(Main.java:681)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/10/10 06:37:13
+-- Database: database8
+-- Database version: 12.3.2-MariaDB-ubu2404
+-- seed value: 1791614146095
+DROP DATABASE IF EXISTS database8;
+CREATE DATABASE database8;
+USE database8;
+CREATE TABLE t0(c0 JSON , c1 CHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin  UNIQUE NOT NULL, c2 INET6 , c3 DATETIME  NOT NULL, PRIMARY KEY(c3)) engine=InnoDB;
+CREATE OR REPLACE TABLE t1(c0 REAL ZEROFILL  UNIQUE NOT NULL, c1 BOOLEAN , PRIMARY KEY(c0));
+INSERT INTO `t1` (`c0`, `c1`) VALUES (9223372036854775807, NULL);
+INSERT INTO `t1` (`c0`, `c1`) VALUES (2, 2);
+INSERT INTO `t1` (`c0`, `c1`) VALUES (3, 3);
+INSERT INTO `t1` (`c0`, `c1`) VALUES (4, 4);
+INSERT INTO `t1` (`c0`, `c1`) VALUES (5, 5);
+INSERT INTO `t1` (`c0`, `c1`) VALUES (6, 6);
+INSERT INTO `t1` (`c0`, `c1`) VALUES (7, 7);
+INSERT INTO `t1` (`c0`, `c1`) VALUES (8, 8);
+SET SESSION max_seeks_for_key = 7789689805482224648;
+SET SESSION max_length_for_sort_data = 315630;
+INSERT INTO t1 (`c0`, `c1`) VALUES (53461850, true);
+INSERT INTO t1 (`c0`, `c1`) VALUES (688725343, true);
+INSERT INTO t1 (`c0`, `c1`) VALUES (-1465563243, true);
+INSERT INTO t1 (`c0`, `c1`) VALUES (1017951398, false);
+ANALYZE TABLE t0;
+SET SESSION join_buffer_size = 279381;
+INSERT INTO t1 (`c0`, `c1`) VALUES (356759805, false);
+INSERT INTO t1 (`c0`, `c1`) VALUES (-1154044125, false);
+INSERT INTO t1 (`c0`, `c1`) VALUES (123416063, true);
+INSERT INTO t1 (`c0`, `c1`) VALUES (-1688178951, false);
+SET SESSION max_seeks_for_key = 584108055198520703;
+INSERT INTO t1 (`c0`, `c1`) VALUES (-629588682, false);
+CREATE UNIQUE INDEX ic2 ON t0(c0 DESC);
+INSERT INTO t1 (`c0`, `c1`) VALUES (1320623293, false);
+INSERT INTO t1 (`c0`, `c1`) VALUES (-1465563243, true);
+SET SESSION max_sort_length = 499849;
+SET SESSION max_sort_length = 1837670;
+SET SESSION foreign_key_checks = 1;
+INSERT INTO t1 (`c0`, `c1`) VALUES (-33006883, false);
+SET SESSION sql_auto_is_null = ON;
+SET SESSION optimizer_search_depth = 17;
+INSERT INTO t1 (`c0`, `c1`) VALUES (316533028, false);
+INSERT INTO t1 (`c0`, `c1`) VALUES (123416063, false);
+INSERT INTO t1 (`c0`, `c1`) VALUES (-1465563243, true);
+INSERT INTO t1 (`c0`, `c1`) VALUES (123416063, false);
+SET SESSION join_cache_level = 6;
+SET SESSION myisam_repair_threads = 3117809098075741333;
+SET SESSION sql_buffer_result = OFF;
+SET SESSION max_sort_length = 2457294;
+INSERT INTO t1 (`c0`, `c1`) VALUES (1931339340, false);
+INSERT INTO t1 (`c0`, `c1`) VALUES (123416063, false);
+SET SESSION autocommit = 1;
+SET SESSION optimizer_switch = 'index_merge_union=on';
+INSERT INTO t1 (`c0`, `c1`) VALUES (-718888225, false);
+INSERT INTO t1 (`c0`, `c1`) VALUES (316533028, false);
+INSERT INTO t1 (`c0`, `c1`) VALUES (-1651219426, false);
+INSERT INTO t1 (`c0`, `c1`) VALUES (-1811929596, false);
+SET SESSION myisam_stats_method = nulls_equal;
+SET SESSION max_sort_length = 1779401;
+SET SESSION max_sp_recursion_depth = 28;
+SET SESSION foreign_key_checks = 0;
+SET SESSION optimizer_prune_level = 1;
+CREATE TABLE `vp_mariadb_database8_48_source` LIKE `t0`;
+ALTER TABLE `vp_mariadb_database8_48_source` ADD COLUMN `vp_rowid` BIGINT NOT NULL FIRST;
+ALTER TABLE `vp_mariadb_database8_48_source` ENGINE=InnoDB;
+CREATE UNIQUE INDEX `vp_mariadb_database8_48_source_rowid_uq` ON `vp_mariadb_database8_48_source` (`vp_rowid`);
+INSERT INTO `vp_mariadb_database8_48_source` (`vp_rowid`, `c0`, `c1`, `c2`, `c3`) SELECT ROW_NUMBER() OVER (ORDER BY `c3`), `c0`, `c1`, `c2`, `c3` FROM `t0` ORDER BY `c3` LIMIT 256;
+CREATE TABLE `vp_mariadb_database8_48_left` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, `c2` inet6) ENGINE=Aria;
+CREATE TABLE `vp_mariadb_database8_48_right` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL, `c3` datetime NOT NULL, `c0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin) ENGINE=Aria;
+INSERT INTO `vp_mariadb_database8_48_left` (`vp_rowid`, `c0`, `c2`) SELECT `vp_rowid`, s.`c0`, s.`c2` FROM `vp_mariadb_database8_48_source` s;
+INSERT INTO `vp_mariadb_database8_48_right` (`vp_rowid`, `c1`, `c3`, `c0`) SELECT `vp_rowid`, s.`c1`, s.`c3`, s.`c0` FROM `vp_mariadb_database8_48_source` s;
+CREATE INDEX `vp_mariadb_database8_48_idx_r_1988270350` ON `vp_mariadb_database8_48_right`(`c0`);
+SET SESSION completion_type='NO_CHAIN';
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_insert_select_d`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_insert_select_d` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_insert_select_d`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_insert_select_r`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_insert_select_r` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_insert_select_r`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_insert_ignore_d`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_insert_ignore_d` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_insert_ignore_d`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_insert_ignore_r`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_insert_ignore_r` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_insert_ignore_r`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_on_duplicate_key_update_d`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_on_duplicate_key_update_d` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_on_duplicate_key_update_d`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_on_duplicate_key_update_r`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_on_duplicate_key_update_r` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_on_duplicate_key_update_r`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_replace_d`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_replace_d` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_replace_d`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_replace_r`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_replace_r` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_replace_r`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_savepoint_rollback_d`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_savepoint_rollback_d` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_savepoint_rollback_d`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_savepoint_rollback_r`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_savepoint_rollback_r` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_savepoint_rollback_r`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_returning_d`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_returning_d` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_returning_d`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_returning_r`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_dml_returning_r` LIKE `vp_mariadb_database8_48_source`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_dml_returning_r`;
+SET SESSION completion_type='NO_CHAIN';
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_temp` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL, `c2` inet6, `c3` datetime NOT NULL);
+INSERT INTO `vp_mariadb_database8_48_temp` SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1`, l.`c2` AS `c2`, r.`c3` AS `c3` FROM `vp_mariadb_database8_48_left` l LEFT JOIN `vp_mariadb_database8_48_right` r ON l.`vp_rowid` = r.`vp_rowid` UNION ALL SELECT r.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, r.`c1` AS `c1`, NULL AS `c2`, r.`c3` AS `c3` FROM `vp_mariadb_database8_48_right` r LEFT JOIN `vp_mariadb_database8_48_left` l ON l.`vp_rowid` = r.`vp_rowid` WHERE l.`vp_rowid` IS NULL;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_temp` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL, `c2` inet6, `c3` datetime NOT NULL);
+INSERT INTO `vp_mariadb_database8_48_temp` SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, r.`c1` AS `c1`, l.`c2` AS `c2`, r.`c3` AS `c3` FROM `vp_mariadb_database8_48_left` l LEFT JOIN `vp_mariadb_database8_48_right` r ON l.`vp_rowid` = r.`vp_rowid` UNION ALL SELECT r.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, r.`c1` AS `c1`, NULL AS `c2`, r.`c3` AS `c3` FROM `vp_mariadb_database8_48_right` r LEFT JOIN `vp_mariadb_database8_48_left` l ON l.`vp_rowid` = r.`vp_rowid` WHERE l.`vp_rowid` IS NULL;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_temp` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL, `c2` inet6, `c3` datetime NOT NULL);
+INSERT INTO `vp_mariadb_database8_48_temp` SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, r.`c1` AS `c1`, l.`c2` AS `c2`, r.`c3` AS `c3` FROM `vp_mariadb_database8_48_left` l LEFT JOIN `vp_mariadb_database8_48_right` r ON l.`vp_rowid` = r.`vp_rowid` UNION ALL SELECT r.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, r.`c1` AS `c1`, NULL AS `c2`, r.`c3` AS `c3` FROM `vp_mariadb_database8_48_right` r LEFT JOIN `vp_mariadb_database8_48_left` l ON l.`vp_rowid` = r.`vp_rowid` WHERE l.`vp_rowid` IS NULL;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_temp` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL, `c2` inet6, `c3` datetime NOT NULL);
+INSERT INTO `vp_mariadb_database8_48_temp` SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1`, l.`c2` AS `c2`, r.`c3` AS `c3` FROM `vp_mariadb_database8_48_left` l LEFT JOIN `vp_mariadb_database8_48_right` r ON l.`vp_rowid` = r.`vp_rowid` UNION ALL SELECT r.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, r.`c1` AS `c1`, NULL AS `c2`, r.`c3` AS `c3` FROM `vp_mariadb_database8_48_right` r LEFT JOIN `vp_mariadb_database8_48_left` l ON l.`vp_rowid` = r.`vp_rowid` WHERE l.`vp_rowid` IS NULL;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database8_48_temp` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin, `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL, `c2` inet6, `c3` datetime NOT NULL);
+INSERT INTO `vp_mariadb_database8_48_temp` SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1`, l.`c2` AS `c2`, r.`c3` AS `c3` FROM `vp_mariadb_database8_48_left` l LEFT JOIN `vp_mariadb_database8_48_right` r ON l.`vp_rowid` = r.`vp_rowid` UNION ALL SELECT r.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, r.`c1` AS `c1`, NULL AS `c2`, r.`c3` AS `c3` FROM `vp_mariadb_database8_48_right` r LEFT JOIN `vp_mariadb_database8_48_left` l ON l.`vp_rowid` = r.`vp_rowid` WHERE l.`vp_rowid` IS NULL;
+DROP VIEW IF EXISTS `vp_mariadb_database8_48_view`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_temp`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database8_48_base_snapshot`;
+DROP TABLE IF EXISTS `vp_mariadb_database8_48_source`;
+DROP TABLE IF EXISTS `vp_mariadb_database8_48_left`;
+DROP TABLE IF EXISTS `vp_mariadb_database8_48_right`;

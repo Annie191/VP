@@ -1,0 +1,67 @@
+#69482: https://github.com/pingcap/tidb/issues/69482 confirmed as a bug.
+
+DROP DATABASE IF EXISTS repro_tidb626_db3;
+CREATE DATABASE repro_tidb626_db3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+USE repro_tidb626_db3;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 TEXT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+INSERT INTO src(c0) VALUES (' '), (''), ('y');
+
+CREATE TABLE l (vp_rowid BIGINT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 TEXT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+INSERT INTO l SELECT vp_rowid FROM src;
+INSERT INTO r SELECT vp_rowid, c0 FROM src;
+
+CREATE VIEW v AS
+SELECT l.vp_rowid, r.c0
+FROM l JOIN r ON l.vp_rowid = r.vp_rowid;
+
+-- Single‑table query (wrong: returns space ' ')
+SELECT 'single' AS q, CONCAT('[', MIN(c0), ']') AS shown, HEX(MIN(c0)) AS hex, LENGTH(MIN(c0)) AS len
+FROM src;
+
+-- View query (correct: returns empty string)
+SELECT 'split' AS q, CONCAT('[', MIN(c0), ']') AS shown, HEX(MIN(c0)) AS hex, LENGTH(MIN(c0)) AS len
+FROM v;
+
+
+2. What Did You Expect to See? (Required)
+String comparison follows the collation: an empty string '' is smaller than a space ' '. Thus MIN(c0) should return '' (empty string) for both the single‑table and the view query. All results should be identical.
+
+3. What Did You See Instead? (Required)
+Single‑table query (default): returns ' ' (space, HEX 20, length 1) — wrong.
+View query: returns '' (empty string, HEX '', length 0) — correct.
+4. What Is Your TiDB Version? (Required)
+Version: TiDB‑v9.0.0
+
+5. Execution Plan Differences
+Single‑table MIN(c0) (wrong) — TopN pushed down to TiKV:
+
+StreamAgg_13  root  funcs:min(c0)
+└─TopN_14     root  c0, offset:0, count:1
+  └─TableReader_25
+    └─TopN_24  cop[tikv]  c0, offset:0, count:1
+      └─Selection_23  not(isnull(c0))
+        └─TableFullScan_22  table:src
+View MIN(c0) (correct) — TopN stays at root:
+
+StreamAgg_21  root  funcs:min(r.c0)
+└─TopN_24     root  r.c0, offset:0, count:1
+  └─MergeJoin_32  inner join ...
+AGG_TO_COP hint (correct) — Uses cop aggregation instead of TopN:
+The plan shows a similar shape but the push‑down operates as a traditional aggregate, not a TopN operator.
+
+6. Root Cause
+TiDB's optimizer converts MIN(c0) into a TopN(c0, 1) (i.e., ORDER BY c0 LIMIT 1) and may push this TopN operator down to the TiKV coprocessor for single‑table scans. Inside TiKV, the TopN execution engine uses its own internal comparison logic for string (TEXT/Blob) values. This comparison is buggy: it erroneously treats ' ' (space) as smaller than '' (empty string), violating the collation order where '' should be the smallest possible string.
+
+When the TopN remains in the TiDB root layer (as in the view query or when the push‑down is prevented), or when the aggregation is performed via the traditional AGG_TO_COP path, the comparison uses TiDB's own expression evaluator or TiKV's aggregate comparator — both of which correctly order '' < ' '. Consequently, the correct minimum is returned.

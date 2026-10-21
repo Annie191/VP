@@ -1,0 +1,2 @@
+logs/tidb615/database12.log filter=lfs diff=lfs merge=lfs -text
+logs/mysql616/database31.log filter=lfs diff=lfs merge=lfs -text

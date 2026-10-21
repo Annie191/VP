@@ -1,0 +1,19 @@
+{
+  "database": "Oceanbase",
+  "source": "/home/lwm/sqlancer/Bugs/Oceanbase/2419.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- Single: wrong, returns NULL\nSELECT\n  IFNULL(('') NOT IN (vp_s.c0), TRUE) AS v\nFROM vp_s FORCE INDEX(i0)\nGROUP BY IFNULL(('') NOT IN (vp_s.c0), TRUE)\nHAVING SUM(c0) IS NOT NULL\nORDER BY IFNULL(('') NOT IN (vp_s.c0), TRUE)",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 13,
+  "target_query": "-- Single: wrong, returns NULL\nSELECT\n  IFNULL(('') NOT IN (vp_s.c0), TRUE) AS v\nFROM vp_s FORCE INDEX(i0)\nGROUP BY IFNULL(('') NOT IN (vp_s.c0), TRUE)\nHAVING SUM(c0) IS NOT NULL\nORDER BY IFNULL(('') NOT IN (vp_s.c0), TRUE);",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

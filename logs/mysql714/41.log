@@ -1,0 +1,84 @@
+DROP DATABASE IF EXISTS repro_mysql714_db41;
+CREATE DATABASE repro_mysql714_db41;
+USE repro_mysql714_db41;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+SET SESSION big_tables = 1;
+SET SESSION internal_tmp_mem_storage_engine = 'MEMORY';
+
+CREATE TABLE vp_s (
+    vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    c0       DECIMAL(65, 30) NULL,
+    c1       DECIMAL(65, 30) NULL
+) ENGINE = InnoDB;
+
+INSERT INTO vp_s (c0, c1) VALUES (NULL, NULL), (NULL, 0), (NULL, 507104938), (0, NULL);
+
+ALTER TABLE vp_s ADD KEY i7 (c0, c1 DESC);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c1 DECIMAL(65,30) NULL, c0 DECIMAL(65,30) NULL) ENGINE = InnoDB;
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 DECIMAL(65,30) NULL) ENGINE = InnoDB;
+
+INSERT INTO vp_l SELECT vp_rowid, c1, c0 FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c0 FROM vp_s;
+
+CREATE INDEX l_idx ON vp_l(vp_rowid, c1);
+CREATE INDEX r_idx ON vp_r(c0, vp_rowid);
+
+-- 单表查询（covering index → IFNULL 正确）
+SELECT ALL SUM(((IFNULL(NULL, vp_s.c1)) XOR (('0.14314946849956256') >= (-2038342261))) IS FALSE) AS ref0
+FROM vp_s;
+
+-- FULL_OUTER_SIMULATION（UNION ALL 物化 → IFNULL 异常）
+SELECT ALL SUM(((IFNULL(NULL, t.c1)) XOR (('0.14314946849956256') >= (-2038342261))) IS FALSE) AS ref0
+FROM (
+    SELECT l.vp_rowid AS vp_rowid, r.c0 AS c0, l.c1 AS c1
+    FROM vp_l l LEFT JOIN vp_r r ON l.vp_rowid = r.vp_rowid
+    UNION ALL
+    SELECT r.vp_rowid AS vp_rowid, r.c0 AS c0, l.c1 AS c1
+    FROM vp_l l RIGHT JOIN vp_r r ON l.vp_rowid = r.vp_rowid WHERE l.vp_rowid IS NULL
+) t;
+
+=== 单表 ===
+|    1 |        ← SUM=1：row 3 贡献了 1（IFNULL 在 covering index 扫描下正确）
+
+=== FULL_OUTER ===
+|    0 |        ← SUM=0：所有行的 IFNULL XOR 结果异常
+
+
+执行计划
+单表（covering index）：
+
+-> Aggregate: sum((((0 <> ifnull(NULL,vp_s.c1)) xor ('0.143...' >= -2038342261)) is false))
+    -> Covering index scan on vp_s using i7 (c0, c1 DESC)
+
+FULL_OUTER_SIMULATION（UNION ALL materialize）：
+
+-> Aggregate: sum((((0 <> ifnull(NULL,t.c1)) xor ('0.143...' >= -2038342261)) is false))
+    -> Table scan on t
+        -> Union all materialize
+            -> Nested loop left join
+                -> Covering index scan on l using l_idx
+                -> Single-row index lookup on r using PRIMARY
+            -> Filter: (l.vp_rowid is null)
+                -> Nested loop antijoin
+                    -> Covering index scan on r using r_idx
+                    -> Single-row index lookup on l using PRIMARY
+
+执行计划差异：
+
+单表查询：Covering index scan on vp_s using i7 (c0, c1 DESC) —— 直接从索引读取 c1，类型信息完整。
+
+派生表查询：Table scan on t —— t 是由 UNION ALL 物化生成的内部临时表（受 SET SESSION big_tables = 1 强制使用磁盘临时表，引擎为 InnoDB），对 t 做全表扫描。
+
+IFNULL(NULL, t.c1) 的实际行为：
+NULL 是无类型常量，IFNULL 返回第二个参数 t.c1 的类型（DECIMAL(65,30)）。优化器很可能将此表达式直接简化为 t.c1，但随后参与 XOR 时，DECIMAL 需要转换为整型（XOR 期望整型操作数）。
+
+物化临时表的 DECIMAL 存储/读取缺陷：
+MySQL 内部临时表（尤其是磁盘临时表）可能对高精度 DECIMAL 的元数据处理存在 bug。当 DECIMAL(65,30) 在物化过程中被写入临时表，再读出并转换为整数时，可能发生以下情况之一：
+
+值全部变为 NULL：临时表的 DECIMAL 列在扫描时字段的 NULL 标志位被错误设置，导致服务器认为所有值均为 NULL，IFNULL 返回 NULL，XOR 结果为 NULL，IS FALSE 始终为 0。
+
+非零值被截断为 0：整数转换时精度丢失，将 507104938 错误处理为 0，则 0 XOR 1 = 1，IS FALSE = 0，聚合仍为 0。

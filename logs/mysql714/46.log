@@ -1,0 +1,87 @@
+DROP DATABASE IF EXISTS repro_mysql714_db46;
+CREATE DATABASE repro_mysql714_db46;
+USE repro_mysql714_db46;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+SET SESSION big_tables = 0;
+
+CREATE TABLE vp_s (
+    vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    c0       DECIMAL(65, 30) NULL,
+    c1       DECIMAL(65, 30) NULL,
+    c2       DECIMAL(65, 30) NULL,
+    c3       DECIMAL(65, 30) NULL
+) ENGINE = InnoDB;
+
+INSERT INTO vp_s (c0, c1, c2, c3) VALUES (0, 0, NULL, NULL), (NULL, 853156578, NULL, 0);
+
+CREATE INDEX src_idx ON vp_s(c0, vp_rowid);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c3 DECIMAL(65,30) NULL, c1 DECIMAL(65,30) NULL) ENGINE = InnoDB;
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 DECIMAL(65,30) NULL, c2 DECIMAL(65,30) NULL) ENGINE = InnoDB;
+
+INSERT INTO vp_l SELECT vp_rowid, c3, c1 FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c0, c2 FROM vp_s;
+
+CREATE INDEX l_idx ON vp_l(vp_rowid, c3);
+CREATE INDEX r_idx ON vp_r(c2);
+
+-- 单表查询（covering index → DISTINCT 丢失 0）
+SELECT DISTINCT CAST(IFNULL(NULL, vp_s.c0) AS SIGNED) AS ref0 FROM vp_s;
+
+-- STRAIGHT_JOIN 多表查询（hash join → 正确保留两行）
+SELECT DISTINCT CAST(IFNULL(NULL, t.c0) AS SIGNED) AS ref0 FROM (
+    SELECT l.vp_rowid, r.c0, l.c1, r.c2, l.c3
+    FROM vp_l l STRAIGHT_JOIN vp_r r ON l.vp_rowid = r.vp_rowid
+) t;
+
+=== 单表 ===
+| NULL |           ← 仅 1 行：0 被 DISTINCT 去重误合并到 NULL
+
+=== STRAIGHT_JOIN ===
+|    0 |           ← 正确：2 行
+| NULL |
+
+
+执行计划
+单表：
+
+-> Table scan on <temporary>
+    -> Temporary table with deduplication
+        -> Covering index scan on vp_s using src_idx (c0, vp_rowid)
+
+STRAIGHT_JOIN：
+
+-> Table scan on <temporary>
+    -> Temporary table with deduplication
+        -> Inner hash join (r.vp_rowid = l.vp_rowid)
+            -> Table scan on r
+            -> Hash
+                -> Covering index scan on l using l_idx
+
+1. 单表查询的去重过程
+sql
+SELECT DISTINCT CAST(IFNULL(NULL, vp_s.c0) AS SIGNED) AS ref0 FROM vp_s;
+表 vp_s 两行数据：(c0=0) 和 (c0=NULL)。
+
+IFNULL(NULL, c0) 等价于直接取 c0，所以需要去重的值就是 0 和 NULL。
+
+执行计划选择 覆盖索引扫描（src_idx(c0, vp_rowid)），直接读取索引中的 c0 值，不再回表。
+
+去重由 临时表（deduplication） 完成：按索引顺序扫描，向临时表插入不重复的值。
+
+2. 0 消失的直接原因
+索引扫描顺序是先 NULL 后 0（NULL 在排序中最小）。
+
+临时表先插入 NULL。
+
+再处理 0 时，临时表将 0 与已有的 NULL 进行比较，判断为 相等，于是丢弃 0，最终只剩一行 NULL。
+
+3. 为什么比较会出错？
+c0 的类型是 DECIMAL(65,30)，这是一种定点高精度数值。
+
+临时表去重使用的是 MySQL 内部的值比较函数，它应当严格区分 NULL 与任何非 NULL 值。但这里却把 DECIMAL 的 0 和 NULL 判断为相同。
+
+该错误仅在 覆盖索引扫描 + DISTINCT 的组合下触发。原因是当优化器直接从索引读取 DECIMAL 值时，索引中存储的格式（或去重临时表对索引列的类型处理）导致比较逻辑出现缺陷，未能正确识别 NULL 标记，误将数值 0 的内部表示与 NULL 视为相同。

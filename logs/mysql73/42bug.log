@@ -1,0 +1,120 @@
+https://bugs.mysql.com/bug.php?id=120867&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro73_42;
+CREATE DATABASE repro73_42;
+USE repro73_42;
+
+SET SESSION optimizer_switch =
+  'index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,engine_condition_pushdown=on,index_condition_pushdown=on,mrr=on,mrr_cost_based=on,block_nested_loop=on,batched_key_access=off,materialization=on,semijoin=on,loosescan=on,firstmatch=on,duplicateweedout=on,subquery_materialization_cost_based=on,use_index_extensions=on,condition_fanout_filter=on,derived_merge=on,use_invisible_indexes=off,skip_scan=on,hash_join=on,subquery_to_derived=off,prefer_ordering_index=on,hypergraph_optimizer=off,derived_condition_pushdown=on,hash_set_operations=on';
+
+CREATE TABLE s (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 FLOAT,
+  c1 DECIMAL(20,0)
+) ENGINE=InnoDB;
+
+INSERT INTO s VALUES (1, 0, 954517769);
+
+CREATE INDEX s_c0 ON s(c0);
+
+CREATE TABLE l (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 FLOAT
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c1 DECIMAL(20,0),
+  c0 FLOAT
+) ENGINE=InnoDB;
+
+INSERT INTO l SELECT id, c0 FROM s;
+INSERT INTO r SELECT id, c1, c0 FROM s;
+
+CREATE VIEW v AS
+SELECT l.id, l.c0, r.c1
+FROM l JOIN r ON l.id = r.id;
+
+SELECT 'single' AS qt, s.c1 AS ref0
+FROM s
+WHERE s.c0 < IFNULL(1.7976931348623157E308, -1605651052)
+GROUP BY s.c1;
+
+SELECT 'split' AS qt, v.c1 AS ref0
+FROM v
+WHERE v.c0 < IFNULL(1.7976931348623157E308, -1605651052)
+GROUP BY v.c1;
+
+mysql> SELECT 'single' ...;
+Empty set
+
+mysql> SELECT 'split' ...;
++-------+-----------+
+| qt    | ref0      |
++-------+-----------+
+| split | 954517769 |
++-------+-----------+
+
+单表：-> Zero rows (no matching row in const table)
+重建视图：-> Table scan on <temporary>
+    -> Temporary table with deduplication
+        -> Nested loop inner join
+            -> Filter: (l.c0 < <cache>(ifnull(1.7976931348623157E308,-(1605651052))))
+                -> Table scan on l
+            -> Single-row index lookup on r using PRIMARY (id = l.id)
+
+1. 数据与查询语义
+表 s 仅有一行：
+
+id = 1, c0 = 0 (FLOAT), c1 = 954517769
+
+单表查询：
+
+sql
+SELECT s.c1
+FROM s
+WHERE s.c0 < IFNULL(1.7976931348623157E308, -1605651052);
+由于 IFNULL 第一个参数非 NULL，等价于 s.c0 < 1.7976931348623157E308。
+0 < 1.79E308 显然为真，理应返回一行。
+
+视图 v 同样只有一行，查询条件完全相同，视图查询正确返回了 954517769，而单表查询却返回 Empty set。
+
+2. 执行计划揭示的异常
+单表：
+
+text
+-> Zero rows (no matching row in const table)
+优化器将 s 识别为 const table（因为只有一行，且可通过主键或唯一索引访问），于是在优化阶段就尝试对整个查询求值。
+在这个过程中，条件 s.c0 < IFNULL(1.7976931348623157E308, -1605651052) 被提前计算，结果判定为 false，导致直接返回空集。
+
+视图：
+
+text
+-> Nested loop inner join
+    -> Filter: (l.c0 < <cache>(ifnull(...)))
+        -> Table scan on l
+    -> Single-row index lookup on r
+由于涉及 JOIN，无法使用 const table 优化，条件在运行时正常求值，得出正确结果。
+
+3. 根因：const table 评估中的浮点溢出/截断
+核心问题是优化器在 const table 路径下对 FLOAT 与极大 DOUBLE 常量 的比较处理存在缺陷：
+
+比较操作数 s.c0 类型为 FLOAT，常量 1.7976931348623157E308 为 DOUBLE 字面量。
+
+MySQL 比较规则要求将 FLOAT 转为 DOUBLE 再比较，这在运行时完全正常。
+
+但在 const table 的预计算阶段，优化器可能为了减少开销，采用了 先将常量转为 FLOAT 再与列值比较 的简化策略（或将两者都转为某种中间类型）。
+
+1.79E308 远超 FLOAT 的表示范围（最大值约 3.4E38），转换为 FLOAT 时发生溢出，结果可能是：
+
+截断为 0.0（部分平台的溢出行为），
+
+或变为 +Inf，但后续错误处理将其视为 NaN。
+
+若被截为 0，条件变成 0 < 0 → false；
+
+若变为 NaN，任何与 NaN 的比较均返回 false。
+
+因此优化器错误地认为条件不成立，判定为 no matching row。
+
+视图查询不受影响，因为 JOIN 路径下 const table 优化不被触发，比较在运行时使用正确的 DOUBLE 类型进行。

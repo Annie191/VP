@@ -1,0 +1,130 @@
+https://github.com/oceanbase/oceanbase/issues/2439 has been reproduced .
+
+DROP DATABASE IF EXISTS repro_ob730_db13_min;
+CREATE DATABASE repro_ob730_db13_min;
+USE repro_ob730_db13_min;
+
+SET SESSION sql_mode = 'PIPES_AS_CONCAT';
+SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+SET SESSION ob_enable_aggregation_pushdown = 0;
+
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL(65,30),
+  c1 BIGINT
+) ENGINE=InnoDB
+PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+
+INSERT INTO src VALUES
+  (1, -338707012, -1),
+  (2, -338707012, -1);
+
+CREATE TABLE l LIKE src;
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c1 BIGINT
+) ENGINE=InnoDB
+PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+
+INSERT INTO l SELECT * FROM src;
+INSERT INTO r SELECT vp_rowid, c1 FROM src;
+
+SELECT /*+ PARALLEL(4) */
+  IFNULL(GREATEST(vp_rowid, c0), (-44622653) && c0) AS g
+FROM src
+GROUP BY IFNULL(GREATEST(vp_rowid, c0), (-44622653) && c0)
+WITH ROLLUP
+ORDER BY g;
+
+SELECT /*+ PARALLEL(4) */
+  IFNULL(GREATEST(s.vp_rowid, s.c0), (-44622653) && s.c0) AS g
+FROM (
+  WITH ll AS (SELECT * FROM l),
+       rr AS (SELECT * FROM r)
+  SELECT ll.vp_rowid, ll.c0, rr.c1
+  FROM ll JOIN rr ON ll.vp_rowid = rr.vp_rowid
+) AS s
+GROUP BY IFNULL(GREATEST(s.vp_rowid, s.c0), (-44622653) && s.c0)
+WITH ROLLUP
+ORDER BY g;
+
+单表: 1, 2, 2
+多表: 1, 1, 2
+
+单表:
+PX COORDINATOR MERGE SORT
+  EXCHANGE OUT DISTR
+    SORT
+      HASH GROUP BY
+        EXCHANGE IN DISTR
+          EXCHANGE OUT DISTR (HASH)
+            EXPANSION
+              PX BLOCK ITERATOR
+                TABLE FULL SCAN src
+
+多表:
+PX COORDINATOR MERGE SORT
+  EXCHANGE OUT DISTR
+    SORT
+      HASH GROUP BY
+        EXCHANGE IN DISTR
+          EXCHANGE OUT DISTR (HASH)
+            EXPANSION
+              SUBPLAN SCAN s
+                PX PARTITION ITERATOR
+                  MERGE JOIN
+                    TABLE FULL SCAN r
+                    TABLE FULL SCAN l
+
+连续执行 16 次，11 次出现单表与 CTE JOIN 重构表的 ROLLUP 汇总代表值不同；普通分组行始终一致。
+
+
+首先计算 GREATEST(vp_rowid, c0)
+
+此时 vp_rowid 与 c0 并非来自任何确定的分组，而是取自某个“残留”行（可能是扫描到的第一行、最后一行或并行分片中的某一行）
+
+由于 GREATEST 返回值非空，IFNULL 直接返回了该值（1 或 2），导致汇总行实际携带了某个普通分组的值
+
+根因是 OceanBase 对 WITH ROLLUP 超级聚合行的分组表达式求值存在逻辑错误：当分组表达式为包含非聚合列的 IFNULL(GREATEST(...), ...) 形式时，汇总行并未强制将整个表达式置为 NULL，而是对内部标量表达式进行了依赖具体行数据的计算，导致汇总行结果不确定且与普通分组行值冲突。该行为违反了 SQL 标准对 ROLLUP 的语义规定，属于内核缺陷。
+
+SELECT *
+FROM (
+  SELECT /*+ PARALLEL(4) */ DISTINCT
+    BIT_OR(vp_rowid) AS b,
+    ((0.67 || c0) <= vp_rowid) AS g1,
+    (((vp_rowid != c1) > -1) >= CAST(c0 IS FALSE AS SIGNED)) AS g2
+  FROM jt
+  GROUP BY
+    ((0.67 || c0) <= vp_rowid),
+    (((vp_rowid != c1) > -1) >= CAST(c0 IS FALSE AS SIGNED))
+  WITH ROLLUP
+) AS t
+ORDER BY g1, g2;
+
+SELECT *
+FROM (
+  SELECT /*+ PARALLEL(4) */ DISTINCT
+    BIT_OR(vp_rowid) AS b,
+    ((0.67 || c0) <= vp_rowid) AS g1,
+    (((vp_rowid != c1) > -1) >= CAST(c0 IS FALSE AS SIGNED)) AS g2
+  FROM src
+  GROUP BY
+    ((0.67 || c0) <= vp_rowid),
+    (((vp_rowid != c1) > -1) >= CAST(c0 IS FALSE AS SIGNED))
+  WITH ROLLUP
+) AS t
+ORDER BY g1, g2;
+
+SELECT *
+FROM (
+  SELECT /*+ PARALLEL(4) */ DISTINCT
+    BIT_OR(vp_rowid) AS b,
+    ((0.67 || c0) <= vp_rowid) AS g1,
+    (((vp_rowid != c1) > -1) >= CAST(c0 IS FALSE AS SIGNED)) AS g2
+  FROM jt
+  GROUP BY
+    ((0.67 || c0) <= vp_rowid),
+    (((vp_rowid != c1) > -1) >= CAST(c0 IS FALSE AS SIGNED))
+  WITH ROLLUP
+) AS t
+ORDER BY g1, g2;

@@ -1,0 +1,75 @@
+https://github.com/databendlabs/databend/issues/20626 已fixed 
+
+DROP DATABASE IF EXISTS repro_databend917_db2_min;
+CREATE DATABASE repro_databend917_db2_min;
+USE repro_databend917_db2_min;
+
+CREATE TABLE source (
+    vp_rowid BIGINT NOT NULL,
+    c0map MAP(VARCHAR, BIGINT) NULL
+) ENGINE=FUSE;
+
+CREATE TABLE left_part (
+    vp_rowid BIGINT NOT NULL
+) ENGINE=FUSE;
+
+CREATE TABLE right_part (
+    vp_rowid BIGINT NOT NULL,
+    c0map MAP(VARCHAR, BIGINT) NULL
+) ENGINE=FUSE;
+
+INSERT INTO source VALUES
+(1, {'x':1}),
+(2, NULL),
+(3, {'x':2}),
+(4, NULL);
+
+INSERT INTO left_part
+SELECT vp_rowid FROM source;
+
+INSERT INTO right_part
+SELECT vp_rowid, c0map FROM source;
+
+SELECT COUNT(source.c0map)
+FROM source
+LIMIT 2;
+
+SELECT COUNT(s.c0map)
+FROM (
+    SELECT l.vp_rowid, r.c0map
+    FROM left_part l
+    LEFT JOIN right_part r
+        ON l.vp_rowid = r.vp_rowid
+) s
+LIMIT 2;
+
+左右表重构查询正确返回 2，因为 MAP 列只有两行非 NULL。单表 source 查询错误地返回 4
+
+单表 EXPLAIN：
+EvalScalar
+├── output columns: [COUNT(source.c0map)]
+├── expressions: [4]
+└── Limit
+    ├── limit: 2
+    └── DummyTableScan
+单表 COUNT(source.c0map) 返回 4 推测可能是因为优化器错误地把 COUNT(c0map) 折叠成了 COUNT(*) / 表行数常量，丢掉了 MAP 列的 NULL 过滤语义。
+重构查询 EXPLAIN：
+Limit
+├── output columns: [COUNT(s.c0map)]
+├── limit: 2
+└── AggregateFinal
+    ├── group by: []
+    ├── aggregate functions: [count(c0map)]
+    └── AggregatePartial
+        ├── group by: []
+        ├── aggregate functions: [count(c0map)]
+        └── HashJoin
+            ├── join type: LEFT OUTER
+            ├── build keys: [right_part.vp_rowid]
+            ├── probe keys: [left_part.vp_rowid]
+            ├── TableScan(Build)
+            │   └── output columns: [vp_rowid, c0map]
+            └── TableScan(Probe)
+                └── output columns: [vp_rowid]
+
+重构版本因为 LEFT JOIN 后列可空性变化，阻止了这个错误优化，所以返回正确的 2。

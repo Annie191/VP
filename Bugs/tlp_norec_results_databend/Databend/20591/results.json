@@ -1,0 +1,21 @@
+{
+  "database": "Databend",
+  "source": "/home/lwm/sqlancer/Bugs/Databend/20591.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT\n    SUM(c1int),\n    vp_rowid,\n    c1int\nFROM source\nWHERE c0boolean\nGROUP BY vp_rowid, c1int\nORDER BY vp_rowid, c1int\nLIMIT 3",
+      "ok": true,
+      "rows": [
+        "-4\t4\t-4",
+        "-5\t5\t-5",
+        "-6\t6\t-6"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "SELECT\n    SUM(c1int),\n    vp_rowid,\n    c1int\nFROM source\nWHERE c0boolean\nGROUP BY vp_rowid, c1int\nORDER BY vp_rowid, c1int\nLIMIT 3;",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

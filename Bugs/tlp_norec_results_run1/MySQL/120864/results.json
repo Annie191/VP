@@ -1,0 +1,20 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120864.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- Single: 覆盖索引 → (-2,0), (-1,NULL) ✓\nSELECT (- vp_rowid) AS ref0, ('x') = (IFNULL(NULL, c1) XOR 0) AS ref1\nFROM src GROUP BY (- vp_rowid), ('x') = (IFNULL(NULL, c1) XOR 0)",
+      "ok": true,
+      "rows": [
+        "-2\t0",
+        "-1\tNULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 10,
+  "target_query": "-- Single: 覆盖索引 → (-2,0), (-1,NULL) ✓\nSELECT (- vp_rowid) AS ref0, ('x') = (IFNULL(NULL, c1) XOR 0) AS ref1\nFROM src GROUP BY (- vp_rowid), ('x') = (IFNULL(NULL, c1) XOR 0);",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

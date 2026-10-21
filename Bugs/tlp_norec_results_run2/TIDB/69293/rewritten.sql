@@ -1,0 +1,1 @@
+-- Database endpoint unavailable; source: /home/lwm/sqlancer/Bugs/TIDB/69293.sql

@@ -1,0 +1,70 @@
+https://bugs.mysql.com/bug.php?id=120975&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro_mysql714_db54;
+CREATE DATABASE repro_mysql714_db54;
+USE repro_mysql714_db54;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+SET SESSION big_tables = 0;
+
+CREATE TABLE vp_s (vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, c0 BIGINT NULL) ENGINE = InnoDB;
+INSERT INTO vp_s (c0) VALUES (NULL), (1);
+ALTER TABLE vp_s ADD UNIQUE KEY i0 (c0);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY) ENGINE = InnoDB;
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 BIGINT NULL) ENGINE = InnoDB;
+INSERT INTO vp_l SELECT vp_rowid FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c0 FROM vp_s;
+
+-- 单表（优化器常量评估 → Impossible WHERE → 0 行）
+SELECT EXISTS (SELECT 1) AS ref0 FROM vp_s
+WHERE (vp_s.c0) IN (IFNULL(0.7957106135922298, 'nK'));
+
+-- EXISTS_FILTER 多表查询（物化后索引查找 → 错误命中 c0=1 → 1 行）
+SELECT EXISTS (SELECT 1) AS ref0 FROM (
+    SELECT l.vp_rowid,
+           (SELECT r.c0 FROM vp_r r WHERE r.vp_rowid = l.vp_rowid) AS c0
+    FROM vp_l l
+    WHERE EXISTS (SELECT 1 FROM vp_r r WHERE r.vp_rowid = l.vp_rowid)
+) vp_s
+WHERE (vp_s.c0) IN (IFNULL(0.7957106135922298, 'nK'));
+
+单表 ===
+Empty set              ← 优化器判定 Impossible WHERE
+
+=== EXISTS_FILTER ===
+|    1 |               ← 错误：c0=1 被命中
+
+执行计划
+单表：
+
+-> Zero rows (Impossible WHERE noticed after reading const tables)
+
+EXISTS_FILTER：
+
+-> Index lookup on vp_s using <auto_key0> (c0 = ifnull(0.7957106135922298,'nK'))
+    -> Materialize
+        -> Nested loop inner join
+            -> Covering index scan on l using PRIMARY
+            -> Single-row covering index lookup on r using PRIMARY
+        -> Select #4 (subquery in projection; dependent)
+            -> Single-row index lookup on r using PRIMARY
+
+根本原因在于 常数表达式的类型推断与键值转换 环节：
+
+IFNULL(0.7957106135922298, 'nK') 的类型
+IFNULL 的第一个参数是数值，第二个参数是字符串。按照 MySQL 的类型聚合规则，该表达式的返回类型被推断为 VARCHAR（因为存在字符串参数）。
+由于第一个参数 0.795... 不为 NULL，实际返回的字符串值是 '0.7957106135922298'。
+
+索引查找键的生成
+自动索引 <auto_key0> 基于列 c0（BIGINT）创建，因此索引查找需要将条件右侧的常量转换为 BIGINT。
+在这一类型转换过程中，优化器/执行器调用了常量的 val_int() 方法。然而，由于该常量实际上是一个 VARCHAR 类型的 IFNULL 表达式，内部实现存在缺陷：
+
+可能错误地使用了第二个参数 'nK' 来计算整数值（例如参数求值顺序或空值判断异常）；
+
+或者在对字符串 '0.795...' 进行整数转换时，因精度、截断或字符集问题产生了错误的截断/舍入结果，最终得到一个非预期的整数值 1（而非正确的 0）。
+
+匹配到错误行
+被错误计算出的整型键值 1 恰好等于派生表中 c0 = 1 的行，于是索引查找成功，该行被返回，导致 EXISTS(SELECT 1) 输出 1，表现为错误结果。

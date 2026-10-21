@@ -1,0 +1,51 @@
+DROP DATABASE IF EXISTS repro_tidb618_db0_min;
+CREATE DATABASE repro_tidb618_db0_min;
+USE repro_tidb618_db0_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+SET tidb_opt_agg_push_down=1;
+
+CREATE TABLE src(
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 BIGINT NULL
+);
+
+INSERT INTO src(c0) VALUES (-2100312475);
+
+CREATE TABLE l(
+  vp_rowid BIGINT NOT NULL PRIMARY KEY
+);
+
+CREATE TABLE r(
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 BIGINT NULL
+);
+
+INSERT INTO l SELECT vp_rowid FROM src;
+INSERT INTO r SELECT vp_rowid,c0 FROM src;
+
+SELECT
+  NULL << 'aMI x*' AS a,
+  403837559 AS b,
+  BIN(c0) AS c
+FROM src
+WHERE BIN((BINARY(CAST(vp_rowid AS DECIMAL)) <= '|'))
+ORDER BY 0.9328472781954409;
+
+SELECT
+  NULL << 'aMI x*' AS a,
+  403837559 AS b,
+  BIN(c0) AS c
+FROM (
+  SELECT l.vp_rowid, r.c0
+  FROM l
+  JOIN (
+    SELECT vp_rowid, COUNT(*) AS vp_count
+    FROM r
+    GROUP BY vp_rowid
+  ) rg ON l.vp_rowid = rg.vp_rowid
+  JOIN r ON r.vp_rowid = rg.vp_rowid
+) v
+WHERE BIN((BINARY(CAST(vp_rowid AS DECIMAL)) <= '|'))
+ORDER BY 0.9328472781954409;

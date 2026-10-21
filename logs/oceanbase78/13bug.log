@@ -1,0 +1,67 @@
+#2420:https://github.com/oceanbase/oceanbase/issues/2420 has been reproduced in version 4.4.2.1, but not in other versions such as 4.3.5.5.
+
+
+#### COUNT_NULL_IF_CASE_PUSHDOWN
+
+DROP DATABASE IF EXISTS repro_db13;
+CREATE DATABASE repro_db13;
+USE repro_db13;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+CREATE TABLE vp_s (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY);
+INSERT INTO vp_s VALUES (), (), (), ();
+
+CREATE TABLE vp_l (id BIGINT NOT NULL PRIMARY KEY);
+INSERT INTO vp_l SELECT id FROM vp_s;
+CREATE TABLE vp_r (id BIGINT NOT NULL PRIMARY KEY);
+INSERT INTO vp_r SELECT id FROM vp_s;
+
+-- Single: 返回 4（错误，IF(id, NULL, id)→NULL → XOR→NULL → COUNT(NULL)=0）
+SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) FROM vp_s WHERE 1;
+
+-- Split: RIGHT JOIN → 返回 0（正确）
+SELECT COUNT((CAST(IF(id, NULL, id) AS SIGNED)) XOR (id)) FROM (
+  SELECT l.id FROM vp_l l RIGHT JOIN vp_r r ON l.id = r.id
+) vp_s WHERE 1;
+
+查询	结果	正确?
+Single	4	❌
+Split	0	✅
+
+执行计划
+Single（pushdown_aggregation → 错误 = 4）
+
+|ID|OPERATOR         |NAME|EST.ROWS|
+|0 |SCALAR GROUP BY  |    |1       |
+|1 |└─TABLE FULL SCAN|vp_s|4       |
+
+  1 - pushdown_aggregation([T_FUN_COUNT(
+        cast(CASE WHEN vp_s.id THEN NULL ELSE vp_s.id END, BIGINT) XOR vp_s.id
+      )])   ← 存储层 CASE WHEN 返回 NULL 但 COUNT 错误计数
+
+
+Split（RIGHT JOIN → 正确 = 0）
+
+|ID|OPERATOR           |NAME|EST.ROWS|
+|0 |SCALAR GROUP BY    |    |1       |
+|1 |└─MERGE JOIN       |    |4       |
+|2 |  ├─TABLE FULL SCAN|r   |4       |
+|3 |  └─TABLE FULL SCAN|l   |4       |
+
+  0 - agg_func([T_FUN_COUNT(...)])    ← 无 pushdown
+
+InnoDB 存储引擎在实现聚合下推（pushdown_aggregation）时，对 IF / CASE WHEN 条件表达式的处理存在 Bug。
+
+具体来说，在存储引擎层处理表达式 IF(id, NULL, id) 时：
+
+条件判断丢失：存储引擎错误地将 IF 函数视为“总是返回第三个参数（ELSE 分支）”，即直接返回 id，而完全忽略了条件 id 的真假判断（本该返回第二个参数 NULL）。
+
+推演过程：
+
+存储引擎实际计算的表达式变成了：CAST(id AS SIGNED) XOR id。
+
+对于任意正整数 id，id XOR id = 0（逻辑 XOR 对相同真值返回假，即 0）。
+
+COUNT(0) 认为 0 是非 NULL 值，因此将所有 4 行全部计数，得到 4。
+
+

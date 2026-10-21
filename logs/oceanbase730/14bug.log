@@ -1,0 +1,113 @@
+https://github.com/oceanbase/oceanbase/issues/2440 has been reproduced .
+
+DROP DATABASE IF EXISTS repro_oceanbase730_db14_min;
+CREATE DATABASE repro_oceanbase730_db14_min;
+USE repro_oceanbase730_db14_min;
+
+SET SESSION sql_mode = 'PIPES_AS_CONCAT';
+SET SESSION ob_enable_aggregation_pushdown = 0;
+
+CREATE TABLE vp_s (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 BIGINT NULL
+) PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+
+CREATE TABLE vp_l (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 BIGINT NULL
+) PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+
+CREATE TABLE vp_r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 BIGINT NULL
+) PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+
+INSERT INTO vp_s VALUES
+(1,0),(2,0),(3,0),(4,0),(5,0),(6,0),(7,0),(8,0),(9,0),(10,0),(11,0),
+(12,1),(13,1),(14,1),(15,1),(16,1),(17,1),(18,1),(19,1),(20,1),(21,1),(22,1);
+INSERT INTO vp_l SELECT * FROM vp_s;
+INSERT INTO vp_r SELECT * FROM vp_s;
+
+SELECT 'source' AS side, q.g, q.f, q.b
+FROM (
+  SELECT /*+ PARALLEL(4) */
+    GREATEST((-1936882281) NOT IN (s.c0, 375398795),
+             CAST('' AS SIGNED), s.vp_rowid, 1) AS g,
+    s.c0 IS FALSE AS f,
+    BIT_AND(s.vp_rowid) AS b
+  FROM vp_s s
+  GROUP BY GREATEST((-1936882281) NOT IN (s.c0, 375398795),
+                    CAST('' AS SIGNED), s.vp_rowid, 1),
+           s.c0 IS FALSE WITH ROLLUP
+) q
+WHERE q.b = 0
+
+UNION ALL
+
+SELECT 'split', q.g, q.f, q.b
+FROM (
+  SELECT /*+ PARALLEL(4) */
+    GREATEST((-1936882281) NOT IN (s.c0, 375398795),
+             CAST('' AS SIGNED), s.vp_rowid, 1) AS g,
+    s.c0 IS FALSE AS f,
+    BIT_AND(s.vp_rowid) AS b
+  FROM (
+    SELECT l.vp_rowid, l.c0
+    FROM vp_l l JOIN vp_r r ON l.vp_rowid = r.vp_rowid
+  ) s
+  GROUP BY GREATEST((-1936882281) NOT IN (s.c0, 375398795),
+                    CAST('' AS SIGNED), s.vp_rowid, 1),
+           s.c0 IS FALSE WITH ROLLUP
+) q
+WHERE q.b = 0;
+
++--------+------+---+------+
+| side   | g    | f | b    |
++--------+------+---+------+
+| source |    2 | NULL |    0 |
+| split  |    8 | NULL |    0 |
++--------+------+---+------+
+
+多次执行结果并不相同
+
+该查询结果不确定的核心原因，是 OceanBase 在并行执行 GROUP BY ... WITH ROLLUP 时，BIT_AND 聚合与复杂 GROUP BY 表达式组合触发的内部缺陷。
+
+1. 理论预期
+两个子查询只是数据源不同（单表 vp_s 与 vp_l JOIN vp_r），由于表数据完全一致，内连接结果也与 vp_s 相同，因此 UNION ALL 的两部分应当返回完全相同且确定的结果。
+
+2. 异常现象
+结果不一致：source 返回 g=2，split 返回 g=8，且重复执行时 g 值还会随机变化。
+
+结果自身矛盾：b = BIT_AND(vp_rowid)，而 vp_rowid 取值 1~22 均非 0。普通分组（g 非空）下，每组只有一行，BIT_AND 必然等于该行 vp_rowid，不可能为 0。输出中 g 不为 NULL 却出现 b=0，说明数据行被错误地合并到了同一组。
+
+3. 根因分析
+3.1 触发条件
+/*+ PARALLEL(4) */：开启并行查询，数据扫描和聚合分布在多个线程执行。
+
+WITH ROLLUP：需要生成超聚合行（NULL 分组），并行下通常拆分为“局部聚合 + 全局合并再 ROLLUP”两阶段。
+
+BIT_AND 聚合：对并行敏感，局部聚合结果必须正确合并。
+
+复杂 GROUP BY 表达式：GREATEST((-1936882281) NOT IN (s.c0, 375398795), CAST('' AS SIGNED), s.vp_rowid, 1) 包含类型转换和逻辑运算，实际上等价于 s.vp_rowid，但优化器可能无法完全简化，并行分发时依赖的“重分区键”计算可能异常。
+
+3.2 缺陷机理
+在并行两阶段聚合中：
+
+局部聚合：各线程按 GROUP BY 表达式计算哈希并分组，得到局部 BIT_AND 结果。
+
+全局合并：协调线程收集局部结果，需再次按 GROUP BY 列分组并合并聚合值，同时完成 ROLLUP 的超聚合行计算。
+
+问题极可能出在合并阶段：
+当 GROUP BY 列包含复杂表达式时，分发元组所使用的“虚拟列”或“哈希值”在不同阶段可能出现不一致（例如因类型转换精度、NULL 传播差异等），导致本应属于不同组的行被误认为同一组，或同一组的局部结果被错误拆分。于是正常行被聚合成更大的组，使得 BIT_AND 出现额外的 0（因为混入了其他 vp_rowid 值），产生了逻辑上不可能存在的 (g=2, b=0) 这样的行。同时，由于不同线程的执行时序和局部结果到达顺序不确定，最终返回的错乱行也是随机的，表现为多次执行结果不同。
+
+3.3 补充说明
+WHERE q.b = 0 过滤后仍可能有多行满足条件，但查询没有 ORDER BY，所以返回任意一行，加剧了结果的不确定性。
+
+关闭 ob_enable_aggregation_pushdown 只是影响聚合下推，不改变并行与 ROLLUP 的交互逻辑，无法避免该缺陷。
+
+4. 结论
+这是 OceanBase 在 并行 + GROUP BY WITH ROLLUP + 复杂表达式 + BIT_AND 组合场景下的一个内部实现 bug，导致聚合分组错乱。要规避此问题，可以尝试：
+
+去掉 PARALLEL 提示，改为串行执行；
+
+使用更简单的 GROUP BY 列（如直接使用 s.vp_rowid 而非复杂表达式）。

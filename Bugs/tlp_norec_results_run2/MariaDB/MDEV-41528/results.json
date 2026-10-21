@@ -1,0 +1,19 @@
+{
+  "database": "MariaDB",
+  "source": "/home/lwm/sqlancer/Bugs/MariaDB/MDEV-41528.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 单表路径\nSELECT DISTINCT c0 + 0\nFROM s\nWHERE (\n    CONCAT(\n        CAST(c0 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,\n        CAST(59615238 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,\n        CAST('2017-12-25 07:22:08' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin\n    ) IN ('2035-02-08 07:06:22', c0)\n)",
+      "ok": true,
+      "rows": [
+        "0"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 10,
+  "target_query": "-- 单表路径\nSELECT DISTINCT c0 + 0\nFROM s\nWHERE (\n    CONCAT(\n        CAST(c0 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,\n        CAST(59615238 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,\n        CAST('2017-12-25 07:22:08' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin\n    ) IN ('2035-02-08 07:06:22', c0)\n);",
+  "skip_reason": "DISTINCT is not handled by this batch rewriter"
+}

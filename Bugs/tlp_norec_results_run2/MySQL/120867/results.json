@@ -1,0 +1,17 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120867.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT 'single' AS qt, s.c1 AS ref0\nFROM s\nWHERE s.c0 < IFNULL(1.7976931348623157E308, -1605651052)\nGROUP BY s.c1",
+      "ok": true,
+      "rows": [],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 12,
+  "target_query": "SELECT 'single' AS qt, s.c1 AS ref0\nFROM s\nWHERE s.c0 < IFNULL(1.7976931348623157E308, -1605651052)\nGROUP BY s.c1;",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

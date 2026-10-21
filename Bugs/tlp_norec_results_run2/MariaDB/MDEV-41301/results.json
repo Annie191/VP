@@ -1,0 +1,20 @@
+{
+  "database": "MariaDB",
+  "source": "/home/lwm/sqlancer/Bugs/MariaDB/MDEV-41301.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 单表查询\nSELECT DISTINCTROW c, NULLIF(-TRUE, c) AS v\nFROM src",
+      "ok": true,
+      "rows": [
+        "2000-01-01 00:00:00\t-1",
+        "2000-01-02 00:00:00\t-1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 11,
+  "target_query": "-- 单表查询\nSELECT DISTINCTROW c, NULLIF(-TRUE, c) AS v\nFROM src;",
+  "skip_reason": "DISTINCT is not handled by this batch rewriter"
+}

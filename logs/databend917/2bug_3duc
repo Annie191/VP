@@ -1,0 +1,76 @@
+DROP DATABASE IF EXISTS repro_databend917_db3_min;
+CREATE DATABASE repro_databend917_db3_min;
+USE repro_databend917_db3_min;
+
+SET enable_query_result_cache = 0;
+
+CREATE TABLE source (
+    id BIGINT NOT NULL,
+    m MAP(VARCHAR NOT NULL, BIGINT NULL) NULL
+) ENGINE=FUSE;
+
+CREATE TABLE l (
+    id BIGINT NOT NULL,
+    m MAP(VARCHAR NOT NULL, BIGINT NULL) NULL
+) ENGINE=FUSE;
+
+CREATE TABLE r (
+    id BIGINT NOT NULL
+) ENGINE=FUSE;
+
+INSERT INTO source VALUES
+    (1, {'a': 1}),
+    (2, NULL);
+
+INSERT INTO l SELECT * FROM source;
+INSERT INTO r SELECT id FROM source;
+
+-- 单表：实际返回 2，错误
+SELECT COUNT(m) FROM source;
+
+-- AGGREGATE_THEN_MERGE 多表：实际返回 1，正确
+SELECT COUNT(m)
+FROM (
+    SELECT l.id, l.m
+    FROM l
+    JOIN (
+        SELECT id, COUNT(*) AS n
+        FROM r
+        GROUP BY id
+    ) rg ON l.id = rg.id
+    JOIN r ON r.id = rg.id
+) s;
+
+实测结果：
+查询	实际结果	正确结果
+单表	2	1
+多表重构	1	1
+
+
+COUNT(m) 应忽略 NULL，因此两条查询都应返回 1。
+分别在查询前加 EXPLAIN 获取计划。单表实际计划：
+EvalScalar
+├── output columns: [COUNT(m)]
+├── expressions: [2]
+├── estimated rows: 1.00
+└── DummyTableScan
+多表核心计划，省略列编号、扫描统计和运行时过滤信息：
+AggregateFinal
+├── aggregate functions: [count(m)]
+└── AggregatePartial
+    ├── aggregate functions: [count(m)]
+    └── HashJoin: INNER
+        ├── build keys: [r.id]
+        ├── probe keys: [l.id]
+        ├── HashJoin(Build): INNER
+        │   ├── build keys: [r.id]
+        │   ├── probe keys: [rg.id]
+        │   ├── TableScan(Build): r
+        │   └── AggregateFinal(Probe)
+        │       ├── group by: [id]
+        │       ├── aggregate functions: []
+        │       └── AggregatePartial
+        │           ├── group by: [id]
+        │           └── TableScan: r
+        └── TableScan(Probe): l
+            └── output columns: [id, m]

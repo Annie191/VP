@@ -1,0 +1,130 @@
+[
+  {
+    "database": "CockroachDB",
+    "source": "/home/lwm/sqlancer/Bugs/CockroachDB/173065.sql",
+    "status": "done",
+    "queries": {
+      "original": {
+        "sql": "SELECT 'single' AS shape, SQRDIFF(c1)\nFROM source",
+        "ok": true,
+        "rows": [
+          "SET",
+          "SET",
+          "single\t-1E+10"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      "tlp_base": {
+        "sql": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source",
+        "ok": true,
+        "rows": [
+          "SET",
+          "SET",
+          "single\t-1E+10"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      "tlp_union": {
+        "sql": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE UNION ALL SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE NOT TRUE UNION ALL SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE IS NULL",
+        "ok": true,
+        "rows": [
+          "SET",
+          "SET",
+          "single\t-1E+10",
+          "single\t",
+          "single\t"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      "norec_optimized": {
+        "sql": "SELECT COUNT(*) FROM source",
+        "ok": true,
+        "rows": [
+          "SET",
+          "SET",
+          "11"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      "norec_unoptimized": {
+        "sql": "SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM source",
+        "ok": true,
+        "rows": [
+          "SET",
+          "SET",
+          "11"
+        ],
+        "stderr": "",
+        "stdout": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 17,
+    "target_query": "SELECT 'single' AS shape, SQRDIFF(c1)\nFROM source;",
+    "variants": {
+      "tlp_base": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source",
+      "tlp_part_true": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE",
+      "tlp_part_false": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE NOT TRUE",
+      "tlp_part_unknown": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE IS NULL",
+      "tlp_union": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE UNION ALL SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE NOT TRUE UNION ALL SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE IS NULL",
+      "norec_optimized": "SELECT COUNT(*) FROM source",
+      "norec_unoptimized": "SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM source",
+      "predicate": "TRUE"
+    },
+    "tlp_checked": true,
+    "tlp_inconsistent": true,
+    "norec_checked": true,
+    "norec_inconsistent": false
+  },
+  {
+    "database": "CockroachDB",
+    "source": "/home/lwm/sqlancer/Bugs/CockroachDB/174729.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- single（等价于原查询的 GROUP BY 常量分组）\nSELECT STDDEV(vp_computed) FROM src GROUP BY CAST(NULL AS INT8)",
+        "ok": true,
+        "rows": [
+          "SET",
+          "SET",
+          "SET",
+          "SET",
+          "SET",
+          "SET",
+          "SET",
+          "4.8989794855663561964"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 18,
+    "target_query": "-- single（等价于原查询的 GROUP BY 常量分组）\nSELECT STDDEV(vp_computed) FROM src GROUP BY CAST(NULL AS INT8);",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "CockroachDB",
+    "source": "/home/lwm/sqlancer/Bugs/CockroachDB/175534.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 单表查询：应返回 7 行 NULL\nSELECT c0\nFROM vp_source\nORDER BY c0, vp_rowid\nLIMIT 3 OFFSET 4",
+        "ok": true,
+        "rows": [
+          "",
+          "",
+          ""
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 10,
+    "target_query": "-- 单表查询：应返回 7 行 NULL\nSELECT c0\nFROM vp_source\nORDER BY c0, vp_rowid\nLIMIT 3 OFFSET 4;",
+    "skip_reason": "ORDER BY is not handled by this batch rewriter"
+  }
+]

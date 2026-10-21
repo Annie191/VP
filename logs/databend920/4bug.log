@@ -1,0 +1,76 @@
+https://github.com/databendlabs/databend/issues/20670 20612的同族
+
+DROP DATABASE IF EXISTS repro_databend920_db4_min;
+CREATE DATABASE repro_databend920_db4_min;
+USE repro_databend920_db4_min;
+
+CREATE TABLE s (
+  id BIGINT NOT NULL,
+  v VARCHAR NULL,
+  b BOOLEAN NULL
+) ENGINE=MEMORY;
+
+CREATE TABLE l (
+  id BIGINT NOT NULL,
+  v VARCHAR NULL
+) ENGINE=FUSE;
+
+CREATE TABLE r (
+  id BIGINT NOT NULL,
+  b BOOLEAN NULL
+) ENGINE=FUSE;
+
+INSERT INTO s
+SELECT vp_rowid, c0varchar, c2boolean
+FROM database4.vp_database4_3231_source;
+
+INSERT INTO l
+SELECT vp_rowid, c0varchar
+FROM database4.vp_database4_3231_l;
+
+INSERT INTO r
+SELECT vp_rowid, c2boolean
+FROM database4.vp_database4_3231_r;
+
+SELECT b
+FROM s
+WHERE NOT ('.' LIKE(v))
+ORDER BY id, id
+LIMIT 5;
+
+SELECT b
+FROM (
+  SELECT l.id, l.v, r.b
+  FROM l
+  JOIN (
+    SELECT id, CONCAT('vp:', id) payload
+    FROM r
+  ) sp ON CONCAT('vp:', l.id) = sp.payload
+  JOIN r ON r.id = sp.id
+) x
+WHERE NOT ('.' LIKE(v))
+ORDER BY id, id
+LIMIT 5;
+
+单表
+0
+1
+1
+1
+1
+多表
+1
+0
+1
+1
+1
+执行计划差异：
+- 单表：TableScan -> Filter -> Sort -> Limit
+- 重构：TableScan -> HashJoin -> HashJoin -> Sort -> Limit -> RowFetch
+
+实际查询结果对应的 rowid 是：
+单表前 5 个 rowid: 1, 2, 3, 4, 5
+多表前 5 个 rowid: 9, 10, 11, 12, 13
+这说明多表路径不是“同一批唯一 id 因物理顺序变化而重新排列”，而是 FUSE l 上的反向 LIKE 过滤先丢掉了 rowid 1 到 8。
+主要机制应归为：
+FUSE 上 NOT (constant LIKE nullable_varchar) 的过滤/分区裁剪差异，随后经 HashJoin、Sort、Limit、RowFetch 体现为投影序列差异。

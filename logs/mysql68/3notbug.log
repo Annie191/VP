@@ -1,0 +1,145 @@
+https://bugs.mysql.com/bug.php?id=120641 Verified as described.  查询不合法
+
+subquery_to_derived 将标量子查询转换为派生表后，derived_condition_pushdown 把外层 WHERE 条件下推到了派生表的物化阶段。但下推后的表达式中，原始列 s.c 被替换为聚合函数 any_value(r.c)。优化器在聚合后上下文中对 any_value() 的表达式链做了错误的常量折叠，将 any_value(r.c) 与 cast(ifnull(any_value(r.c), ...) as double) 错误地判定为相等，导致该行在物化阶段被过滤掉，最终 COUNT = 0。
+这是一个derived condition pushdown 与聚合上下文交互的优化器 Bug：下推条件时未正确处理 any_value() 聚合函数在编译期常量折叠中的语义等价性。
+
+DROP DATABASE IF EXISTS repro;
+CREATE DATABASE repro;
+USE repro;
+
+SET SESSION optimizer_switch =
+  'subquery_to_derived=on,derived_merge=on,derived_condition_pushdown=on';
+
+CREATE TABLE src (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c FLOAT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO src (c)
+VALUES (790583485);
+
+CREATE TABLE l (
+  id BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c FLOAT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO l (id)
+SELECT id FROM src;
+
+INSERT INTO r (id, c)
+SELECT id, c FROM src;
+
+-- Single query: directly reads the source table, returns 1.
+SELECT 'single' AS query_type, COUNT(*) AS row_count
+FROM src AS s
+WHERE s.c NOT IN (+(IFNULL(s.c, '-762030035')));
+
+-- Split query: reconstructs the source table from vertical partitions, incorrectly returns 0 on MySQL 8.0.46.
+SELECT 'split' AS query_type, COUNT(*) AS row_count
+FROM (
+  SELECT
+    l.id,
+    (
+      SELECT r.c
+      FROM r
+      WHERE r.id = l.id
+    ) AS c
+  FROM l
+) AS s
+WHERE s.c NOT IN (+(IFNULL(s.c, '-762030035')));
+
+触发 bug 时:
++------------+-----------+
+| query_type | row_count |
++------------+-----------+
+| single     |         1 |
++------------+-----------+
+
++------------+-----------+
+| query_type | row_count |
++------------+-----------+
+| split      |         0 |
++------------+-----------+
+
+EXPLAIN FORMAT=TREE
+SELECT 'single' AS query_type, COUNT(*) AS row_count
+FROM src AS s
+WHERE s.c NOT IN (+(IFNULL(s.c, '-762030035')));
+
+EXPLAIN FORMAT=TREE
+SELECT 'split' AS query_type, COUNT(*) AS row_count
+FROM (
+  SELECT
+    l.id,
+    (
+      SELECT r.c
+      FROM r
+      WHERE r.id = l.id
+    ) AS c
+  FROM l
+) AS s
+WHERE s.c NOT IN (+(IFNULL(s.c, '-762030035')));
+
+
+-> Aggregate: count(0)
+    -> Filter: (s.c <> cast(ifnull(s.c,'-762030035') as double))
+        -> Table scan on s
+
+c 是 FLOAT（单精度浮点，约 6~7 位有效数字）。790583485 有 9 位数字，存入 FLOAT 后会发生精度截断/舍入（实际存储为近似值，如 790583488）
+第二个参数是字符串，这会影响 IFNULL 的返回类型推导。+(...)	一元正号。如果 IFNULL 返回类型被推导为字符串，+ 会强制转为精确数值（DECIMAL/DOUBLE），得到原始字符串的精确数值表示
+
+Filter 行为：
+s.c 是 FLOAT，存储值为 790583485 的近似值（如 790583488）
+IFNULL(s.c, '-762030035')：因 s.c 非 NULL，返回 s.c（FLOAT）
+CAST(... AS DOUBLE)：FLOAT 近似值 → DOUBLE 精确数值表示
+s.c NOT IN (...)	比较 FLOAT 近似值 vs 右边表达式的精确值。由于 FLOAT 精度截断，两边不相等，结果为 TRUE。COUNT(*) = 1
+
+-> Aggregate: count(0)
+    -> Nested loop inner join
+        -> Index scan on l using PRIMARY
+        -> Filter: reject_if((derived_2_3.Name_exp_3 > 1))
+            -> Index lookup on derived_2_3 using <auto_key0> (id=l.id)
+                -> Materialize
+                    -> Filter: (any_value(r.c) <> cast(ifnull(any_value(r.c),'-762030035') as double))
+                        -> Group aggregate: count(0)
+                            -> Index scan on r using PRIMARY
+
+
+subquery_to_derived 转换后的结构
+原始标量子查询：(SELECT r.c FROM r WHERE r.id = l.id)
+被转换为：
+    派生表 derived_2_3，包含 r.id 和聚合后的 r.c
+    外层 Nested loop join 连接 l 和 derived_2_3
+    reject_if((derived_2_3.Name_exp_3 > 1)) 确保标量子查询的"只返回一行"约束
+reject_if 是 MySQL 内部表示 LEFT JOIN 的 antijoin 或 NOT EXISTS 的一种方式。
+Name_exp_3 是物化派生表的一个内部计数器，记录每个分组（按 id 分组）的行数。
+reject_if(... > 1) 的含义：如果某个 id 在派生表中匹配到多于 1 行，则拒绝（即忽略）该行。这实际上是 优化器将原查询的 NOT IN 转换成了 antijoin（反连接）。
+
+derived_condition_pushdown 把外层 WHERE 下推到了物化阶段
+外层 WHERE：WHERE s.c NOT IN (+(IFNULL(s.c, '-762030035')))
+被下推到了派生表物化内部，变成：Filter: (any_value(r.c) <> cast(ifnull(any_value(r.c),'-762030035') as double))
+
+下推后的表达式使用了 any_value() 聚合函数
+注意计划中的层级：
+plain
+Filter (使用 any_value(r.c))
+    -> Group aggregate: count(0)
+        -> Index scan on r
+
+先扫描 r 表
+做聚合（无 GROUP BY，整个表一个组，count(0) = 1）
+在聚合后用 any_value(r.c) 计算 Filter
+
+any_value(r.c) 虽然在逻辑上等于 r.c，但在 MySQL 执行引擎的内部类型标记/可空性推导上与直接列读取不同。
+derived_condition_pushdown 下推条件时，将 s.c 替换为 any_value(r.c)，但优化器在编译期对 any_value() 的常量折叠路径与直接列路径不一致，导致：
+cast(ifnull(any_value(r.c), '-762030035') as double) 被折叠为与 any_value(r.c) 精确相等
+而在基线查询中，同样的表达式链被保留为不等（FLOAT 精度差异未被抹平）
+
+
+MySQL 优化器在启用 subquery_to_derived、derived_merge、derived_condition_pushdown 后，
+将原本的 NOT IN 条件错误地转换为 antijoin（reject_if）并推入派生表内部，导致条件求值语义从 行级标量比较 变成了 分组存在性检测，
+同时内部比较因浮点精度问题也可能被短路。最终使得本应返回相同结果的查询得到了不同的行数。

@@ -1,0 +1,62 @@
+#69480：https://github.com/pingcap/tidb/issues/69480 confirmed as a bug.
+
+## 复现结果：Bug 确认可稳定复现
+
+### 最小复现案例
+
+```sql
+DROP DATABASE IF EXISTS test_repro;
+CREATE DATABASE test_repro;
+USE test_repro;
+
+CREATE TABLE source (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DOUBLE UNSIGNED ZEROFILL DEFAULT NULL
+) ENGINE=InnoDB;
+INSERT INTO source (c0) VALUES (NULL), (0.30446792022164715), (0.7041492922748734), (0.8527053518765303);
+ALTER TABLE source ADD KEY i0 (c0), ADD UNIQUE KEY i2 (c0), ADD KEY i5 (c0), ADD KEY i6 (c0), ADD KEY i7 (c0), ADD KEY i1 (c0);
+
+CREATE TABLE l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 DOUBLE UNSIGNED ZEROFILL DEFAULT NULL) ENGINE=InnoDB;
+CREATE TABLE r (vp_rowid BIGINT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+INSERT INTO l (vp_rowid, c0) SELECT vp_rowid, c0 FROM source;
+INSERT INTO r (vp_rowid) SELECT vp_rowid FROM source;
+
+-- 单表查询: 结果 1,2,3,4 (NULL最前)
+SELECT vp_rowid FROM source WHERE '2018-04-13' ORDER BY (-c0) DESC, vp_rowid;
+-- 分表重组: 结果 2,3,4,1 (NULL最后)
+SELECT vp_rowid FROM (
+  SELECT l.vp_rowid AS vp_rowid, l.c0 AS c0
+  FROM l JOIN LATERAL (
+    SELECT * FROM r rr WHERE rr.vp_rowid = l.vp_rowid
+  ) r ON TRUE
+) source2 WHERE '2018-04-13' ORDER BY (-c0) DESC, vp_rowid;
+```
+
+### 单表查询执行计划（IndexFullScan keep order:true 替代 Sort）
+
+| id | task | operator | info |
+|----|------|----------|------|
+| Projection | root | | source.vp_rowid |
+| └─IndexReader | root | | index:IndexFullScan |
+| &nbsp;&nbsp;└─**IndexFullScan** | cop[tikv] | index:i0(c0) | **keep order:true** |
+
+### 分表重组执行计划（显式 Sort）
+
+| id | task | operator | info |
+|----|------|----------|------|
+| Projection | root | | l.vp_rowid |
+| └─**Sort** | root | | **Column#7:desc**, l.vp_rowid |
+| &nbsp;&nbsp;└─Projection | root | | unaryminus(l.c0)→Column#7 |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─IndexJoin | root | | inner join l↔r on vp_rowid |
+
+### 根因
+
+优化器在消除 Sort 时，对于 ORDER BY expr(column) [ASC|DESC] 的情况：
+识别到 ORDER BY (-c0) DESC
+发现索引 i0(c0) 存在
+推断：因为 -c0 关于 c0 单调递减，所以 c0 ASC 的逆序等价于 (-c0) DESC
+错误：使用了 IndexFullScan keep order:true（即按索引升序扫描，然后在 TiDB 层反向）
+但问题在于：
+索引中 NULL 的位置是固定的（通常在最小端）
+简单反向索引顺序 ≠ 表达式排序的语义
+特别是当表达式在 NULL 处不连续时（-NULL = NULL），单调性推理失效。

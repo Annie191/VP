@@ -1,0 +1,20 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120732.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT DISTINCT\n  LEAST((! s.c), s.id NOT IN (NULL, NULL, s.c)) AS a,\n  (((s.c) IN (s.id)) AND (IFNULL(s.c, 1767027735))) AND (0.07523026689631984) AS b,\n  SUM(DISTINCT EXISTS (SELECT 1)) AS c\nFROM s\nGROUP BY\n  LEAST((NOT s.c), s.id NOT IN (NULL, NULL, s.c)),\n  (((s.c) IN (s.id)) AND (IFNULL(s.c, 1767027735))) AND (0.07523026689631984)",
+      "ok": true,
+      "rows": [
+        "NULL\tNULL\t1",
+        "NULL\t0\t1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "SELECT DISTINCT\n  LEAST((! s.c), s.id NOT IN (NULL, NULL, s.c)) AS a,\n  (((s.c) IN (s.id)) AND (IFNULL(s.c, 1767027735))) AND (0.07523026689631984) AS b,\n  SUM(DISTINCT EXISTS (SELECT 1)) AS c\nFROM s\nGROUP BY\n  LEAST((NOT s.c), s.id NOT IN (NULL, NULL, s.c)),\n  (((s.c) IN (s.id)) AND (IFNULL(s.c, 1767027735))) AND (0.07523026689631984);",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

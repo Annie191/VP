@@ -1,0 +1,121 @@
+https://jira.mariadb.org/browse/MDEV-41558  similar to MDEV-41528
+
+DROP DATABASE IF EXISTS repro_mariadb818_db6;
+CREATE DATABASE repro_mariadb818_db6;
+USE repro_mariadb818_db6;
+
+SET SESSION sql_mode = '';
+SET SESSION optimizer_switch = 'derived_merge=off';
+
+CREATE TABLE single_data (
+    c0 BIT(1),
+    c1 SET('a','b','c') NOT NULL
+) ENGINE=MyISAM;
+
+INSERT INTO single_data(c0, c1) VALUES
+(NULL, ''), (0, 'a'), (1, 'b'), (0, 'c'),
+(1, 'a,b'), (0, 'a,c'), (1, 'b,c'), (0, 'a,b,c');
+
+CREATE TABLE part_l (
+    vp_rowid BIGINT NOT NULL PRIMARY KEY,
+    c0 BIT(1)
+) ENGINE=MyISAM;
+
+CREATE TABLE part_r (
+    vp_rowid BIGINT NOT NULL PRIMARY KEY,
+    c1 SET('a','b','c') NOT NULL
+) ENGINE=MyISAM;
+
+INSERT INTO part_l
+SELECT ROW_NUMBER() OVER (), c0 FROM single_data;
+
+INSERT INTO part_r
+SELECT ROW_NUMBER() OVER (), c1 FROM single_data;
+
+-- 单表查询：7 rows
+SELECT *
+FROM (
+    SELECT ALL
+        CAST(((- c0) IN (c0)) AS UNSIGNED) AS x0,
+        c1 AS x1,
+        473386488 AS x2,
+        CAST((c0 IN (c0, 'a,b')) AS UNSIGNED) AS x3,
+        CAST(LPAD(
+            CAST(c1 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+            'b,c',
+            CAST(c0 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin
+        ) AS UNSIGNED) AS x4
+    FROM single_data
+    WHERE (
+        LPAD(
+            CAST('2043-04-01 08:41:36' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+            '2025-03-31',
+            CAST(c0 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin
+        ) IN (c0, '2001:db8::9504')
+    ) XOR c0
+) q
+ORDER BY 1, 2, 3, 4, 5;
+
+-- 多表重建查询：3 rows
+SELECT *
+FROM (
+    SELECT ALL
+        CAST(((- c0) IN (c0)) AS UNSIGNED) AS x0,
+        c1 AS x1,
+        473386488 AS x2,
+        CAST((c0 IN (c0, 'a,b')) AS UNSIGNED) AS x3,
+        CAST(LPAD(
+            CAST(c1 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+            'b,c',
+            CAST(c0 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin
+        ) AS UNSIGNED) AS x4
+    FROM (
+        SELECT l.vp_rowid, l.c0, r.c1
+        FROM part_l l
+        JOIN part_r r ON l.vp_rowid = r.vp_rowid
+    ) AS source
+    WHERE (
+        LPAD(
+            CAST('2043-04-01 08:41:36' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+            '2025-03-31',
+            CAST(c0 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin
+        ) IN (c0, '2001:db8::9504')
+    ) XOR c0
+) q
+ORDER BY 1, 2, 3, 4, 5;
+
++------+-------+-----------+------+------+
+| x0   | x1    | x2        | x3   | x4   |
++------+-------+-----------+------+------+
+|    0 | b     | 473386488 |    1 |    0 |
+|    0 | a,b   | 473386488 |    1 |    0 |
+|    0 | b,c   | 473386488 |    1 |    0 |
+|    1 | a     | 473386488 |    1 |    0 |
+|    1 | c     | 473386488 |    1 |    0 |
+|    1 | a,c   | 473386488 |    1 |    0 |
+|    1 | a,b,c | 473386488 |    1 |    0 |
++------+-------+-----------+------+------+
+
++------+-----+-----------+------+------+
+| x0   | x1  | x2        | x3   | x4   |
++------+-----+-----------+------+------+
+|    0 | b   | 473386488 |    1 |    0 |
+|    0 | a,b | 473386488 |    1 |    0 |
+|    0 | b,c | 473386488 |    1 |    0 |
++------+-----+-----------+------+------+
+
+单表：
+<derived2>       ALL
+  single_data    ALL
+
+多表：
+<derived2>       ALL
+  <derived3>     ALL
+    l            ALL
+    r            hash_ALL  #hash#PRIMARY
+
+    执行计划显示 MariaDB 将谓词同时下推到派生表内部：
+DERIVED ... WHERE
+  (LPAD(... CAST(l.c0 AS CHAR) ...)
+   IN (l.c0, '2001:db8::9504') XOR l.c0)
+之后外层又对派生表结果重新应用同一谓词。单表或直接 l JOIN r 查询返回 7 行，但下推到 JOIN 内部后，c0=0 的 4 行被错误过滤，只剩 c0=1 的 3 行。

@@ -1,0 +1,84 @@
+DROP DATABASE IF EXISTS repro_databend917_db17_min;
+CREATE DATABASE repro_databend917_db17_min;
+USE repro_databend917_db17_min;
+
+SET enable_query_result_cache = 0;
+
+CREATE TABLE source (
+    vp_rowid BIGINT NOT NULL,
+    c0varchar VARCHAR NULL
+) ENGINE=FUSE;
+
+CREATE TABLE l (
+    vp_rowid BIGINT NOT NULL
+) ENGINE=FUSE;
+
+CREATE TABLE r (
+    vp_rowid BIGINT NOT NULL,
+    c0varchar VARCHAR NULL
+) ENGINE=MEMORY;
+
+INSERT INTO source VALUES (1, ''), (2, 'a');
+INSERT INTO l SELECT vp_rowid FROM source;
+INSERT INTO r SELECT * FROM source;
+
+CREATE VIEW v AS
+SELECT l.vp_rowid, r.c0varchar
+FROM l JOIN r ON l.vp_rowid = r.vp_rowid;
+
+-- 单表：实际返回 0.0
+SELECT STDDEV_POP(vp_rowid)
+FROM source
+WHERE '' LIKE c0varchar;
+
+-- VIEW 多表：实际返回 0.5
+SELECT STDDEV_POP(vp_rowid)
+FROM v
+WHERE '' LIKE c0varchar;
+
+实测结果：
+查询	STDDEV_POP(vp_rowid)
+单表	0.0
+VIEW 多表	0.5
+
+单表：
+AggregateFinal
+├── aggregate functions: [stddev_pop(vp_rowid)]
+└── AggregatePartial
+    ├── aggregate functions: [stddev_pop(vp_rowid)]
+    └── TableScan
+        ├── table: repro_databend917_db17_min.source
+        ├── output columns: [vp_rowid]
+        ├── read rows: 2
+        ├── partitions total: 1
+        ├── partitions scanned: 1
+        └── push downs:
+            [is_true(like('', source.c0varchar))]
+VIEW 多表：
+AggregateFinal
+├── aggregate functions: [stddev_pop(vp_rowid)]
+└── AggregatePartial
+    ├── aggregate functions: [stddev_pop(vp_rowid)]
+    └── HashJoin
+        ├── join type: INNER
+        ├── build keys: [r.vp_rowid]
+        ├── probe keys: [l.vp_rowid]
+        ├── filters: []
+        ├── Filter(Build)
+        │   ├── filters: [is_true(like('', r.c0varchar))]
+        │   └── TableScan
+        │       ├── table: repro_databend917_db17_min.r
+        │       ├── output columns: [vp_rowid, c0varchar]
+        │       ├── read rows: 2
+        │       ├── partitions total: 0
+        │       ├── partitions scanned: 0
+        │       └── push downs:
+        │           [is_true(like('', r.c0varchar))]
+        └── TableScan(Probe)
+            ├── table: repro_databend917_db17_min.l
+            ├── output columns: [vp_rowid]
+            ├── read rows: 2
+            ├── partitions total: 1
+            ├── partitions scanned: 1
+            ├── push downs: [filters: []]
+            └── apply join filters: [#0]

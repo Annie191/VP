@@ -1,0 +1,17 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120721.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 原表：空结果\nSELECT 0.4034060568939616 AS ref0\nFROM src\nWHERE COALESCE(NULL,0.026605629777798234) IN (c1)\nORDER BY id",
+      "ok": true,
+      "rows": [],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "-- 原表：空结果\nSELECT 0.4034060568939616 AS ref0\nFROM src\nWHERE COALESCE(NULL,0.026605629777798234) IN (c1)\nORDER BY id;",
+  "skip_reason": "ORDER BY is not handled by this batch rewriter"
+}

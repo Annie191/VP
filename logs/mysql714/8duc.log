@@ -1,0 +1,76 @@
+https://bugs.mysql.com/bug.php?id=120981&thanks=4 
+This is a duplicate of the Bug#120429 which is fixed in the upcoming 9.7 LTS release.
+
+DROP DATABASE IF EXISTS repro_mysql714_db8;
+CREATE DATABASE repro_mysql714_db8;
+USE repro_mysql714_db8;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+SET SESSION big_tables = 1;
+
+CREATE TABLE vp_s (
+    vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    c0       DECIMAL(65, 30) NULL
+) ENGINE = InnoDB;
+
+INSERT INTO vp_s (c0) VALUES (NULL), (0), (0), (1);
+
+ALTER TABLE vp_s ADD KEY i0 (c0 DESC);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 DECIMAL(65,30) NULL) ENGINE = InnoDB;
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 DECIMAL(65,30) NULL) ENGINE = InnoDB;
+
+INSERT INTO vp_l SELECT vp_rowid, c0 FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c0 FROM vp_s;
+
+CREATE INDEX l_idx ON vp_l(c0);
+
+-- 单表查询（covering index → IFNULL 正确 → c0=0 的行通过）
+SELECT COUNT(*) FROM vp_s
+WHERE 1 NOT IN (IFNULL(NULL, vp_s.c0), CAST('abc' AS SIGNED));
+
+-- STRAIGHT_JOIN 多表查询（JOIN 路径 → IFNULL 损坏 → 全部过滤）
+SELECT COUNT(*) FROM (
+    SELECT l.vp_rowid, l.c0
+    FROM vp_l l STRAIGHT_JOIN vp_r r ON l.vp_rowid = r.vp_rowid
+) t
+WHERE 1 NOT IN (IFNULL(NULL, t.c0), CAST('abc' AS SIGNED));
+
+=== 单表 ===
+|        2 |          ← c0=0 的两行通过（1 NOT IN (0, 0) = TRUE）
+
+=== STRAIGHT_JOIN ===
+|        0 |          ← 全部被过滤（IFNULL 损坏 → NOT IN 均得 NULL）
+
+执行计划
+单表：
+
+-> Aggregate: count(0)
+    -> Filter: (1 not in (ifnull(NULL,c0),<cache>(cast('abc' as signed))))
+        -> Covering index scan on vp_s using i0 (c0 DESC)
+
+STRAIGHT_JOIN：
+
+-> Aggregate: count(0)
+    -> Nested loop inner join
+        -> Filter: (1 not in (ifnull(NULL,l.c0),<cache>(cast('abc' as signed))))
+            -> Covering index scan on l using l_idx (c0)
+        -> Single-row covering index lookup on r using PRIMARY
+
+多表执行计划的差异
+
+单表使用了 c0 DESC 降序索引（i0）进行覆盖索引扫描。
+
+多表 STRAIGHT_JOIN 中，驱动表 l 使用了升序索引（l_idx）进行覆盖索引扫描，并在扫描后立即应用过滤条件。
+执行计划显示 Filter: (1 not in (ifnull(NULL,l.c0),<cache>(cast('abc' as signed)))) 直接作用于索引扫描的输出。
+
+Bug 触发的关键点
+在多表查询的嵌套循环连接中，IFNULL(NULL, l.c0) 表达式被错误求值，始终返回 NULL，而不是 l.c0 的真实值。结果 NOT IN 列表变为 (NULL, 0)，对于任何输入行，1 NOT IN (NULL, 0) 的结果都是 NULL（未知），从而所有行被过滤。
+
+内部原因推测
+
+
+索引列读取缺陷：当 IFNULL 的第二个参数是一个来自覆盖索引扫描的列时，执行器可能没有正确提取其值（例如，内部 NULL 标记被误传），导致函数返回 NULL。单表使用降序索引可能恰好避开了这一代码路径（降序索引在内部对 NULL 做了特殊编码/解码，反而让值的传递正确）。
+

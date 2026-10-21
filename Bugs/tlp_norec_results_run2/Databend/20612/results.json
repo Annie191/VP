@@ -1,0 +1,21 @@
+{
+  "database": "Databend",
+  "source": "/home/lwm/sqlancer/Bugs/Databend/20612.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 单表基准查询。\nSELECT vp_rowid\nFROM vp_source\nORDER BY vp_rowid\nLIMIT 3",
+      "ok": true,
+      "rows": [
+        "1",
+        "2",
+        "3"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 14,
+  "target_query": "-- 单表基准查询。\nSELECT vp_rowid\nFROM vp_source\nORDER BY vp_rowid\nLIMIT 3;",
+  "skip_reason": "ORDER BY is not handled by this batch rewriter"
+}

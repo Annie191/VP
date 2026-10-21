@@ -1,0 +1,72 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120975.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "-- 单表（优化器常量评估 → Impossible WHERE → 0 行）\nSELECT EXISTS (SELECT 1) AS ref0 FROM vp_s\nWHERE (vp_s.c0) IN (IFNULL(0.7957106135922298, 'nK'))",
+      "ok": true,
+      "rows": [],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s",
+      "ok": true,
+      "rows": [
+        "1",
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) UNION ALL /* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE NOT (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) UNION ALL /* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) IS NULL",
+      "ok": true,
+      "rows": [
+        "1",
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT COUNT(*) FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK'))",
+      "ok": true,
+      "rows": [
+        "0"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT SUM(CASE WHEN (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) THEN 1 ELSE NULL END) FROM vp_s",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 13,
+  "target_query": "-- 单表（优化器常量评估 → Impossible WHERE → 0 行）\nSELECT EXISTS (SELECT 1) AS ref0 FROM vp_s\nWHERE (vp_s.c0) IN (IFNULL(0.7957106135922298, 'nK'));",
+  "variants": {
+    "tlp_base": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s",
+    "tlp_part_true": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK'))",
+    "tlp_part_false": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE NOT (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK'))",
+    "tlp_part_unknown": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) IS NULL",
+    "tlp_union": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) UNION ALL /* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE NOT (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) UNION ALL /* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT EXISTS(SELECT 1) AS ref0 FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) IS NULL",
+    "norec_optimized": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT COUNT(*) FROM vp_s WHERE (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK'))",
+    "norec_unoptimized": "/* 单表（优化器常量评估 → Impossible WHERE → 0 行） */ SELECT SUM(CASE WHEN (vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK')) THEN 1 ELSE NULL END) FROM vp_s",
+    "predicate": "(vp_s.c0) IN (COALESCE(0.7957106135922298, 'nK'))"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": false,
+  "norec_checked": true,
+  "norec_inconsistent": false,
+  "notes": [
+    "NoREC comparison normalizes empty aggregate NULL to 0."
+  ]
+}

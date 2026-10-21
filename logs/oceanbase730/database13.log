@@ -1,0 +1,436 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: OCEANBASE_MYSQL_RANDOM_TABLE_REWRITE
+--Strategy summary: split=OVERLAPPED_SPLIT, reconstruction=CTE, shape=MULTI_COLUMN, prefix=vp_database13_130_
+--Strategy counts: split={EMPTY_SPLIT=0, SINGLE_REPLICATED=24, SINGLE_RIGHT_ROW_ID_ONLY=23, SINGLE_LEFT_ROW_ID_ONLY=22, EVEN_SPLIT=16, OVERLAPPED_SPLIT=17, SKEWED_SPLIT=16, TYPE_DIRECTED_SPLIT=14}, reconstruction={JOIN=826, LEFT_RIGHT_JOIN=835, FULL_OUTER_SIMULATION=862, SCALAR_SUBQUERY=838, EXISTS_FILTER=859, IN_FILTER=855, NOT_EXISTS_ANTI=860, DERIVED_TABLE=850, CTE=853, VIEW=852, TEMP_TABLE=835, AGGREGATE_THEN_MERGE=840, ROW_NUMBER_ALIGNMENT=881, JSON_PACK=863, STRING_PACK=835, NATURAL_OR_USING=854, STRAIGHT_JOIN=875, LATERAL_DERIVED=842}
+--Database: database13
+--OceanBase version: 5.7.25-OceanBase_CE-v4.4.2.1
+--OceanBase VP capabilities: engineClause=true, createIndex=true, temporaryTable=true, foreignKey=true, checkConstraint=true, rollup=true, windowFunction=true, jsonObject=true, groupConcat=true, lateralDerived=true, hashPartition=true, columnGroup=true, columnGroupAll=true, columnGroupEach=true, columnGroupAllEach=true, columnStoreReadHint=true, columnStoreReadHintAll=false, columnStoreReadHintEach=true, columnStoreReadHintAllEach=true, collations=[utf8mb4_bin, utf8mb4_general_ci, utf8mb4_0900_ai_ci], sessionVariables={sql_mode=true, time_zone=true, sql_auto_is_null=true, character_set_connection=true, collation_connection=true, group_concat_max_len=true, tmp_table_size=true, max_heap_table_size=true, join_buffer_size=true, sort_buffer_size=true, read_buffer_size=true, read_rnd_buffer_size=true, optimizer_switch=true, ob_enable_aggregation_pushdown=true, unique_checks=true, foreign_key_checks=true}
+--VP pushdown mode: neutralize
+--OB storage profile: default
+--OB storage phase: DEFAULT
+--OB partition profile: hash
+--OB partition count: 8
+--OB parallel degree: 4
+--OB column store profile: none
+--OB column store source hint: 
+--OB column store split inner hint: 
+--OB SQL semantics profile: fuzz
+--OB SQL semantics selected: name=pipes-collation-utf8mb4_0900_ai_ci, sqlMode=PIPES_AS_CONCAT, characterSetConnection=utf8mb4, collationConnection=utf8mb4_0900_ai_ci
+--Base table: t1
+--Base table DDL: CREATE TABLE `t1` (
+--  `c0` decimal(10,0) DEFAULT NULL,
+--  `c1` bigint(56) DEFAULT NULL COMMENT 'asdf'
+--) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+-- partition by key(`c0`)
+--(partition `p0`)
+--Base table engine: InnoDB
+--VP source engine: InnoDB
+--VP left engine: InnoDB
+--VP right engine: InnoDB
+--Base row count: 23
+--Base shape: MULTI_COLUMN
+--Stable row order: `c0`, `c1`
+--Prefix: vp_database13_130_
+--Split strategy: OVERLAPPED_SPLIT
+--Left columns: c0, c1
+--Right columns: c1
+--Overlap columns: c1
+--Physical foreign key: false
+--Reconstruction strategy: CTE
+--Description: shape=MULTI_COLUMN, split=OVERLAPPED_SPLIT, reconstruction=CTE
+--Session vars: sql_mode=PIPES_AS_CONCAT, time_zone=+00:00, optimizer_switch=, ob_enable_aggregation_pushdown=0, character_set_connection=utf8mb4, collation_connection=utf8mb4_0900_ai_ci, group_concat_max_len=1048576
+--Session SET statements:
+--SET SESSION sql_mode = 'PIPES_AS_CONCAT';
+--SET SESSION time_zone = '+00:00';
+--SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+--SET SESSION optimizer_switch = '';
+--SET SESSION ob_enable_aggregation_pushdown = 0;
+--SET SESSION group_concat_max_len = 1048576;
+--Setup statements:
+--CREATE TABLE `vp_database13_130_source` (`vp_rowid` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, `c0` DECIMAL(65,30) NULL, `c1` BIGINT NULL) ENGINE=InnoDB PARTITION BY HASH(`vp_rowid`) PARTITIONS 8;
+--INSERT INTO `vp_database13_130_source` (`c0`, `c1`) SELECT `c0`, `c1` FROM `t1` ORDER BY `c0`, `c1` LIMIT 256;
+--CREATE TABLE `vp_database13_130_l` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` DECIMAL(65,30) NULL, `c1` BIGINT NULL) ENGINE=InnoDB PARTITION BY HASH(`vp_rowid`) PARTITIONS 8;
+--CREATE TABLE `vp_database13_130_r` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c1` BIGINT NULL) ENGINE=InnoDB PARTITION BY HASH(`vp_rowid`) PARTITIONS 8;
+--INSERT INTO `vp_database13_130_l` (`vp_rowid`, `c0`, `c1`) SELECT `vp_rowid`, `c0`, `c1` FROM `vp_database13_130_source`;
+--INSERT INTO `vp_database13_130_r` (`vp_rowid`, `c1`) SELECT `vp_rowid`, `c1` FROM `vp_database13_130_source`;
+--CREATE INDEX `vp_database13_130_src_asym_2118443238` ON `vp_database13_130_source`(`c0`, `vp_rowid`);
+--CREATE INDEX `vp_database13_130_r_asym_2053061569` ON `vp_database13_130_r`(`c1`, `vp_rowid`);
+--CREATE INDEX `vp_database13_130_idx_src_68430630` ON `vp_database13_130_source`(`vp_rowid`, `c1`);
+--CREATE INDEX `vp_database13_130_idx_l_297400660` ON `vp_database13_130_l`(`vp_rowid`, `c1`, `c0`);
+--VP source snapshot:
+--SELECT `vp_rowid`, `c0`, `c1` FROM `vp_database13_130_source` ORDER BY `vp_rowid`;
+--[vp_rowid=1, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=2, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=3, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=4, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=5, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=6, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=7, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=8, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=9, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=10, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=11, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=12, c0=-338707012.000000000000000000000000000000, c1=-1]
+--VP left snapshot:
+--SELECT `vp_rowid`, `c0`, `c1` FROM `vp_database13_130_l` ORDER BY `vp_rowid`;
+--[vp_rowid=1, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=2, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=3, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=4, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=5, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=6, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=7, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=8, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=9, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=10, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=11, c0=-338707012.000000000000000000000000000000, c1=-1]
+--[vp_rowid=12, c0=-338707012.000000000000000000000000000000, c1=-1]
+--VP right snapshot:
+--SELECT `vp_rowid`, `c1` FROM `vp_database13_130_r` ORDER BY `vp_rowid`;
+--[vp_rowid=1, c1=-1]
+--[vp_rowid=2, c1=-1]
+--[vp_rowid=3, c1=-1]
+--[vp_rowid=4, c1=-1]
+--[vp_rowid=5, c1=-1]
+--[vp_rowid=6, c1=-1]
+--[vp_rowid=7, c1=-1]
+--[vp_rowid=8, c1=-1]
+--[vp_rowid=9, c1=-1]
+--[vp_rowid=10, c1=-1]
+--[vp_rowid=11, c1=-1]
+--[vp_rowid=12, c1=-1]
+--Single query: SELECT /*+ PARALLEL(4) */ ALL IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0)) FROM `vp_database13_130_source` GROUP BY IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0)) WITH ROLLUP ORDER BY IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0))
+--Split query: SELECT /*+ PARALLEL(4) */ ALL IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0)) FROM (WITH l AS (SELECT * FROM `vp_database13_130_l`), r AS (SELECT * FROM `vp_database13_130_r`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM l JOIN r ON l.`vp_rowid` = r.`vp_rowid`) `vp_database13_130_source` GROUP BY IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0)) WITH ROLLUP ORDER BY IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0))
+--Pushdown aggregation labels: single=absent, split=absent
+--Single query plan:
+--EXPLAIN SELECT /*+ PARALLEL(4) */ ALL IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0)) FROM `vp_database13_130_source` GROUP BY IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0)) WITH ROLLUP ORDER BY IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0));
+--[Query Plan===============================================================================================================================]
+--[Query Plan=|ID|OPERATOR                           |NAME                                                           |EST.ROWS|EST.TIME(us)|]
+--[Query Plan=------------------------------------------------------------------------------------------------------------------------------]
+--[Query Plan=|0 |PX COORDINATOR MERGE SORT          |                                                               |23      |50          |]
+--[Query Plan=|1 |└─EXCHANGE OUT DISTR               |:EX10001                                                       |23      |37          |]
+--[Query Plan=|2 |  └─SORT                           |                                                               |23      |30          |]
+--[Query Plan=|3 |    └─HASH GROUP BY                |                                                               |23      |29          |]
+--[Query Plan=|4 |      └─EXCHANGE IN DISTR          |                                                               |46      |26          |]
+--[Query Plan=|5 |        └─EXCHANGE OUT DISTR (HASH)|:EX10000                                                       |46      |20          |]
+--[Query Plan=|6 |          └─EXPANSION              |                                                               |46      |5           |]
+--[Query Plan=|7 |            └─PX BLOCK ITERATOR    |                                                               |23      |5           |]
+--[Query Plan=|8 |              └─TABLE FULL SCAN    |vp_database13_130_source(vp_database13_130_src_asym_2118443238)|23      |5           |]
+--[Query Plan===============================================================================================================================]
+--[Query Plan=Outputs & filters:]
+--[Query Plan=-------------------------------------]
+--[Query Plan=  0 - output([INTERNAL_FUNCTION(IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0,]
+--[Query Plan=       DECIMAL_INT(81, 30))))]), filter(nil), rowset=256]
+--[Query Plan=      sort_keys([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30))), ASC])]
+--[Query Plan=  1 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [INTERNAL_FUNCTION(IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0,]
+--[Query Plan=       DECIMAL_INT(81, 30))))]), filter(nil), rowset=256]
+--[Query Plan=      dop=4]
+--[Query Plan=  2 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0)], [vp_database13_130_source.c0]), filter(nil), rowset=256]
+--[Query Plan=      sort_keys([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30))), ASC])]
+--[Query Plan=  3 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0)], [vp_database13_130_source.c0]), filter(nil), rowset=256]
+--[Query Plan=      group([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GROUPING_ID]), agg_func(nil)]
+--[Query Plan=  4 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0)], [vp_database13_130_source.c0], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=  5 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0)], [vp_database13_130_source.c0], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=      (#keys=2, [IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GROUPING_ID]), dop=4]
+--[Query Plan=  6 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0)], [vp_database13_130_source.c0], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=      repeat(2)[(NULL),(IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0,]
+--[Query Plan=       DECIMAL_INT(81, 30))))]]
+--[Query Plan=  7 - output([vp_database13_130_source.vp_rowid], [vp_database13_130_source.c0]), filter(nil), rowset=256]
+--[Query Plan=  8 - output([vp_database13_130_source.vp_rowid], [vp_database13_130_source.c0]), filter(nil), rowset=256]
+--[Query Plan=      access([vp_database13_130_source.vp_rowid], [vp_database13_130_source.c0]), partitions(p[0-7])]
+--[Query Plan=      is_index_back=false, is_global_index=false, ]
+--[Query Plan=      range_key([vp_database13_130_source.c0], [vp_database13_130_source.vp_rowid]), range(MIN,MIN ; MAX,MAX)always true]
+--Split query plan:
+--EXPLAIN SELECT /*+ PARALLEL(4) */ ALL IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0)) FROM (WITH l AS (SELECT * FROM `vp_database13_130_l`), r AS (SELECT * FROM `vp_database13_130_r`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM l JOIN r ON l.`vp_rowid` = r.`vp_rowid`) `vp_database13_130_source` GROUP BY IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0)) WITH ROLLUP ORDER BY IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), (-4.4622653E7) && (vp_database13_130_source.c0));
+--[Query Plan========================================================================================================================]
+--[Query Plan=|ID|OPERATOR                             |NAME                                                  |EST.ROWS|EST.TIME(us)|]
+--[Query Plan=-----------------------------------------------------------------------------------------------------------------------]
+--[Query Plan=|0 |PX COORDINATOR MERGE SORT            |                                                      |23      |55          |]
+--[Query Plan=|1 |└─EXCHANGE OUT DISTR                 |:EX10001                                              |23      |42          |]
+--[Query Plan=|2 |  └─SORT                             |                                                      |23      |34          |]
+--[Query Plan=|3 |    └─HASH GROUP BY                  |                                                      |23      |33          |]
+--[Query Plan=|4 |      └─EXCHANGE IN DISTR            |                                                      |46      |31          |]
+--[Query Plan=|5 |        └─EXCHANGE OUT DISTR (HASH)  |:EX10000                                              |46      |24          |]
+--[Query Plan=|6 |          └─EXPANSION                |                                                      |46      |10          |]
+--[Query Plan=|7 |            └─SUBPLAN SCAN           |vp_database13_130_source                              |23      |10          |]
+--[Query Plan=|8 |              └─PX PARTITION ITERATOR|                                                      |23      |10          |]
+--[Query Plan=|9 |                └─MERGE JOIN         |                                                      |23      |10          |]
+--[Query Plan=|10|                  ├─TABLE FULL SCAN  |vp_database13_130_r                                   |23      |5           |]
+--[Query Plan=|11|                  └─TABLE FULL SCAN  |vp_database13_130_l(vp_database13_130_idx_l_297400660)|23      |5           |]
+--[Query Plan========================================================================================================================]
+--[Query Plan=Outputs & filters:]
+--[Query Plan=-------------------------------------]
+--[Query Plan=  0 - output([INTERNAL_FUNCTION(IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0,]
+--[Query Plan=       DECIMAL_INT(81, 30))))]), filter(nil), rowset=256]
+--[Query Plan=      sort_keys([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30))), ASC])]
+--[Query Plan=  1 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [INTERNAL_FUNCTION(IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0,]
+--[Query Plan=       DECIMAL_INT(81, 30))))]), filter(nil), rowset=256]
+--[Query Plan=      dop=4]
+--[Query Plan=  2 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0)], [vp_database13_130_source.c0]), filter(nil), rowset=256]
+--[Query Plan=      sort_keys([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30))), ASC])]
+--[Query Plan=  3 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0)], [vp_database13_130_source.c0]), filter(nil), rowset=256]
+--[Query Plan=      group([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GROUPING_ID]), agg_func(nil)]
+--[Query Plan=  4 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0)], [vp_database13_130_source.c0], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=  5 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0)], [vp_database13_130_source.c0], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=      (#keys=2, [IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GROUPING_ID]), dop=4]
+--[Query Plan=  6 - output([IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0, DECIMAL_INT(81,]
+--[Query Plan=       30)))], [GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0)], [vp_database13_130_source.c0], [GROUPING_ID]), filter(nil), rowset=256]
+--[Query Plan=      repeat(2)[(NULL),(IFNULL(GREATEST(vp_database13_130_source.vp_rowid, vp_database13_130_source.c0), cast(-44622653 AND vp_database13_130_source.c0,]
+--[Query Plan=       DECIMAL_INT(81, 30))))]]
+--[Query Plan=  7 - output([vp_database13_130_source.vp_rowid], [vp_database13_130_source.c0]), filter(nil), rowset=256]
+--[Query Plan=      access([vp_database13_130_source.vp_rowid], [vp_database13_130_source.c0])]
+--[Query Plan=  8 - output([vp_database13_130_l.vp_rowid], [vp_database13_130_l.c0]), filter(nil), rowset=256]
+--[Query Plan=      partition wise, force partition granule]
+--[Query Plan=  9 - output([vp_database13_130_l.vp_rowid], [vp_database13_130_l.c0]), filter(nil), rowset=256]
+--[Query Plan=      equal_conds([vp_database13_130_l.vp_rowid = vp_database13_130_r.vp_rowid]), other_conds(nil)]
+--[Query Plan=      merge_directions([ASC])]
+--[Query Plan= 10 - output([vp_database13_130_r.vp_rowid]), filter(nil), rowset=256]
+--[Query Plan=      access([vp_database13_130_r.vp_rowid]), partitions(p[0-7])]
+--[Query Plan=      is_index_back=false, is_global_index=false, ]
+--[Query Plan=      range_key([vp_database13_130_r.vp_rowid]), range(MIN ; MAX)always true]
+--[Query Plan= 11 - output([vp_database13_130_l.vp_rowid], [vp_database13_130_l.c0]), filter(nil), rowset=256]
+--[Query Plan=      access([vp_database13_130_l.vp_rowid], [vp_database13_130_l.c0]), partitions(p[0-7])]
+--[Query Plan=      is_index_back=false, is_global_index=false, ]
+--[Query Plan=      range_key([vp_database13_130_l.vp_rowid], [vp_database13_130_l.c1], [vp_database13_130_l.c0]), range(MIN,MIN,MIN ; MAX,MAX,MAX)always true]
+--Single result sample: S:1:1; x2, S:1:2; x1, S:1:3; x1, S:1:4; x1, S:1:5; x1, S:1:6; x1, S:1:7; x1, S:1:8; x1, S:1:9; x1, S:2:10; x1, S:2:11; x1, S:2:12; x1
+--Split result sample: S:1:8; x2, S:1:1; x1, S:1:2; x1, S:1:3; x1, S:1:4; x1, S:1:5; x1, S:1:6; x1, S:1:7; x1, S:1:9; x1, S:2:10; x1, S:2:11; x1, S:2:12; x1
+--Only in single: S:1:1; x1
+--Only in split: S:1:8; x1
+--
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.comparePair(OceanBaseVerticalPartitioningOracle.java:2334)
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.comparePair(OceanBaseVerticalPartitioningOracle.java:2295)
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.checkSplitWithDefaultStorageProfile(OceanBaseVerticalPartitioningOracle.java:527)
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.check(OceanBaseVerticalPartitioningOracle.java:503)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:479)
+--	at sqlancer.Main$2.run(Main.java:696)
+--	at sqlancer.Main$2.runThread(Main.java:678)
+--	at sqlancer.Main$2.run(Main.java:669)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/07/30 07:48:54
+-- Database: database13
+-- Database version: 5.7.25
+-- seed value: 1785395468106
+DROP DATABASE IF EXISTS database13;
+CREATE DATABASE database13;
+USE database13;
+CREATE TABLE t0(c0 FLOAT(41, 22)  , c1 VARCHAR(500)  COMMENT 'asdf'  , c2 MEDIUMINT(7)  COMMENT 'asdf'   NULL UNIQUE, c3 VARCHAR(500) )  PARTITION BY KEY (c2, c0);
+CREATE TABLE IF NOT EXISTS t0(c0 VARCHAR(500)  COMMENT 'asdf' )  PARTITION BY KEY (c0);
+INSERT INTO `t0`(`c0`) VALUES ("");
+REPLACE INTO `t0`(`c0`) VALUES ('');
+INSERT INTO `t0`(`c0`) VALUES ("");
+REPLACE INTO `t0`(`c0`) VALUES ('ß');
+INSERT INTO `t0`(`c0`) VALUES ("Jm3");
+REPLACE INTO `t0`(`c0`) VALUES ('檛<');
+REPLACE INTO `t0`(`c0`) VALUES ("745237147");
+INSERT INTO `t0`(`c0`) VALUES (' ');
+REPLACE INTO `t0`(`c0`) VALUES ('2038-01-19');
+INSERT INTO `t0`(`c0`) VALUES ('L)U');
+INSERT INTO `t0`(`c0`) VALUES ('AaBbCc');
+INSERT INTO `t0`(`c0`) VALUES ('9999-12-31');
+INSERT INTO `t0`(`c0`) VALUES ('745237147');
+REPLACE INTO `t0`(`c0`) VALUES ('');
+REPLACE INTO `t0`(`c0`) VALUES ('*V');
+REPLACE INTO `t0`(`c0`) VALUES ('745237147');
+REPLACE INTO `t0`(`c0`) VALUES ("");
+CHECKSUM TABLE `t0`;
+ANALYZE TABLE `t0`;
+REPAIR TABLE `t0` QUICK EXTENDED USE_FRM;
+REPLACE INTO `t0`(`c0`) VALUES ('变');
+CHECKSUM TABLE `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+UPDATE `t0` SET `c0`='é';
+REPAIR TABLE `t0` QUICK USE_FRM;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0`;
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+OPTIMIZE TABLE `t0`;
+UPDATE `t0` SET `c0`='1e309';
+UPDATE `t0` SET `c0`=(CAST((t0.c0) && (NULL) AS SIGNED)) IN (((NULL) IN (t0.c0, '|m9', 745237147)) IN (-1616218074));
+INSERT INTO `t0`(`c0`) VALUES ('-0');
+CHECKSUM TABLE `t0`;
+CHECKSUM TABLE `t0`;
+CHECKSUM TABLE `t0` QUICK;
+REPLACE INTO `t0`(`c0`) VALUES ('é');
+UPDATE `t0` SET `c0`=(((t0.c0) >= (t0.c0)) = ((0.727296034625866) IS NOT FALSE)) IS UNKNOWN;
+INSERT INTO `t0`(`c0`) VALUES ('L)U');
+ANALYZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+CREATE TABLE IF NOT EXISTS t1(c0 DECIMAL , c1 BIGINT(56)   COMMENT 'asdf'  )  PARTITION BY KEY (c0);
+REPLACE INTO `t1`(`c0`) VALUES (-1);
+REPLACE INTO `t1`(`c0`) VALUES (-1.616218074E9);
+INSERT INTO `t1`(`c1`) VALUES (-2147483648);
+INSERT INTO `t1`(`c1`, `c0`) VALUES (-1616218074, 0.3910587636440057);
+INSERT INTO `t1`(`c0`) VALUES (0.727296034625866);
+REPLACE INTO `t1`(`c0`, `c1`) VALUES (0.5514561500575578, 1317098316);
+REPLACE INTO `t1`(`c1`) VALUES (-338707012);
+REPLACE INTO `t1`(`c1`) VALUES (-338207306);
+REPLACE INTO `t1`(`c1`) VALUES (1317098316);
+INSERT INTO `t1`(`c0`, `c1`) VALUES (-1, -2147483648);
+INSERT INTO `t1`(`c1`) VALUES (-1);
+REPLACE INTO `t1`(`c0`, `c1`) VALUES (0.3768266500947647, -1616218074);
+INSERT INTO `t1`(`c0`, `c1`) VALUES (0.3768266500947647, -1616218074);
+REPLACE INTO `t1`(`c0`, `c1`) VALUES (0.11740129128289278, 9223372036854775807);
+INSERT INTO `t1`(`c0`, `c1`) VALUES (0.0000000001, -9223372036854775808);
+REPLACE INTO `t1`(`c0`, `c1`) VALUES (0.932053436902438, 1);
+ANALYZE TABLE `t1`;
+UPDATE `t1` SET `c1`=1 WHERE COALESCE(IF(NULL, t1.c0, t1.c0),  EXISTS (SELECT 1));
+INSERT INTO `t1`(`c1`, `c0`) VALUES (-174439043, 99999999999999999999.9999999999);
+REPAIR TABLE `t1` QUICK EXTENDED USE_FRM;
+OPTIMIZE TABLE `t1`;
+OPTIMIZE TABLE `t1`;
+CREATE INDEX i0 ON `t1`(`c1` ASC, `c0`);
+ANALYZE TABLE `t1`;
+DROP INDEX i0 ON `t1`;
+REPLACE INTO `t1`(`c1`) VALUES (-1);
+REPLACE INTO `t1`(`c1`) VALUES (-1616218074);
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+INSERT INTO `t1`(`c0`) VALUES (-1);
+UPDATE `t1` SET `c0`=0.0000000001, `c1`=-747152295;
+OPTIMIZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+UPDATE `t1` SET `c0`=CAST(IF('0.3768266500947647', -3.38707012E8, t1.c1) AS SIGNED), `c1`=-1 WHERE 0.38889354153251676;
+CREATE INDEX i84 ON `t1`(`c1` DESC);
+OPTIMIZE TABLE `t1`;
+REPAIR TABLE `t1`;
+DROP INDEX i84 ON `t1`;
+ANALYZE TABLE `t1`;
+INSERT INTO `t1`(`c1`, `c0`) VALUES (455955296, -99999999999999999999.9999999999);
+INSERT INTO `t1`(`c0`, `c1`) VALUES (0.07229071571644186, 9223372036854775807);
+INSERT INTO `t1`(`c1`, `c0`) VALUES (2147483647, 0.0000000001);
+OPTIMIZE TABLE `t1`;
+INSERT INTO `t1`(`c0`, `c1`) VALUES (-99999999999999999999.9999999999, 344646435);
+INSERT INTO `t1`(`c0`, `c1`) VALUES (0.11740129128289278, 1450760682);
+REPAIR TABLE `t1` QUICK;
+UPDATE `t1` SET `c0`=-1 WHERE NULL;
+REPAIR TABLE `t1` QUICK;
+INSERT INTO `t1`(`c1`, `c0`) VALUES (-44622653, -4.4622653E7);
+CREATE TABLE IF NOT EXISTS t2(c0 DECIMAL(50, 21) UNSIGNED )  PARTITION BY HASH(c0) partitions 6;
+CREATE TABLE t2(c0 VARCHAR(500)  COMMENT 'asdf' , c1 DOUBLE  COMMENT 'asdf'  UNIQUE NULL )  PARTITION BY KEY (c1);
+REPLACE INTO `t2`(`c1`, `c0`) VALUES (-0.0, "-342935977");
+REPLACE INTO `t2`(`c1`, `c0`) VALUES (0.7474823434654033, 'Bq');
+INSERT INTO `t2`(`c1`, `c0`) VALUES (0.6641757061055518, '2024-02-29');
+REPLACE INTO `t2`(`c1`) VALUES (1e308);
+INSERT INTO `t2`(`c1`) VALUES (-1e308);
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ("6", 2.057477025E9);
+REPLACE INTO `t2`(`c1`) VALUES (0.7163092009895857);
+INSERT INTO `t2`(`c0`) VALUES ('2024-02-29');
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ('.\rE,', -3.38207306E8);
+REPLACE INTO `t2`(`c0`) VALUES ("");
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ("m'", 1.317098316E9);
+REPLACE INTO `t2`(`c0`) VALUES ('');
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ('2038-01-19', 0);
+INSERT INTO `t2`(`c0`) VALUES ('gV*IZ');
+INSERT INTO `t2`(`c0`) VALUES ('1976600374');
+INSERT INTO `t2`(`c0`, `c1`) VALUES ('00', 1e308);
+DROP INDEX c1 ON `t2`;
+UPDATE `t2` SET `c0`="5L7" WHERE 1801552452;
+CREATE INDEX i0 ON `t2`(`c1`);
+CREATE INDEX i1 ON `t2`(`c1` ASC);
+UPDATE `t2` SET `c1`=0.000000000000000000000000000001, `c0`="";
+CHECKSUM TABLE `t2` QUICK;
+DROP INDEX i1 ON `t2`;
+DROP INDEX i0 ON `t2`;
+UPDATE `t2` SET `c0`=((IF('', t2.c0, '')) IN ((t2.c0) IS TRUE)) IS FALSE, `c1`=t2.c0 WHERE (CAST((NOT (t2.c0)) AS SIGNED)) XOR ( EXISTS (SELECT 1));
+UPDATE `t2` SET `c1`=-0.0, `c0`='9999-12-31';
+INSERT INTO `t2`(`c1`, `c0`) VALUES (0.000000000000000000000000000001, 'L5럞');
+ANALYZE TABLE `t2`;
+REPAIR TABLE `t2` QUICK EXTENDED;
+OPTIMIZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+REPAIR TABLE `t2` QUICK EXTENDED USE_FRM;
+CHECKSUM TABLE `t2` QUICK;
+UPDATE `t2` SET `c1`=0, `c0`='é' WHERE  EXISTS (SELECT 1 from dual wHERE FALSE);
+CREATE INDEX i0 ON `t2`(`c1` ASC);
+CREATE INDEX i1 ON `t2`(`c1` DESC);
+CREATE INDEX i2 ON `t2`(`c1`);
+ANALYZE TABLE `t2`;
+CREATE INDEX i3 ON `t2`(`c1`);
+INSERT INTO `t2`(`c1`) VALUES (-1.167171611E9);
+DROP INDEX i1 ON `t2`;
+OPTIMIZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+REPAIR TABLE `t2`;
+REPLACE INTO `t2`(`c0`) VALUES ('2038-01-19');
+REPAIR TABLE `t2` QUICK;
+ANALYZE TABLE `t2`;
+REPLACE INTO `t2`(`c0`, `c1`) VALUES ('', 0.6145275846464171);
+INSERT INTO `t2`(`c0`) VALUES (",q)*#m");
+CREATE INDEX i1 ON `t2`(`c1` DESC);
+ANALYZE TABLE `t2`;
+DROP INDEX i2 ON `t2`;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE t0(c0 DECIMAL ZEROFILL  COMMENT 'asdf'  NULL )  PARTITION BY KEY (c0);
+INSERT INTO `t0`(`c0`) VALUES (-99999999999999999999.9999999999);
+INSERT INTO `t0`(`c0`) VALUES (99999999999999999999.9999999999);
+INSERT INTO `t0`(`c0`) VALUES (0.6768388927449089);
+INSERT INTO `t0`(`c0`) VALUES (0);
+INSERT INTO `t0`(`c0`) VALUES (0.22587562200956957);
+REPLACE INTO `t0`(`c0`) VALUES (0.932053436902438);
+INSERT INTO `t0`(`c0`) VALUES (0.7993398065215822);
+REPLACE INTO `t0`(`c0`) VALUES (0.6286126124472641);
+REPLACE INTO `t0`(`c0`) VALUES (1.823763399E9);
+INSERT INTO `t0`(`c0`) VALUES (0.000000000000000000000000000001);
+INSERT INTO `t0`(`c0`) VALUES (0.3850870319544871);
+INSERT INTO `t0`(`c0`) VALUES (0.9248897895792757);
+REPLACE INTO `t0`(`c0`) VALUES (0.33068325085350614);
+INSERT INTO `t0`(`c0`) VALUES (0);
+REPLACE INTO `t0`(`c0`) VALUES (0.0000000001);
+INSERT INTO `t0`(`c0`) VALUES (1.801552452E9);
+CREATE INDEX i2 ON `t0`(`c0`);
+UPDATE `t0` SET `c0`=0.9737806404360988 WHERE (((-7.47152295E8) NOT IN ('Ky')) || ("0.0")) IS TRUE;
+DROP INDEX i2 ON `t0`;
+OPTIMIZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+UPDATE `t0` SET `c0`=(((- (concat(t0.c0,'')))) = ((concat(t0.c0,'')) IN (concat(t0.c0,'')))) IN ((+ (IFNULL("", NULL)))) WHERE CAST((LEAST(concat(t0.c0,''), "鱱X.Kkm!|R", concat(t0.c0,''), concat(t0.c0,''))) IN ((concat(t0.c0,'')) IS NOT FALSE, 2045394602) AS SIGNED);
+REPAIR TABLE `t0` EXTENDED;
+CHECKSUM TABLE `t0` EXTENDED;
+REPAIR TABLE `t0` USE_FRM;
+REPLACE INTO `t0`(`c0`) VALUES (0.8116320855096454);
+REPLACE INTO `t0`(`c0`) VALUES (-1);
+UPDATE `t0` SET `c0`=(1839344392) > ( EXISTS (SELECT 1)) WHERE ((! ((concat(t0.c0,'')) OR (0.5428731892485369)))) AND (LEAST(0.03357224797617819, concat(t0.c0,''), 0.3026801583619052, concat(t0.c0,'')));
+UPDATE `t0` SET `c0`=-99999999999999999999.9999999999 WHERE  EXISTS (SELECT 1 from dual wHERE FALSE);
+UPDATE `t0` SET `c0`=-1;
+CREATE INDEX i2 ON `t0`(`c0`);
+REPLACE INTO `t0`(`c0`) VALUES (0.0000000001);
+CHECKSUM TABLE `t0` EXTENDED;
+ANALYZE TABLE `t0`;
+DROP INDEX i2 ON `t0`;
+UPDATE `t0` SET `c0`=99999999999999999999.9999999999;
+OPTIMIZE TABLE `t0`;
+CREATE INDEX i2 ON `t0`(`c0` ASC);
+CREATE INDEX i4 ON `t0`(`c0`);
+UPDATE `t0` SET `c0`=GREATEST((concat(t0.c0,'')) && (NULL), (concat(t0.c0,'')) != (-148760151), (- (concat(t0.c0,''))), (concat(t0.c0,'')) NOT IN (44325178, 0.16822609919106235));
+OPTIMIZE TABLE `t0`;
+DROP TABLE IF EXISTS `t2`;

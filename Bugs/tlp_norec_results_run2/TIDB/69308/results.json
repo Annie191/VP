@@ -1,0 +1,11 @@
+{
+  "database": "TIDB",
+  "source": "/home/lwm/sqlancer/Bugs/TIDB/69308.sql",
+  "status": "unavailable",
+  "errors": [
+    {
+      "stage": "probe",
+      "stderr": "ERROR 2003 (HY000): Can't connect to MySQL server on '127.0.0.1:4000' (111)\n"
+    }
+  ]
+}

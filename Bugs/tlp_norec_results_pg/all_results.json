@@ -1,0 +1,31 @@
+[
+  {
+    "database": "PostgreSQL",
+    "source": "/home/lwm/sqlancer/Bugs/PostgreSQL/19653.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- ============ ① 单表查询：正常执行 ============\nSELECT ARRAY['', '']::TEXT[] FROM m_src\nWHERE NOT (m_src.tsvec @@ m_src.tsq)\nGROUP BY ROLLUP (ARRAY['', '']::TEXT[])",
+        "ok": true,
+        "rows": [
+          "SET",
+          "SET",
+          "SET",
+          "SET",
+          "SET",
+          "SET",
+          "SET",
+          "SET",
+          "SET",
+          "",
+          "{\"\",\"\"}"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 21,
+    "target_query": "-- ============ ① 单表查询：正常执行 ============\nSELECT ARRAY['', '']::TEXT[] FROM m_src\nWHERE NOT (m_src.tsvec @@ m_src.tsq)\nGROUP BY ROLLUP (ARRAY['', '']::TEXT[]);",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  }
+]

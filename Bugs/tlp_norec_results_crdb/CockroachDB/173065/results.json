@@ -1,0 +1,81 @@
+{
+  "database": "CockroachDB",
+  "source": "/home/lwm/sqlancer/Bugs/CockroachDB/173065.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "SELECT 'single' AS shape, SQRDIFF(c1)\nFROM source",
+      "ok": true,
+      "rows": [
+        "SET",
+        "SET",
+        "single\t-1E+10"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source",
+      "ok": true,
+      "rows": [
+        "SET",
+        "SET",
+        "single\t-1E+10"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE UNION ALL SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE NOT TRUE UNION ALL SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE IS NULL",
+      "ok": true,
+      "rows": [
+        "SET",
+        "SET",
+        "single\t-1E+10",
+        "single\t",
+        "single\t"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "SELECT COUNT(*) FROM source",
+      "ok": true,
+      "rows": [
+        "SET",
+        "SET",
+        "11"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM source",
+      "ok": true,
+      "rows": [
+        "SET",
+        "SET",
+        "11"
+      ],
+      "stderr": "",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 17,
+  "target_query": "SELECT 'single' AS shape, SQRDIFF(c1)\nFROM source;",
+  "variants": {
+    "tlp_base": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source",
+    "tlp_part_true": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE",
+    "tlp_part_false": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE NOT TRUE",
+    "tlp_part_unknown": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE IS NULL",
+    "tlp_union": "SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE UNION ALL SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE NOT TRUE UNION ALL SELECT 'single' AS shape, SQRDIFF(c1) FROM source WHERE TRUE IS NULL",
+    "norec_optimized": "SELECT COUNT(*) FROM source",
+    "norec_unoptimized": "SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM source",
+    "predicate": "TRUE"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": true,
+  "norec_checked": true,
+  "norec_inconsistent": false
+}

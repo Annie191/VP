@@ -1,0 +1,72 @@
+{
+  "database": "Oceanbase",
+  "source": "/home/lwm/sqlancer/Bugs/Oceanbase/2411.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "-- 单表扫描（bug: 返回 4，正确应为 0）\nSELECT COUNT((NULL) != (id)) FROM vp_s",
+      "ok": true,
+      "rows": [
+        "4"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "/* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT((NULL) <> (id)) FROM vp_s",
+      "ok": true,
+      "rows": [
+        "4"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "SELECT SUM(agg0) FROM (/* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT((NULL) <> (id)) AS agg0 FROM vp_s WHERE TRUE UNION ALL /* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT((NULL) <> (id)) AS agg0 FROM vp_s WHERE NOT TRUE UNION ALL /* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT((NULL) <> (id)) AS agg0 FROM vp_s WHERE TRUE IS NULL) AS tlp_parts",
+      "ok": true,
+      "rows": [
+        "4"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "/* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT(*) FROM vp_s",
+      "ok": true,
+      "rows": [
+        "4"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "/* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM vp_s",
+      "ok": true,
+      "rows": [
+        "4"
+      ],
+      "stderr": "",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 10,
+  "target_query": "-- 单表扫描（bug: 返回 4，正确应为 0）\nSELECT COUNT((NULL) != (id)) FROM vp_s;",
+  "variants": {
+    "tlp_base": "/* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT((NULL) <> (id)) FROM vp_s",
+    "tlp_part_true": "/* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT((NULL) <> (id)) FROM vp_s WHERE TRUE",
+    "tlp_part_false": "/* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT((NULL) <> (id)) FROM vp_s WHERE NOT TRUE",
+    "tlp_part_unknown": "/* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT((NULL) <> (id)) FROM vp_s WHERE TRUE IS NULL",
+    "tlp_union": "SELECT SUM(agg0) FROM (/* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT((NULL) <> (id)) AS agg0 FROM vp_s WHERE TRUE UNION ALL /* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT((NULL) <> (id)) AS agg0 FROM vp_s WHERE NOT TRUE UNION ALL /* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT((NULL) <> (id)) AS agg0 FROM vp_s WHERE TRUE IS NULL) AS tlp_parts",
+    "norec_optimized": "/* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT COUNT(*) FROM vp_s",
+    "norec_unoptimized": "/* 单表扫描（bug: 返回 4，正确应为 0） */ SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM vp_s",
+    "predicate": "TRUE"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": false,
+  "norec_checked": true,
+  "norec_inconsistent": false,
+  "notes": [
+    "NoREC comparison normalizes empty aggregate NULL to 0."
+  ]
+}

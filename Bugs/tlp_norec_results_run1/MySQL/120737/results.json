@@ -1,0 +1,19 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120737.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT DISTINCT\n  'single' AS q,\n  COUNT((GREATEST(s.c0, '')) && (0.980680600517849)) AS ref0,\n  (+(((s.c1) IS FALSE) &&\n     ((CASE 0.03346139528957415 WHEN s.c0 THEN s.vp_rowid ELSE 1446123744 END)))) AS ref1,\n  SUM(DISTINCT CAST(s.c0 AS DECIMAL(65,30))) AS ref2\nFROM s\nGROUP BY (+(((s.c1) IS FALSE) &&\n       ((CASE 0.03346139528957415 WHEN s.c0 THEN s.vp_rowid ELSE 1446123744 END))))",
+      "ok": true,
+      "rows": [
+        "single\t2\t0\t100000000000000000000000001930040182.999999999999999999999999999999"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 11,
+  "target_query": "SELECT DISTINCT\n  'single' AS q,\n  COUNT((GREATEST(s.c0, '')) && (0.980680600517849)) AS ref0,\n  (+(((s.c1) IS FALSE) &&\n     ((CASE 0.03346139528957415 WHEN s.c0 THEN s.vp_rowid ELSE 1446123744 END)))) AS ref1,\n  SUM(DISTINCT CAST(s.c0 AS DECIMAL(65,30))) AS ref2\nFROM s\nGROUP BY (+(((s.c1) IS FALSE) &&\n       ((CASE 0.03346139528957415 WHEN s.c0 THEN s.vp_rowid ELSE 1446123744 END))));",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

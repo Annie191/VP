@@ -1,0 +1,108 @@
+https://github.com/cockroachdb/cockroach/issues/172870
+
+**Describe the problem**
+
+CockroachDB v26.2.3 returns an internal vectorized runtime error for a valid query involving an `IF` expression of type `BIT`, `VARBIT`, `BIT[]`, or `VARBIT[]`, followed by `GROUP BY` and `UNION ALL`.
+
+**To Reproduce**
+
+1. Start a CockroachDB v26.2.3 single-node cluster.
+2. Connect with `psql`.
+3. Execute the following SQL statements:
+```sql
+DROP DATABASE IF EXISTS repro_cockroachdb727_db4_varbit_array_min CASCADE;
+CREATE DATABASE repro_cockroachdb727_db4_varbit_array_min;
+USE repro_cockroachdb727_db4_varbit_array_min;
+
+SET vectorize = on;
+
+SELECT IF(false, ARRAY[]::VARBIT(1)[], NULL)
+GROUP BY 1
+UNION ALL
+SELECT NULL;
+```
+4. Observe the error:
+```
+ERROR: internal error: unexpected error from the vectorized runtime:
+unexpected replacement: original vector is varbit[] whereas the replacement is varbit[]
+```
+The following variants also reproduce the issue:
+- `SELECT IF(false, ARRAY[]::BIT(1)[], NULL) GROUP BY 1 UNION ALL SELECT NULL;`
+- `SELECT IF(false, B''::VARBIT(1), NULL) GROUP BY 1 UNION ALL SELECT NULL;`
+- `SELECT IF(false, B''::BIT(1), NULL) GROUP BY 1 UNION ALL SELECT NULL;`
+
+`EXPLAIN (VEC)` shows a `*colexec.SerialUnorderedSynchronizer`. The stack trace includes `pkg/col/coldata/batch.go: ReplaceCol` and `pkg/sql/colexec/serial_unordered_synchronizer.go: Next`.
+
+
+**Expected behavior**
+The query should execute successfully and return two NULL rows. With `SET vectorize = off`, the query returns the expected result without error.
+
+**Additional data / screenshots**
+No table schema or data is required. The problem appears limited to the vectorized execution path, affecting both scalar and array forms of BIT and VARBIT.
+
+
+**Environment:**
+- **CockroachDB version:** CockroachDB CCL v26.2.3
+- **Docker image:** cockroachdb/cockroach:v26.2.3
+- **Server OS:** Ubuntu 20.04.6 LTS x86_64, Linux 5.4.0-204-generic
+- **Client app:** psql (PostgreSQL connection, sslmode=disable)
+- **Cluster mode:** single-node, insecure
+
+**Additional context**
+
+## 中文版本
+
+### 标题
+BIT/VARBIT 表达式与 GROUP BY、UNION ALL 组合触发 vectorized execution 内部错误
+
+### 问题描述
+CockroachDB v26.2.3 在执行包含 BIT、VARBIT、BIT[] 或 VARBIT[] 类型 IF 表达式，并结合 GROUP BY 与 UNION ALL 的合法 SQL 时，返回 vectorized runtime 内部错误。
+该案例不依赖表、数据、索引或 SQLancer。最初由 SQLancer VP 测试发现，之后已使用 psql 最小化。
+
+### 复现步骤
+**做了什么？**  
+在 CockroachDB v26.2.3 上，开启向量化执行后，运行了一个包含 BIT/VARBIT 类型 IF 表达式、GROUP BY 和 UNION ALL 的查询。
+
+**复现步骤：**
+1. 启动 CockroachDB v26.2.3 单节点集群。
+2. 使用 psql 连接。
+3. 执行以下 SQL 语句：
+```sql
+DROP DATABASE IF EXISTS repro_cockroachdb727_db4_varbit_array_min CASCADE;
+CREATE DATABASE repro_cockroachdb727_db4_varbit_array_min;
+USE repro_cockroachdb727_db4_varbit_array_min;
+
+SET vectorize = on;
+
+SELECT IF(false, ARRAY[]::VARBIT(1)[], NULL)
+GROUP BY 1
+UNION ALL
+SELECT NULL;
+```
+4. 观察到错误：
+```
+ERROR: internal error: unexpected error from the vectorized runtime:
+unexpected replacement: original vector is varbit[] whereas the replacement is varbit[]
+```
+以下变体也会触发相同问题：
+- `SELECT IF(false, ARRAY[]::BIT(1)[], NULL) GROUP BY 1 UNION ALL SELECT NULL;`
+- `SELECT IF(false, B''::VARBIT(1), NULL) GROUP BY 1 UNION ALL SELECT NULL;`
+- `SELECT IF(false, B''::BIT(1), NULL) GROUP BY 1 UNION ALL SELECT NULL;`
+
+`EXPLAIN (VEC)` 显示执行计划包含 `*colexec.SerialUnorderedSynchronizer`。错误栈包含 `pkg/col/coldata/batch.go: ReplaceCol` 与 `pkg/sql/colexec/serial_unordered_synchronizer.go: Next`。
+
+### 预期行为
+该 SQL 应正常执行并返回两行 NULL。执行 `SET vectorize = off` 后，查询可以正常返回结果。
+
+### 附加数据 / 截图
+不需要表结构或数据。问题似乎只发生在 vectorized execution 路径中，并同时影响 BIT、VARBIT 及其数组类型。
+
+### 环境
+- **CockroachDB 版本：** CockroachDB CCL v26.2.3
+- **Docker 镜像：** cockroachdb/cockroach:v26.2.3
+- **服务端系统：** Ubuntu 20.04.6 LTS x86_64，Linux 5.4.0-204-generic
+- **客户端：** psql，PostgreSQL 连接，sslmode=disable
+- **集群模式：** 单节点、--insecure
+
+### 补充背景
+开启向量化时，合法 SQL 无法执行。该问题由 SQLancer 生成的查询触发，但已独立最小化为无需 SQLancer、无需任何 schema setup 的复现案例。

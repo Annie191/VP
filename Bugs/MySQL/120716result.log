@@ -1,0 +1,6 @@
+-- 正确
+direct_empty_min_false
+NULL
+-- 错误
+left_join_empty_min_false
+0

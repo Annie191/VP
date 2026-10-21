@@ -1,0 +1,72 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120716.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "-- 正确基线：空表聚合，返回 NULL\nSELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v\nFROM s",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v FROM s",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "SELECT MIN(agg0) FROM (/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE TRUE UNION ALL /* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE NOT TRUE UNION ALL /* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE TRUE IS NULL) AS tlp_parts",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "/* 正确基线：空表聚合，返回 NULL */ SELECT COUNT(*) FROM s",
+      "ok": true,
+      "rows": [
+        "0"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "/* 正确基线：空表聚合，返回 NULL */ SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM s",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 6,
+  "target_query": "-- 正确基线：空表聚合，返回 NULL\nSELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v\nFROM s;",
+  "variants": {
+    "tlp_base": "/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v FROM s",
+    "tlp_part_true": "/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v FROM s WHERE TRUE",
+    "tlp_part_false": "/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v FROM s WHERE NOT TRUE",
+    "tlp_part_unknown": "/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v FROM s WHERE TRUE IS NULL",
+    "tlp_union": "SELECT MIN(agg0) FROM (/* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE TRUE UNION ALL /* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE NOT TRUE UNION ALL /* 正确基线：空表聚合，返回 NULL */ SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS agg0 FROM s WHERE TRUE IS NULL) AS tlp_parts",
+    "norec_optimized": "/* 正确基线：空表聚合，返回 NULL */ SELECT COUNT(*) FROM s",
+    "norec_unoptimized": "/* 正确基线：空表聚合，返回 NULL */ SELECT SUM(CASE WHEN TRUE THEN 1 ELSE NULL END) FROM s",
+    "predicate": "TRUE"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": false,
+  "norec_checked": true,
+  "norec_inconsistent": false,
+  "notes": [
+    "NoREC comparison normalizes empty aggregate NULL to 0."
+  ]
+}

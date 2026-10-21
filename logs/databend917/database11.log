@@ -1,0 +1,399 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=SINGLE_REPLICATED, reconstruction=EXISTS_FILTER, shape=SINGLE_COLUMN, prefix=vp_database11_167_
+--Strategy counts: split={EMPTY_SPLIT=2, SINGLE_REPLICATED=4, SINGLE_RIGHT_ROW_ID_ONLY=5, SINGLE_LEFT_ROW_ID_ONLY=5, EVEN_SPLIT=10, OVERLAPPED_SPLIT=11, SKEWED_SPLIT=12, TYPE_DIRECTED_SPLIT=11}, reconstruction={JOIN=256, LEFT_RIGHT_JOIN=275, FULL_OUTER_SIMULATION=275, SCALAR_SUBQUERY=275, EXISTS_FILTER=270, IN_FILTER=290, NOT_EXISTS_ANTI=265, DERIVED_TABLE=280, CTE=276, VIEW=270, TEMP_TABLE=195, AGGREGATE_THEN_MERGE=271, ROW_NUMBER_ALIGNMENT=262, JSON_PACK=275, STRING_PACK=280, NATURAL_OR_USING=278, LATERAL_DERIVED=270}
+--Database: database11
+--Databend version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+--Base table: t0
+--Base table DDL: CREATE TABLE t0 (
+--  c0varchar VARCHAR NULL DEFAULT '\\2tT>uE'
+--) ENGINE=FUSE
+--Base table engine: FUSE
+--VP source engine: FUSE
+--VP left engine: MEMORY
+--VP right engine: MEMORY
+--Base row count: 47
+--Base shape: SINGLE_COLUMN
+--Stable row order: `c0varchar`
+--Prefix: vp_database11_167_
+--Split strategy: SINGLE_REPLICATED
+--Left columns: {c0varchar}
+--Right columns: {c0varchar}
+--Overlap columns: {c0varchar}
+--Physical foreign key: false
+--Schema profile: NULL_DEFAULT
+--Source schema fidelity: column types, nullability, and defaults; keys/constraints/generated expressions omitted
+--Helper schema fidelity: projection-only; columns are nullable and constraints/defaults are not copied
+--Copied source constraints: []
+--Reconstruction strategy: EXISTS_FILTER
+--Description: shape=SINGLE_COLUMN, split=SINGLE_REPLICATED, reconstruction=EXISTS_FILTER
+--Databend session settings: default_order_by_null=nulls_last, disable_join_reorder=0, enable_bloom_runtime_filter=1, enable_cbo=1, enable_join_runtime_filter=1, enable_query_result_cache=0, max_threads=40, numeric_cast_option=rounding, sql_dialect=PostgreSQL, timezone=UTC
+--Session SET statements:
+--SET default_order_by_null = 'nulls_last';
+--SET disable_join_reorder = 0;
+--SET enable_bloom_runtime_filter = 1;
+--SET enable_cbo = 1;
+--SET enable_join_runtime_filter = 1;
+--SET enable_query_result_cache = 0;
+--SET max_threads = 40;
+--SET numeric_cast_option = 'rounding';
+--SET sql_dialect = 'PostgreSQL';
+--SET timezone = 'UTC';
+--Setup statements:
+---- source schema profile: NULL_DEFAULT;
+---- copied source column nullability and defaults from SHOW CREATE TABLE;
+---- helper columns intentionally remain nullable projections for outer-join reconstruction;
+--CREATE TABLE `vp_database11_167_source` (`vp_rowid` BIGINT NOT NULL, `c0varchar` VARCHAR NULL DEFAULT '\\2tT>uE') ENGINE=FUSE;
+--INSERT INTO `vp_database11_167_source` (`vp_rowid`, `c0varchar`) SELECT ROW_NUMBER() OVER (ORDER BY `c0varchar`), `c0varchar` FROM `t0` LIMIT 4096;
+--CREATE TABLE `vp_database11_167_l` (`vp_rowid` BIGINT NOT NULL, `c0varchar` VARCHAR NULL) ENGINE=MEMORY;
+--CREATE TABLE `vp_database11_167_r` (`vp_rowid` BIGINT NOT NULL, `c0varchar` VARCHAR NULL) ENGINE=MEMORY;
+--INSERT INTO `vp_database11_167_l` (`vp_rowid`, `c0varchar`) SELECT `vp_rowid`, `c0varchar` FROM `vp_database11_167_source`;
+--INSERT INTO `vp_database11_167_r` (`vp_rowid`, `c0varchar`) SELECT `vp_rowid`, `c0varchar` FROM `vp_database11_167_source`;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+--DROP TABLE IF EXISTS `vp_database11_167_joined`;
+--CREATE TEMPORARY TABLE `vp_database11_167_joined` (`vp_rowid` BIGINT NOT NULL, `c0varchar` VARCHAR NULL);
+--SET force_aggregate_data_spill = 1;
+--SET force_sort_data_spill = 1;
+--DROP VIEW IF EXISTS `vp_database11_167_v`;
+--CREATE VIEW `vp_database11_167_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database11_167_v`;
+--CREATE VIEW `vp_database11_167_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database11_167_v`;
+--CREATE VIEW `vp_database11_167_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database11_167_v`;
+--CREATE VIEW `vp_database11_167_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database11_167_v`;
+--CREATE VIEW `vp_database11_167_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--SET force_aggregate_data_spill = 1;
+--SET force_sort_data_spill = 1;
+--TRUNCATE TABLE `vp_database11_167_joined`;
+--INSERT INTO `vp_database11_167_joined` (`vp_rowid`, `c0varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database11_167_joined`;
+--INSERT INTO `vp_database11_167_joined` (`vp_rowid`, `c0varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database11_167_joined`;
+--INSERT INTO `vp_database11_167_joined` (`vp_rowid`, `c0varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--SET force_aggregate_data_spill = 1;
+--SET force_sort_data_spill = 1;
+--TRUNCATE TABLE `vp_database11_167_joined`;
+--INSERT INTO `vp_database11_167_joined` (`vp_rowid`, `c0varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database11_167_joined`;
+--INSERT INTO `vp_database11_167_joined` (`vp_rowid`, `c0varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--VP source snapshot:
+--SELECT `vp_rowid`, `c0varchar` FROM `vp_database11_167_source` ORDER BY `vp_rowid` LIMIT 256;
+--1 | 
+--2 | 
+--3 | 
+--4 | 
+--5 | 
+--6 | 
+--7 | 
+--8 | 
+--9 | 
+--10 | 
+--11 | 
+--12 | 
+--13 | 
+--14 | 1680644507
+--15 | <zT
+--16 | I蟪
+--17 | NKVz
+--18 | P2pᛧ
+--19 | XeG馛]*騐怑V
+--20 | \2tt>ue
+--21 | sy2(8傳
+--22 | vp_-1
+--23 | vp_-2
+--24 | vp_-3
+--25 | vp_0
+--26 | vp_0
+--27 | vp_0
+--28 | vp_0
+--29 | vp_0
+--30 | vp_0
+--31 | vp_0
+--32 | vp_0
+--33 | vp_0
+--34 | vp_0
+--35 | vp_0
+--36 | vp_1
+--37 | ~J{}cR
+--38 | ~j{}cr
+--39 | 딖6
+--40 | 통/
+--41 | NULL
+--42 | NULL
+--43 | NULL
+--44 | NULL
+--45 | NULL
+--46 | NULL
+--47 | NULL
+--VP left snapshot:
+--SELECT `vp_rowid`, `c0varchar` FROM `vp_database11_167_l` ORDER BY `vp_rowid` LIMIT 256;
+--1 | 
+--2 | 
+--3 | 
+--4 | 
+--5 | 
+--6 | 
+--7 | 
+--8 | 
+--9 | 
+--10 | 
+--11 | 
+--12 | 
+--13 | 
+--14 | 1680644507
+--15 | <zT
+--16 | I蟪
+--17 | NKVz
+--18 | P2pᛧ
+--19 | XeG馛]*騐怑V
+--20 | \2tt>ue
+--21 | sy2(8傳
+--22 | vp_-1
+--23 | vp_-2
+--24 | vp_-3
+--25 | vp_0
+--26 | vp_0
+--27 | vp_0
+--28 | vp_0
+--29 | vp_0
+--30 | vp_0
+--31 | vp_0
+--32 | vp_0
+--33 | vp_0
+--34 | vp_0
+--35 | vp_0
+--36 | vp_1
+--37 | ~J{}cR
+--38 | ~j{}cr
+--39 | 딖6
+--40 | 통/
+--41 | NULL
+--42 | NULL
+--43 | NULL
+--44 | NULL
+--45 | NULL
+--46 | NULL
+--47 | NULL
+--VP right snapshot:
+--SELECT `vp_rowid`, `c0varchar` FROM `vp_database11_167_r` ORDER BY `vp_rowid` LIMIT 256;
+--1 | 
+--2 | 
+--3 | 
+--4 | 
+--5 | 
+--6 | 
+--7 | 
+--8 | 
+--9 | 
+--10 | 
+--11 | 
+--12 | 
+--13 | 
+--14 | 1680644507
+--15 | <zT
+--16 | I蟪
+--17 | NKVz
+--18 | P2pᛧ
+--19 | XeG馛]*騐怑V
+--20 | \2tt>ue
+--21 | sy2(8傳
+--22 | vp_-1
+--23 | vp_-2
+--24 | vp_-3
+--25 | vp_0
+--26 | vp_0
+--27 | vp_0
+--28 | vp_0
+--29 | vp_0
+--30 | vp_0
+--31 | vp_0
+--32 | vp_0
+--33 | vp_0
+--34 | vp_0
+--35 | vp_0
+--36 | vp_1
+--37 | ~J{}cR
+--38 | ~j{}cr
+--39 | 딖6
+--40 | 통/
+--41 | NULL
+--42 | NULL
+--43 | NULL
+--44 | NULL
+--45 | NULL
+--46 | NULL
+--47 | NULL
+--Single query: SELECT `vp_database11_167_source`.`c0varchar` FROM vp_database11_167_source WHERE (('-1297934617')LIKE(`vp_database11_167_source`.`c0varchar`)) ORDER BY `vp_database11_167_source`.`vp_rowid`
+--Split query: SELECT `vp_database11_167_source`.`c0varchar` FROM (SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l WHERE EXISTS (SELECT 1 FROM `vp_database11_167_r` r WHERE r.`vp_rowid` = l.`vp_rowid`)) `vp_database11_167_source` WHERE (('-1297934617')LIKE(`vp_database11_167_source`.`c0varchar`)) ORDER BY `vp_database11_167_source`.`vp_rowid`
+--Single query plan:
+--EXPLAIN SELECT `vp_database11_167_source`.`c0varchar` FROM vp_database11_167_source WHERE (('-1297934617')LIKE(`vp_database11_167_source`.`c0varchar`)) ORDER BY `vp_database11_167_source`.`vp_rowid`;
+--Sort(Single)
+--├── output columns: [vp_database11_167_source.vp_rowid (#0), vp_database11_167_source.c0varchar (#1)]
+--├── sort keys: [vp_rowid ASC NULLS LAST]
+--├── estimated rows: 9.40
+--└── TableScan
+--    ├── table: default.database11.vp_database11_167_source
+--    ├── scan id: 0
+--    ├── output columns: [vp_rowid (#0), c0varchar (#1)]
+--    ├── read rows: 47
+--    ├── read size: < 1 KiB
+--    ├── partitions total: 1
+--    ├── partitions scanned: 1
+--    ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 2 ms>, blocks: <range pruning: 1 to 1 cost: 1 ms>]
+--    ├── push downs: [filters: [is_true(like('-1297934617', vp_database11_167_source.c0varchar (#1)))], limit: NONE]
+--    └── estimated rows: 9.40
+--Split query plan:
+--EXPLAIN SELECT `vp_database11_167_source`.`c0varchar` FROM (SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l WHERE EXISTS (SELECT 1 FROM `vp_database11_167_r` r WHERE r.`vp_rowid` = l.`vp_rowid`)) `vp_database11_167_source` WHERE (('-1297934617')LIKE(`vp_database11_167_source`.`c0varchar`)) ORDER BY `vp_database11_167_source`.`vp_rowid`;
+--Sort(Single)
+--├── output columns: [l.vp_rowid (#0), l.c0varchar (#1)]
+--├── sort keys: [vp_rowid ASC NULLS LAST]
+--├── estimated rows: 9.40
+--└── HashJoin
+--    ├── output columns: [l.vp_rowid (#0), l.c0varchar (#1)]
+--    ├── join type: RIGHT SEMI
+--    ├── build keys: [l.vp_rowid (#0)]
+--    ├── probe keys: [r.vp_rowid (#2)]
+--    ├── keys is null equal: [false]
+--    ├── filters: []
+--    ├── build join filters:
+--    │   └── filter id:0, build key:l.vp_rowid (#0), probe targets:[r.vp_rowid (#2)@scan1], filter type:bloom,inlist,min_max
+--    ├── estimated rows: 9.40
+--    ├── Filter(Build)
+--    │   ├── output columns: [l.vp_rowid (#0), l.c0varchar (#1)]
+--    │   ├── filters: [is_true(like('-1297934617', vp_database11_167_source.c0varchar (#1)))]
+--    │   ├── estimated rows: 9.40
+--    │   └── TableScan
+--    │       ├── table: default.database11.vp_database11_167_l
+--    │       ├── scan id: 0
+--    │       ├── output columns: [vp_rowid (#0), c0varchar (#1)]
+--    │       ├── read rows: 47
+--    │       ├── read size: 1.41 KiB
+--    │       ├── partitions total: 0
+--    │       ├── partitions scanned: 0
+--    │       ├── push downs: [filters: [is_true(like('-1297934617', vp_database11_167_l.c0varchar (#1)))], limit: NONE]
+--    │       └── estimated rows: 47.00
+--    └── TableScan(Probe)
+--        ├── table: default.database11.vp_database11_167_r
+--        ├── scan id: 1
+--        ├── output columns: [vp_rowid (#2)]
+--        ├── read rows: 47
+--        ├── read size: < 1 KiB
+--        ├── partitions total: 0
+--        ├── partitions scanned: 0
+--        ├── push downs: [filters: [], limit: NONE]
+--        ├── apply join filters: [#0]
+--        └── estimated rows: 47.00
+--Single result sample: S:0:; x13
+--Split result sample: 
+--Only in single: S:0:; x13
+--Only in split: 
+--
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.comparePair(DatabendVerticalPartitioningOracle.java:3092)
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.check(DatabendVerticalPartitioningOracle.java:551)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:487)
+--	at sqlancer.Main$2.run(Main.java:708)
+--	at sqlancer.Main$2.runThread(Main.java:690)
+--	at sqlancer.Main$2.run(Main.java:681)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/10/08 07:34:58
+-- Database: database11
+-- Database version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+-- seed value: 1791443211642
+DROP DATABASE IF EXISTS database11;
+CREATE DATABASE database11;
+USE database11;
+CREATE TABLE t0(c0VARCHAR VARCHAR NULL DEFAULT('\\2tT>uE'));
+INSERT INTO t0(c0varchar) VALUES ('통/'), (''), ('XeG馛]*騐怑V');
+INSERT INTO t0(c0varchar) VALUES ('1680644507');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('\\2tt>ue');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0'), ('vp_-2'), ('vp_0');
+CREATE TABLE t1(c0VARCHAR VARCHAR NULL, c1ARRAY ARRAY(INT64) NULL DEFAULT([1, 2, 3]));
+INSERT INTO t1(c0varchar) VALUES ('');
+INSERT INTO t1(c1array, c0varchar) VALUES ([1, 2, 3], 'Sy2(8傳'), ([1, 2, 3], '-1186770765');
+INSERT INTO t1(c0varchar, c1array) VALUES ('통/', [1, 2, 3]);
+INSERT INTO t1(c1array) VALUES ([1, 2, 3]);
+INSERT INTO t1(c1array, c0varchar) VALUES ([0, 0], NULL), (NULL, 'vp_2');
+INSERT INTO t1(c1array, c0varchar) VALUES ([0, 0], NULL), (NULL, 'vp_3');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0'), ('vp_0'), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t0(c0varchar) VALUES ('~J{}cR');
+INSERT INTO t0(c0varchar) VALUES ('I蟪'), ('NKVz'), ('');
+INSERT INTO t1(c1array, c0varchar) VALUES ([1, 2, 3], '-1433734790');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t1(c1array, c0varchar) VALUES ([1, 2, 3], '-1433734790');
+INSERT INTO t0(c0varchar) VALUES ('sy2(8傳');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t1(c1array) VALUES ([1, 2, 3]), ([1, 2, 3]);
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t0(c0varchar) VALUES ('P2pᛧ');
+INSERT INTO t1(c1array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_-1');
+INSERT INTO t1(c1array, c0varchar) VALUES ([1, 2, 3], '2107082730'), ([1, 2, 3], '');
+INSERT INTO t1(c1array) VALUES ([1, 2, 3]), ([1, 2, 3]);
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t0(c0varchar) VALUES ('딖6');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0'), ('vp_0'), ('vp_0');
+INSERT INTO t1(c1array) VALUES ([3, 3]), (NULL), ([3, 3]), ([0, 0]);
+INSERT INTO t1(c1array, c0varchar) VALUES ([1, 2, 3], '-1183358959'), ([1, 2, 3], 'c6');
+INSERT INTO t0(c0varchar) VALUES (''), ('');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_-3'), ('vp_1'), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('<zT');
+INSERT INTO t0(c0varchar) VALUES ('~j{}cr'), ('');
+INSERT INTO t1(c0varchar, c1array) VALUES ('1680644507', [1, 2, 3]), ('XeG馛]*騐怑V', [1, 2, 3]);
+DROP STREAM IF EXISTS `vp_database11_167_source_stream`;
+DROP STREAM IF EXISTS `vp_database11_167_left_stream`;
+DROP STREAM IF EXISTS `vp_database11_167_right_stream`;
+DROP VIEW IF EXISTS `vp_database11_167_v`;
+DROP TABLE IF EXISTS `vp_database11_167_joined`;
+DROP TABLE IF EXISTS `vp_database11_167_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database11_167_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database11_167_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database11_167_r`;
+DROP TABLE IF EXISTS `vp_database11_167_l`;
+DROP TABLE IF EXISTS `vp_database11_167_source`;
+CREATE TABLE `vp_database11_167_source` (`vp_rowid` BIGINT NOT NULL, `c0varchar` VARCHAR NULL DEFAULT '\\2tT>uE') ENGINE=FUSE;
+INSERT INTO `vp_database11_167_source` (`vp_rowid`, `c0varchar`) SELECT ROW_NUMBER() OVER (ORDER BY `c0varchar`), `c0varchar` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database11_167_l` (`vp_rowid` BIGINT NOT NULL, `c0varchar` VARCHAR NULL) ENGINE=MEMORY;
+CREATE TABLE `vp_database11_167_r` (`vp_rowid` BIGINT NOT NULL, `c0varchar` VARCHAR NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database11_167_l` (`vp_rowid`, `c0varchar`) SELECT `vp_rowid`, `c0varchar` FROM `vp_database11_167_source`;
+INSERT INTO `vp_database11_167_r` (`vp_rowid`, `c0varchar`) SELECT `vp_rowid`, `c0varchar` FROM `vp_database11_167_source`;
+DROP TABLE IF EXISTS `vp_database11_167_joined`;
+CREATE TEMPORARY TABLE `vp_database11_167_joined` (`vp_rowid` BIGINT NOT NULL, `c0varchar` VARCHAR NULL);
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP VIEW IF EXISTS `vp_database11_167_v`;
+CREATE VIEW `vp_database11_167_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database11_167_v`;
+CREATE VIEW `vp_database11_167_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database11_167_v`;
+CREATE VIEW `vp_database11_167_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database11_167_v`;
+CREATE VIEW `vp_database11_167_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database11_167_v`;
+CREATE VIEW `vp_database11_167_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+TRUNCATE TABLE `vp_database11_167_joined`;
+INSERT INTO `vp_database11_167_joined` (`vp_rowid`, `c0varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database11_167_joined`;
+INSERT INTO `vp_database11_167_joined` (`vp_rowid`, `c0varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database11_167_joined`;
+INSERT INTO `vp_database11_167_joined` (`vp_rowid`, `c0varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+TRUNCATE TABLE `vp_database11_167_joined`;
+INSERT INTO `vp_database11_167_joined` (`vp_rowid`, `c0varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database11_167_joined`;
+INSERT INTO `vp_database11_167_joined` (`vp_rowid`, `c0varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0varchar` AS `c0varchar` FROM `vp_database11_167_l` l JOIN `vp_database11_167_r` r ON l.`vp_rowid` = r.`vp_rowid`;

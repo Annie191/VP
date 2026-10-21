@@ -1,0 +1,57 @@
+DROP DATABASE IF EXISTS repro_ob_715_38;
+CREATE DATABASE repro_ob_715_38;
+USE repro_ob_715_38;
+
+SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER';
+SET SESSION time_zone = '+00:00';
+SET SESSION optimizer_switch = '';
+SET SESSION group_concat_max_len = 1048576;
+
+CREATE TABLE vp_s (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 FLOAT NULL
+);
+INSERT INTO vp_s (c0) VALUES (0.0);
+
+CREATE TABLE vp_l (id BIGINT NOT NULL PRIMARY KEY);
+CREATE TABLE vp_r (id BIGINT NOT NULL PRIMARY KEY, c0 FLOAT NULL);
+
+INSERT INTO vp_l SELECT id FROM vp_s;
+INSERT INTO vp_r SELECT id, c0 FROM vp_s;
+
+CREATE INDEX idx_s ON vp_s(id, c0);
+
+-- Single: 错误返回 1
+SELECT VAR_SAMP(c0), COUNT(NULL < id != 1)
+FROM vp_s;
+
+-- Split: 正确返回 0
+SELECT VAR_SAMP(c0), COUNT(NULL < id != 1)
+FROM (
+  SELECT l.id AS id, r.c0 AS c0
+  FROM vp_l l LEFT JOIN vp_r r ON l.id = r.id
+) vp_s;
+
+
+
+single: VAR_SAMP=NULL, COUNT=1
+split : VAR_SAMP=NULL, COUNT=0
+
+表达式语义：
+NULL < id        -- NULL
+NULL < id != 1   -- NULL != 1，仍为 NULL
+COUNT(NULL)      -- 应为 0
+关键执行计划：
+Single:
+SCALAR GROUP BY
+└─ TABLE FULL SCAN vp_s
+   pushdown_aggregation([T_FUN_COUNT(NULL < vp_s.id != 1)], ...)
+
+Split:
+SCALAR GROUP BY
+└─ MERGE OUTER JOIN
+   ├─ TABLE FULL SCAN l
+   └─ TABLE FULL SCAN r
+   agg_func([T_FUN_COUNT(NULL < l.id != 1)], ...)
+
+可能原因：OceanBase 在聚合下推到存储引擎时，对链式比较表达式 a <op1> b <op2> c 做了等价变形，错误地将其转换为 (a <op1> b) AND (b <op2> c)，破坏了左结合性语义，进而改变了三值逻辑运算结果（从 NULL 变为 FALSE），最终导致 COUNT() 输出错误。

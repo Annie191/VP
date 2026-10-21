@@ -1,0 +1,19 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120976.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 单表查询（covering index → CAST 正确）\nSELECT DISTINCTROW MAX(DISTINCT vp_s.vp_rowid) AS ref0 FROM vp_s\nWHERE CAST(IFNULL(vp_s.c0, vp_s.c1) AS SIGNED)",
+      "ok": true,
+      "rows": [
+        "2"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 16,
+  "target_query": "-- 单表查询（covering index → CAST 正确）\nSELECT DISTINCTROW MAX(DISTINCT vp_s.vp_rowid) AS ref0 FROM vp_s\nWHERE CAST(IFNULL(vp_s.c0, vp_s.c1) AS SIGNED);",
+  "skip_reason": "DISTINCT is not handled by this batch rewriter"
+}

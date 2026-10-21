@@ -1,0 +1,25 @@
+DROP DATABASE IF EXISTS test_repro;
+CREATE DATABASE test_repro;
+USE test_repro;
+
+CREATE TABLE source (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DOUBLE UNSIGNED ZEROFILL DEFAULT NULL
+) ENGINE=InnoDB;
+INSERT INTO source (c0) VALUES (NULL), (0.30446792022164715), (0.7041492922748734), (0.8527053518765303);
+ALTER TABLE source ADD KEY i0 (c0), ADD UNIQUE KEY i2 (c0), ADD KEY i5 (c0), ADD KEY i6 (c0), ADD KEY i7 (c0), ADD KEY i1 (c0);
+
+CREATE TABLE l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 DOUBLE UNSIGNED ZEROFILL DEFAULT NULL) ENGINE=InnoDB;
+CREATE TABLE r (vp_rowid BIGINT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+INSERT INTO l (vp_rowid, c0) SELECT vp_rowid, c0 FROM source;
+INSERT INTO r (vp_rowid) SELECT vp_rowid FROM source;
+
+-- 单表查询: 结果 1,2,3,4 (NULL最前)
+SELECT vp_rowid FROM source WHERE '2018-04-13' ORDER BY (-c0) DESC, vp_rowid;
+-- 分表重组: 结果 2,3,4,1 (NULL最后)
+SELECT vp_rowid FROM (
+  SELECT l.vp_rowid AS vp_rowid, l.c0 AS c0
+  FROM l JOIN LATERAL (
+    SELECT * FROM r rr WHERE rr.vp_rowid = l.vp_rowid
+  ) r ON TRUE
+) source2 WHERE '2018-04-13' ORDER BY (-c0) DESC, vp_rowid;

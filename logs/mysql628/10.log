@@ -1,0 +1,52 @@
+DROP DATABASE IF EXISTS repro;
+CREATE DATABASE repro;
+USE repro;
+
+-- 源表：显式指定 utf8mb4_bin
+CREATE TABLE src (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_bin
+) ENGINE=InnoDB;
+INSERT INTO src (c0) VALUES (NULL), (''), ('-1612443869'), ('^DAz줞,Q'), ('0.9870890100414281');
+
+-- 拆分表：不指定 collation，继承数据库默认 utf8mb4_0900_ai_ci
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 TEXT
+) ENGINE=InnoDB;
+INSERT INTO r (id, c0) SELECT id, c0 FROM src;
+
+-- 重建临时表（sqlancer 的 split 路径）
+DROP TEMPORARY TABLE IF EXISTS joined;
+CREATE TEMPORARY TABLE joined AS
+  SELECT src.id, r.c0 FROM src JOIN r ON src.id = r.id;
+
+-- Single query：查源表，MAX 用 utf8mb4_bin → ^DAz줞,Q
+SELECT 'single' AS qt, MAX(c0) AS ref0 FROM src;
+
+-- Split query：查 joined，c0 列继承 utf8mb4_0900_ai_ci → 0.9870890100414281
+SELECT 'split'  AS qt, MAX(c0) AS ref0 FROM joined;
+
+
+        single (src, utf8mb4_bin)	split (joined, utf8mb4_0900_ai_ci)
+MAX(c0)	^DAz줞,Q	0.9870890100414281 ❌
+
+
+utf8mb4_bin:             utf8mb4_0900_ai_ci:
+NULL                     NULL
+''                       ''
+-1612443869              -1612443869
+0.9870890100414281       ^DAz줞,Q
+^DAz줞,Q    ← MAX       0.9870890100414281  ← MAX ❌
+
+-- Single:
+-> Aggregate: max(src.c0)
+    -> Table scan on src
+
+-- Split:
+-> Aggregate: max(joined.c0)
+
+显式指定 utf8mb4_bin 后，bug 消失，两个 MAX 都返回 ^DAz줞,Q：
+
+
+基表 t2 的 c0 继承表级默认 utf8mb4_0900_ai_ci，但 SQLancer 建源表时主动改了成 utf8mb4_bin（日志中也写着 Stable row order: c0，需要用 binary collation 保证排序确定性）。问题出在 SQLancer 的垂直分区框架：它知道给源表加 utf8mb4_bin，建拆分表 r 时却忘了把这个 column-level collation 带过去，导致 r.c0 回退到数据库默认的 utf8mb4_0900_ai_ci。

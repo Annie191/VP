@@ -1,0 +1,44 @@
+https://bugs.mysql.com/bug.php?id=120721&thanks=4    Verified as a duplicate of internal bug#36448705.
+A fix for this problem will be delivered in an upcoming 9.7 release.
+
+DROP DATABASE IF EXISTS repro_m616_6_min;
+CREATE DATABASE repro_m616_6_min;
+USE repro_m616_6_min;
+
+CREATE TABLE src(id BIGINT PRIMARY KEY AUTO_INCREMENT, c1 BIGINT NULL) ENGINE=InnoDB;
+INSERT INTO src(c1) VALUES(0),(1);
+
+CREATE TABLE l(id BIGINT PRIMARY KEY) ENGINE=InnoDB;
+CREATE TABLE r(id BIGINT PRIMARY KEY, c1 BIGINT NULL) ENGINE=InnoDB;
+INSERT INTO l SELECT id FROM src;
+INSERT INTO r SELECT id,c1 FROM src;
+
+-- 原表：空结果
+SELECT 0.4034060568939616 AS ref0
+FROM src
+WHERE COALESCE(NULL,0.026605629777798234) IN (c1)
+ORDER BY id;
+
+-- 分表重构：错误返回 1 行
+SELECT 0.4034060568939616 AS ref0
+FROM (
+  SELECT l.id, (SELECT r.c1 FROM r WHERE r.id=l.id) AS c1
+  FROM l
+) s
+WHERE COALESCE(NULL,0.026605629777798234) IN (c1)
+ORDER BY id;
+实际结果：
+single: 空
+split : 0.4034060568939616
+执行计划关键部分：
+Sort: s.id
+  Index lookup on s using <auto_key0> (c1 = coalesce(NULL,0.026605629777798234))
+    Materialize
+      Covering index scan on l using PRIMARY
+      Select #3 (subquery in projection; dependent)
+        Single-row index lookup on r using PRIMARY
+判断：0.026605... IN (BIGINT列) 在原表上应不匹配 0；但分表查询把标量子查询物化后，派生表上的自动索引查找把它当成 c1=0 命中了。
+
+0.026605... IN (BIGINT列) 在原表上应不匹配 0；但分表查询把标量子查询物化后，物化派生表创建自动索引 <auto_key0> 时，优化器可能：
+错误地选择了索引键的数据类型（例如使用 DOUBLE 而非 BIGINT）
+或者在 索引查找阶段，将 DOUBLE 类型的查找值 0.026605... 隐式转换为索引列的类型时发生了向零截断（CAST(0.0266... AS BIGINT) = 0），导致错误匹配

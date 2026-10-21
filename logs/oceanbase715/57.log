@@ -1,0 +1,110 @@
+DROP DATABASE IF EXISTS repro_ob_715_57;
+CREATE DATABASE repro_ob_715_57;
+USE repro_ob_715_57;
+
+SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER';
+SET SESSION time_zone = '+00:00';
+SET SESSION optimizer_switch = '';
+SET SESSION group_concat_max_len = 1048576;
+
+CREATE TABLE vp_s (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 VARCHAR(500) NULL,
+  c1 VARCHAR(500) NULL,
+  c2 VARCHAR(500) NULL,
+  c3 DOUBLE NULL
+) ENGINE=InnoDB;
+
+INSERT INTO vp_s (c0, c1, c2, c3) VALUES
+  (NULL, NULL, 'iDAᘸluq', 0.1867809614325605),
+  (NULL, ' ',  '忐',      1.0E308),
+  ('1970-01-01', NULL, NULL, NULL);
+
+CREATE TABLE vp_l (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 VARCHAR(500) NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE vp_r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c1 VARCHAR(500) NULL,
+  c3 DOUBLE NULL,
+  c2 VARCHAR(500) NULL
+) ENGINE=InnoDB;
+
+INSERT INTO vp_l SELECT vp_rowid, c0 FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c1, c3, c2 FROM vp_s;
+
+CREATE INDEX src_asym ON vp_s(c3, vp_rowid);
+CREATE INDEX r_asym ON vp_r(c3, vp_rowid);
+CREATE INDEX idx_src ON vp_s(vp_rowid, c3);
+CREATE INDEX idx_r ON vp_r(c3, vp_rowid);
+
+-- 原始行上，分组表达式只有 0 和 NULL
+SELECT vp_rowid, c3,
+       (((-1389224053) >= (1736695958)) IS FALSE) IN (c3) AS g
+FROM vp_s
+ORDER BY vp_rowid;
+
+-- single: NULL x2, 0 x1
+SELECT (((-1389224053) >= (1736695958)) IS FALSE) IN (vp_s.c3) AS v
+FROM vp_s
+GROUP BY (((-1389224053) >= (1736695958)) IS FALSE) IN (vp_s.c3) WITH ROLLUP
+HAVING SUM(vp_rowid) IS NOT NULL
+ORDER BY (((-1389224053) >= (1736695958)) IS FALSE) IN (vp_s.c3)
+LIMIT 15;
+
+-- split: 0 x2, NULL x1
+SELECT (((-1389224053) >= (1736695958)) IS FALSE) IN (vp_s.c3) AS v
+FROM (
+  SELECT
+    l.vp_rowid AS vp_rowid,
+    l.c0 AS c0,
+    (SELECT r.c1 FROM vp_r r WHERE r.vp_rowid = l.vp_rowid) AS c1,
+    (SELECT r.c2 FROM vp_r r WHERE r.vp_rowid = l.vp_rowid) AS c2,
+    (SELECT r.c3 FROM vp_r r WHERE r.vp_rowid = l.vp_rowid) AS c3
+  FROM vp_l l
+) vp_s
+GROUP BY (((-1389224053) >= (1736695958)) IS FALSE) IN (vp_s.c3) WITH ROLLUP
+HAVING SUM(vp_rowid) IS NOT NULL
+ORDER BY (((-1389224053) >= (1736695958)) IS FALSE) IN (vp_s.c3)
+LIMIT 15;
+
+source:
+vp_rowid  c3                    g
+1         0.1867809614325605    0
+2         1e308                 0
+3         NULL                  NULL
+
+single:
+v
+NULL
+NULL
+0
+
+split:
+v
+0
+NULL
+0
+
+Single:
+|0 |TOP-N SORT           |
+|1 |└─HASH GROUP BY      |
+|2 |  └─EXPANSION        |
+|3 |    └─TABLE FULL SCAN|vp_s(src_asym)|
+
+repeat(2)[(NULL),(cast(...)=vp_s.c3)]
+group([cast(...)=vp_s.c3], [GROUPING_ID])
+
+Split:
+|0 |TOP-N SORT                     |
+|1 |└─HASH GROUP BY                |
+|2 |  └─EXPANSION                  |
+|3 |    └─SUBPLAN SCAN             |vp_s|
+|4 |      └─SUBPLAN FILTER         |
+|5 |        ├─TABLE FULL SCAN      |l|
+|6 |        └─DISTRIBUTED TABLE GET|r|
+
+repeat(2)[(NULL),(cast(...)=vp_s.c3)]
+group([cast(...)=vp_s.c3], [GROUPING_ID])

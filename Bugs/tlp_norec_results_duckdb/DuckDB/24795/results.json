@@ -1,0 +1,26 @@
+{
+  "database": "DuckDB",
+  "source": "/home/lwm/sqlancer/Bugs/DuckDB/24795.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 查询 1：单表，使用 GROUP BY ALL\nSELECT c0, COUNT(*) AS vp_count\nFROM repro_duckdb_database8_min_source\nGROUP BY ALL",
+      "ok": true,
+      "rows": [
+        "┌─────────┬──────────┐",
+        "│   c0    │ vp_count │",
+        "│ varchar │  int64   │",
+        "├─────────┼──────────┤",
+        "│ A       │        1 │",
+        "│ a       │        1 │",
+        "│ b       │        1 │",
+        "└─────────┴──────────┘"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 7,
+  "target_query": "-- 查询 1：单表，使用 GROUP BY ALL\nSELECT c0, COUNT(*) AS vp_count\nFROM repro_duckdb_database8_min_source\nGROUP BY ALL;",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

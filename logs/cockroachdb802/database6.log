@@ -1,0 +1,180 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=EVEN_SPLIT, reconstruction=LATERAL_DERIVED, shape=MULTI_COLUMN, prefix=vp_database6_496_
+--Strategy counts: split={EMPTY_SPLIT=17, SINGLE_REPLICATED=15, SINGLE_RIGHT_ROW_ID_ONLY=15, SINGLE_LEFT_ROW_ID_ONLY=14, EVEN_SPLIT=112, OVERLAPPED_SPLIT=108, SKEWED_SPLIT=107, TYPE_DIRECTED_SPLIT=108}, reconstruction={JOIN=2444, LEFT_RIGHT_JOIN=2429, FULL_OUTER_SIMULATION=2449, OUTER_NULL_EXTENSION=2448, SCALAR_SUBQUERY=2444, EXISTS_FILTER=2446, IN_FILTER=2444, NOT_EXISTS_ANTI=2440, DERIVED_TABLE=2433, CTE=2442, VIEW=2448, TEMP_TABLE=2438, AGGREGATE_THEN_MERGE=2429, ROW_NUMBER_ALIGNMENT=2443, JSON_PACK=2434, STRING_PACK=2448, NATURAL_OR_USING=2453, STRAIGHT_JOIN=2447, LATERAL_DERIVED=2440}
+--Database: database6
+--CockroachDB version: CockroachDB CCL v26.2.3 (x86_64-pc-linux-gnu, built 2026/06/24 12:27:14, go1.25.5)
+--Base table: t0
+--Base table DDL: CREATE TABLE public.t0 (
+--	c0 JSONB NOT NULL DEFAULT '{}':::JSONB,
+--	c1 DECIMAL NULL,
+--	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+--	CONSTRAINT t0_pkey PRIMARY KEY (rowid ASC),
+--	INDEX i0 (rowid ASC, c1 ASC) STORING (c0),
+--	INDEX i1 (c1 ASC, rowid DESC) STORING (c0),
+--	INDEX i3 (rowid ASC),
+--	INDEX i4 (rowid DESC) STORING (c1, c0)
+--) WITH (schema_locked = true);
+--Base table engine: N/A
+--VP source engine: N/A
+--VP left engine: N/A
+--VP right engine: N/A
+--Base row count: 11
+--VP source row count: 11
+--Base shape: MULTI_COLUMN
+--Stable row order: "c1", "rowid"
+--Prefix: vp_database6_496_
+--Split strategy: EVEN_SPLIT
+--Left columns: {c1, c0}
+--Right columns: {rowid}
+--Overlap columns: {}
+--Physical foreign key: false
+--Reconstruction strategy: LATERAL_DERIVED
+--Description: shape=MULTI_COLUMN, split=EVEN_SPLIT, reconstruction=LATERAL_DERIVED
+--Optimizer profile: ROW_EXECUTION
+--AS OF SYSTEM TIME: 1785739504246383033.0000000000
+--Session vars: TimeZone=UTC, vectorize=off, optimizer_use_histograms=on, enable_zigzag_join=off, serial_normalization=rowid
+--Session SET statements:
+--SET TimeZone = 'UTC';
+--SET vectorize = 'off';
+--SET optimizer_use_histograms = 'on';
+--SET enable_zigzag_join = 'off';
+--SET serial_normalization = 'rowid';
+--Setup statements:
+--CREATE TABLE "vp_database6_496_source" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "c0" JSONB NULL, "c1" DECIMAL NULL, "rowid" INT64 NULL);
+--CREATE TABLE "vp_database6_496_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c1" DECIMAL NULL, "c0" JSONB NULL);
+--CREATE TABLE "vp_database6_496_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "rowid" INT8 NULL);
+--INSERT INTO "vp_database6_496_source" ("vp_rowid", "c0", "c1", "rowid") SELECT ROW_NUMBER() OVER ( ORDER BY "c1", "rowid") AS "vp_rowid", "c0", "c1", "rowid" FROM "t0" LIMIT 256;
+--CREATE UNIQUE INDEX "vp_database6_496_src_idx_0" ON "vp_database6_496_source" (rowid ASC);
+--CREATE INDEX "vp_database6_496_src_idx_1" ON "vp_database6_496_source" (rowid ASC, c1 ASC) STORING (c0);
+--CREATE INDEX "vp_database6_496_src_idx_2" ON "vp_database6_496_source" (c1 ASC, rowid DESC) STORING (c0);
+--CREATE INDEX "vp_database6_496_src_idx_3" ON "vp_database6_496_source" (rowid ASC);
+--CREATE INDEX "vp_database6_496_src_idx_4" ON "vp_database6_496_source" (rowid DESC) STORING (c1, c0);
+--INSERT INTO "vp_database6_496_l" ("vp_rowid", "c1", "c0") SELECT "vp_rowid", "c1", "c0" FROM "vp_database6_496_source";
+--INSERT INTO "vp_database6_496_r" ("vp_rowid", "rowid") SELECT "vp_rowid", "rowid" FROM "vp_database6_496_source";
+--CREATE INDEX "vp_database6_496_l_asym_570666734" ON "vp_database6_496_l"("vp_rowid", "c1");
+--CREATE INDEX "vp_database6_496_r_asym_2133280963" ON "vp_database6_496_r"("rowid", "vp_rowid");
+--DROP VIEW IF EXISTS "vp_database6_496_v";
+--CREATE VIEW "vp_database6_496_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", l."c1" AS "c1", r."rowid" AS "rowid" FROM "vp_database6_496_l" l JOIN "vp_database6_496_r" r ON l."vp_rowid" = r."vp_rowid";
+--VP source snapshot:
+--SELECT "vp_rowid", "c0", "c1", "rowid" FROM "vp_database6_496_source" ORDER BY "vp_rowid";
+--1 | {} | 99999999999999999999.9999999999 | 1198224390333628418
+--2 | {} | 99999999999999999999.9999999999 | 1198224390333661186
+--3 | {"k": null} | 99999999999999999999.9999999999 | 1198224390333693954
+--4 | [] | 99999999999999999999.9999999999 | 1198224390333726722
+--5 | {} | 99999999999999999999.9999999999 | 1198224390333759490
+--6 | {"k": 1} | 99999999999999999999.9999999999 | 1198224390333792258
+--7 | {"k": null} | 99999999999999999999.9999999999 | 1198224390333825026
+--8 | {"k": null} | 99999999999999999999.9999999999 | 1198224390333857794
+--9 | {} | 99999999999999999999.9999999999 | 1198224390333890562
+--10 | {} | 99999999999999999999.9999999999 | 1198224390333923330
+--11 | {"k": null} | 99999999999999999999.9999999999 | 1198224390333956098
+--VP left snapshot:
+--SELECT "vp_rowid", "c1", "c0" FROM "vp_database6_496_l" ORDER BY "vp_rowid";
+--1 | 99999999999999999999.9999999999 | {}
+--2 | 99999999999999999999.9999999999 | {}
+--3 | 99999999999999999999.9999999999 | {"k": null}
+--4 | 99999999999999999999.9999999999 | []
+--5 | 99999999999999999999.9999999999 | {}
+--6 | 99999999999999999999.9999999999 | {"k": 1}
+--7 | 99999999999999999999.9999999999 | {"k": null}
+--8 | 99999999999999999999.9999999999 | {"k": null}
+--9 | 99999999999999999999.9999999999 | {}
+--10 | 99999999999999999999.9999999999 | {}
+--11 | 99999999999999999999.9999999999 | {"k": null}
+--VP right snapshot:
+--SELECT "vp_rowid", "rowid" FROM "vp_database6_496_r" ORDER BY "vp_rowid";
+--1 | 1198224390333628418
+--2 | 1198224390333661186
+--3 | 1198224390333693954
+--4 | 1198224390333726722
+--5 | 1198224390333759490
+--6 | 1198224390333792258
+--7 | 1198224390333825026
+--8 | 1198224390333857794
+--9 | 1198224390333890562
+--10 | 1198224390333923330
+--11 | 1198224390333956098
+--Single query: SELECT DISTINCT SQRDIFF("c1") FROM "vp_database6_496_source" AS "vp_database6_496_source" AS OF SYSTEM TIME 1785739504246383033.0000000000 WHERE ("c0" IS NULL OR "c0" @> '{}'::JSONB OR jsonb_typeof("c0") IS NOT NULL) ORDER BY 1
+--Split query: SELECT DISTINCT SQRDIFF("c1") FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", l."c1" AS "c1", r."rowid" AS "rowid" FROM "vp_database6_496_l" l JOIN LATERAL (SELECT * FROM "vp_database6_496_r" rr WHERE rr."vp_rowid" = l."vp_rowid") r ON TRUE) AS "vp_database6_496_source" AS OF SYSTEM TIME 1785739504246383033.0000000000 WHERE ("c0" IS NULL OR "c0" @> '{}'::JSONB OR jsonb_typeof("c0") IS NOT NULL) ORDER BY 1
+--Single query plan:
+--EXPLAIN (OPT) SELECT DISTINCT SQRDIFF("c1") FROM "vp_database6_496_source" AS "vp_database6_496_source" AS OF SYSTEM TIME 1785739504246383033.0000000000 WHERE ("c0" IS NULL OR "c0" @> '{}'::JSONB OR jsonb_typeof("c0") IS NOT NULL) ORDER BY 1;
+--scalar-group-by
+-- ├── select
+-- │    ├── scan vp_database6_496_source
+-- │    └── filters
+-- │         └── ((c0 IS NULL) OR (c0 @> '{}')) OR (jsonb_typeof(c0) IS NOT NULL)
+-- └── aggregations
+--      └── sqr-diff
+--           └── c1
+--Split query plan:
+--EXPLAIN (OPT) SELECT DISTINCT SQRDIFF("c1") FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", l."c1" AS "c1", r."rowid" AS "rowid" FROM "vp_database6_496_l" l JOIN LATERAL (SELECT * FROM "vp_database6_496_r" rr WHERE rr."vp_rowid" = l."vp_rowid") r ON TRUE) AS "vp_database6_496_source" AS OF SYSTEM TIME 1785739504246383033.0000000000 WHERE ("c0" IS NULL OR "c0" @> '{}'::JSONB OR jsonb_typeof("c0") IS NOT NULL) ORDER BY 1;
+--scalar-group-by
+-- ├── inner-join (merge)
+-- │    ├── scan vp_database6_496_r [as=rr]
+-- │    ├── select
+-- │    │    ├── scan vp_database6_496_l [as=l]
+-- │    │    └── filters
+-- │    │         └── ((c0 IS NULL) OR (c0 @> '{}')) OR (jsonb_typeof(c0) IS NOT NULL)
+-- │    └── filters (true)
+-- └── aggregations
+--      └── sqr-diff
+--           └── c1
+--Single result sample: S:12:-20000000000; x1
+--Split result sample: S:12:-30000000000; x1
+--Only in single: S:12:-20000000000; x1
+--Only in split: S:12:-30000000000; x1
+--
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.comparePair(CockroachDBVerticalPartitioningOracle.java:3110)
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.check(CockroachDBVerticalPartitioningOracle.java:432)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:479)
+--	at sqlancer.Main$2.run(Main.java:696)
+--	at sqlancer.Main$2.runThread(Main.java:678)
+--	at sqlancer.Main$2.run(Main.java:669)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/08/03 06:45:04
+-- Database: database6
+-- Database version: 13.0.0
+-- seed value: 1785738304484
+USE test;
+DROP DATABASE IF EXISTS database6 CASCADE;
+CREATE DATABASE database6;
+USE database6;
+--Don't send automatic bug reports;
+SET CLUSTER SETTING debug.panic_on_failed_assertions = true;
+SET CLUSTER SETTING diagnostics.reporting.enabled = false;
+SET CLUSTER SETTING diagnostics.reporting.send_crash_reports.enabled = false;
+-- Disable the collection of metrics and hope that it helps performance;
+SET CLUSTER SETTING sql.metrics.statement_details.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.dump_to_logs.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.gateway_node.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.index_recommendation_collection.enabled = false;
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+SET CLUSTER SETTING timeseries.storage.enabled = false;
+SET experimental_enable_hash_sharded_indexes = 'on';
+SET experimental_enable_temp_tables = 'on';
+CREATE TABLE t0 (c0 VARBIT(114)[] DEFAULT (ARRAY[]::VARBIT(114)[]) CHECK (('{"k":1}'::JSONB @> NULLIF((('[]'::JSONB) ::JSONB), (('{}'::JSONB) ::JSONB)))), FAMILY "primary" (c0));
+CREATE TABLE t1 (c0 TIMETZ DEFAULT (TIMETZ '1970-01-14T00:09:59'));
+CREATE TABLE t65 (c0 BYTES DEFAULT (x'ecfb84'::BYTES), CONSTRAINT "primary" PRIMARY KEY(c0 DESC));
+DROP TABLE IF EXISTS "t1" CASCADE;
+CREATE TABLE t1 (c0 BYTES UNIQUE  DEFAULT (x'53f018'::BYTES));
+DROP TABLE IF EXISTS "t65" CASCADE;
+CREATE TABLE t2 (c0 VARBIT(190) DEFAULT (B'100001010101111'), CONSTRAINT "primary" PRIMARY KEY(c0));
+DROP TABLE IF EXISTS "t1" CASCADE;
+CREATE TABLE t1 (c0 INT64 DEFAULT (-608936947), CONSTRAINT "primary" PRIMARY KEY(c0 DESC));
+DROP TABLE IF EXISTS "t2" CASCADE;
+CREATE TABLE t2 (c0 TIMESTAMPTZ, CONSTRAINT "primary" PRIMARY KEY(c0));
+DROP TABLE IF EXISTS "t1" CASCADE;
+CREATE TABLE t1 (c0 DECIMAL DEFAULT (-233155342), FAMILY "primary" (c0));
+DROP TABLE IF EXISTS "t0" CASCADE;
+CREATE TABLE t0 (c0 VARBIT(185) AS (B'11001000111010100100000110001000111010101100011011') STORED, c1 BIGINT);
+DROP TABLE IF EXISTS "t2" CASCADE;
+CREATE TABLE t2 (c0 TIMETZ NOT NULL  DEFAULT (TIMETZ '1969-12-12T02:49:15'));
+DROP TABLE IF EXISTS "t0" CASCADE;
+CREATE TABLE t42 (c0 BOOL UNIQUE  PRIMARY KEY);
+DROP TABLE IF EXISTS "t42" CASCADE;
+CREATE TABLE t0 (c0 JSONB NOT NULL  DEFAULT ('{}'::JSONB), c1 DECIMAL);
+DROP TABLE IF EXISTS "t1" CASCADE;

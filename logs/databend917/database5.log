@@ -1,0 +1,930 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=TYPE_DIRECTED_SPLIT, reconstruction=TEMP_TABLE, shape=MULTI_COLUMN, prefix=vp_database5_146_
+--Strategy counts: split={EMPTY_SPLIT=2, SINGLE_REPLICATED=2, SINGLE_RIGHT_ROW_ID_ONLY=4, SINGLE_LEFT_ROW_ID_ONLY=5, EVEN_SPLIT=10, OVERLAPPED_SPLIT=10, SKEWED_SPLIT=11, TYPE_DIRECTED_SPLIT=11}, reconstruction={JOIN=230, LEFT_RIGHT_JOIN=245, FULL_OUTER_SIMULATION=240, SCALAR_SUBQUERY=237, EXISTS_FILTER=238, IN_FILTER=245, NOT_EXISTS_ANTI=245, DERIVED_TABLE=243, CTE=248, VIEW=250, TEMP_TABLE=166, AGGREGATE_THEN_MERGE=241, ROW_NUMBER_ALIGNMENT=228, JSON_PACK=243, STRING_PACK=242, NATURAL_OR_USING=247, LATERAL_DERIVED=245}
+--Database: database5
+--Databend version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+--Base table: t0
+--Base table DDL: CREATE TABLE t0 (
+--  c0date DATE NULL DEFAULT NULL,
+--  c1decimal DECIMAL(43, 8) NULL DEFAULT 1.00000000,
+--  c2float FLOAT NULL DEFAULT 0.6591864
+--) ENGINE=FUSE
+--Base table engine: FUSE
+--VP source engine: MEMORY
+--VP left engine: FUSE
+--VP right engine: MEMORY
+--Base row count: 42
+--Base shape: MULTI_COLUMN
+--Stable row order: `c0date`, `c1decimal`, `c2float`
+--Prefix: vp_database5_146_
+--Split strategy: TYPE_DIRECTED_SPLIT
+--Left columns: {c1decimal, c2float}
+--Right columns: {c0date}
+--Overlap columns: {}
+--Physical foreign key: false
+--Schema profile: NULL_DEFAULT
+--Source schema fidelity: column types, nullability, and defaults; keys/constraints/generated expressions omitted
+--Helper schema fidelity: projection-only; columns are nullable and constraints/defaults are not copied
+--Copied source constraints: []
+--Reconstruction strategy: TEMP_TABLE
+--Description: shape=MULTI_COLUMN, split=TYPE_DIRECTED_SPLIT, reconstruction=TEMP_TABLE
+--Databend session settings: default_order_by_null=nulls_last, disable_join_reorder=0, enable_bloom_runtime_filter=1, enable_cbo=1, enable_join_runtime_filter=1, enable_query_result_cache=0, max_threads=40, numeric_cast_option=rounding, sql_dialect=PostgreSQL, timezone=UTC
+--Session SET statements:
+--SET default_order_by_null = 'nulls_last';
+--SET disable_join_reorder = 0;
+--SET enable_bloom_runtime_filter = 1;
+--SET enable_cbo = 1;
+--SET enable_join_runtime_filter = 1;
+--SET enable_query_result_cache = 0;
+--SET max_threads = 40;
+--SET numeric_cast_option = 'rounding';
+--SET sql_dialect = 'PostgreSQL';
+--SET timezone = 'UTC';
+--Setup statements:
+---- source schema profile: NULL_DEFAULT;
+---- copied source column nullability and defaults from SHOW CREATE TABLE;
+---- helper columns intentionally remain nullable projections for outer-join reconstruction;
+--CREATE TABLE `vp_database5_146_source` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL DEFAULT 1.00000000, `c2float` DOUBLE NULL DEFAULT 0.6591864) ENGINE=MEMORY;
+--INSERT INTO `vp_database5_146_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT ROW_NUMBER() OVER (ORDER BY `c0date`, `c1decimal`, `c2float`), `c0date`, `c1decimal`, `c2float` FROM `t0` LIMIT 4096;
+--CREATE TABLE `vp_database5_146_l` (`vp_rowid` BIGINT NOT NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL) ENGINE=FUSE;
+--CREATE TABLE `vp_database5_146_r` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL) ENGINE=MEMORY;
+--INSERT INTO `vp_database5_146_l` (`vp_rowid`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c1decimal`, `c2float` FROM `vp_database5_146_source`;
+--INSERT INTO `vp_database5_146_r` (`vp_rowid`, `c0date`) SELECT `vp_rowid`, `c0date` FROM `vp_database5_146_source`;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+--DROP TABLE IF EXISTS `vp_database5_146_joined`;
+--CREATE TEMPORARY TABLE `vp_database5_146_joined` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL);
+--SET force_aggregate_data_spill = 1;
+--SET force_sort_data_spill = 1;
+--DROP VIEW IF EXISTS `vp_database5_146_v`;
+--CREATE VIEW `vp_database5_146_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database5_146_v`;
+--CREATE VIEW `vp_database5_146_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database5_146_v`;
+--CREATE VIEW `vp_database5_146_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database5_146_v`;
+--CREATE VIEW `vp_database5_146_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database5_146_v`;
+--CREATE VIEW `vp_database5_146_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--SET force_aggregate_data_spill = 1;
+--SET force_sort_data_spill = 1;
+--TRUNCATE TABLE `vp_database5_146_joined`;
+--INSERT INTO `vp_database5_146_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database5_146_joined`;
+--INSERT INTO `vp_database5_146_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database5_146_joined`;
+--INSERT INTO `vp_database5_146_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database5_146_joined`;
+--INSERT INTO `vp_database5_146_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database5_146_joined`;
+--INSERT INTO `vp_database5_146_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--VP source snapshot:
+--SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_146_source` ORDER BY `vp_rowid` LIMIT 256;
+--1 | 1969-12-15 | 1.00000000 | 0.8556254506111145
+--2 | 1970-01-10 | 1.00000000 | 0.469486802816391
+--3 | 1970-01-10 | 1.00000000 | 0.8981453776359558
+--4 | 1970-01-11 | 1.00000000 | 0.15438950061798096
+--5 | 1970-01-13 | 1.00000000 | 0.8146394491195679
+--6 | 1970-01-13 | 1.00000000 | 7.821312E8
+--7 | 1970-01-17 | 1.00000000 | 7.821312E8
+--8 | 2000-01-01 | 0E-8 | 0.0
+--9 | 2000-01-01 | 0E-8 | 0.6591864228248596
+--10 | 2000-01-01 | 0E-8 | 0.6591864228248596
+--11 | 2000-01-01 | 0E-8 | 0.6591864228248596
+--12 | 2000-01-01 | 0E-8 | 0.6591864228248596
+--13 | 2000-01-01 | 1.00000000 | 0.0
+--14 | 2000-01-01 | 1.00000000 | NULL
+--15 | 2000-01-02 | 1.00000000 | 0.6591864228248596
+--16 | 2000-01-03 | 1.00000000 | -2.0
+--17 | 2000-01-03 | 1.00000000 | 2.0
+--18 | 2000-01-04 | 1.00000000 | -3.0
+--19 | 2000-01-04 | 1.00000000 | NULL
+--20 | NULL | -2.00000000 | 0.6591864228248596
+--21 | NULL | -1.00000000 | -1.0
+--22 | NULL | 0E-8 | 0.0
+--23 | NULL | 0E-8 | 0.6591864228248596
+--24 | NULL | 0E-8 | 0.6591864228248596
+--25 | NULL | 1.00000000 | -3.0
+--26 | NULL | 1.00000000 | 0.0
+--27 | NULL | 1.00000000 | 0.0
+--28 | NULL | 1.00000000 | 0.0
+--29 | NULL | 1.00000000 | 0.0
+--30 | NULL | 1.00000000 | 0.0
+--31 | NULL | 1.00000000 | 0.23118504881858826
+--32 | NULL | 1.00000000 | 0.6223193407058716
+--33 | NULL | 1.00000000 | 1.0
+--34 | NULL | 1.00000000 | 3.0
+--35 | NULL | 1.00000000 | 1.419568896E9
+--36 | NULL | NULL | 0.0
+--37 | NULL | NULL | 0.0
+--38 | NULL | NULL | 0.6591864228248596
+--39 | NULL | NULL | 0.6591864228248596
+--40 | NULL | NULL | 0.6591864228248596
+--41 | NULL | NULL | 0.6591864228248596
+--42 | NULL | NULL | 3.0
+--VP left snapshot:
+--SELECT `vp_rowid`, `c1decimal`, `c2float` FROM `vp_database5_146_l` ORDER BY `vp_rowid` LIMIT 256;
+--1 | 1.00000000 | 0.8556254506111145
+--2 | 1.00000000 | 0.469486802816391
+--3 | 1.00000000 | 0.8981453776359558
+--4 | 1.00000000 | 0.15438950061798096
+--5 | 1.00000000 | 0.8146394491195679
+--6 | 1.00000000 | 7.821312E8
+--7 | 1.00000000 | 7.821312E8
+--8 | 0E-8 | 0.0
+--9 | 0E-8 | 0.6591864228248596
+--10 | 0E-8 | 0.6591864228248596
+--11 | 0E-8 | 0.6591864228248596
+--12 | 0E-8 | 0.6591864228248596
+--13 | 1.00000000 | 0.0
+--14 | 1.00000000 | NULL
+--15 | 1.00000000 | 0.6591864228248596
+--16 | 1.00000000 | -2.0
+--17 | 1.00000000 | 2.0
+--18 | 1.00000000 | -3.0
+--19 | 1.00000000 | NULL
+--20 | -2.00000000 | 0.6591864228248596
+--21 | -1.00000000 | -1.0
+--22 | 0E-8 | 0.0
+--23 | 0E-8 | 0.6591864228248596
+--24 | 0E-8 | 0.6591864228248596
+--25 | 1.00000000 | -3.0
+--26 | 1.00000000 | 0.0
+--27 | 1.00000000 | 0.0
+--28 | 1.00000000 | 0.0
+--29 | 1.00000000 | 0.0
+--30 | 1.00000000 | 0.0
+--31 | 1.00000000 | 0.23118504881858826
+--32 | 1.00000000 | 0.6223193407058716
+--33 | 1.00000000 | 1.0
+--34 | 1.00000000 | 3.0
+--35 | 1.00000000 | 1.419568896E9
+--36 | NULL | 0.0
+--37 | NULL | 0.0
+--38 | NULL | 0.6591864228248596
+--39 | NULL | 0.6591864228248596
+--40 | NULL | 0.6591864228248596
+--41 | NULL | 0.6591864228248596
+--42 | NULL | 3.0
+--VP right snapshot:
+--SELECT `vp_rowid`, `c0date` FROM `vp_database5_146_r` ORDER BY `vp_rowid` LIMIT 256;
+--1 | 1969-12-15
+--2 | 1970-01-10
+--3 | 1970-01-10
+--4 | 1970-01-11
+--5 | 1970-01-13
+--6 | 1970-01-13
+--7 | 1970-01-17
+--8 | 2000-01-01
+--9 | 2000-01-01
+--10 | 2000-01-01
+--11 | 2000-01-01
+--12 | 2000-01-01
+--13 | 2000-01-01
+--14 | 2000-01-01
+--15 | 2000-01-02
+--16 | 2000-01-03
+--17 | 2000-01-03
+--18 | 2000-01-04
+--19 | 2000-01-04
+--20 | NULL
+--21 | NULL
+--22 | NULL
+--23 | NULL
+--24 | NULL
+--25 | NULL
+--26 | NULL
+--27 | NULL
+--28 | NULL
+--29 | NULL
+--30 | NULL
+--31 | NULL
+--32 | NULL
+--33 | NULL
+--34 | NULL
+--35 | NULL
+--36 | NULL
+--37 | NULL
+--38 | NULL
+--39 | NULL
+--40 | NULL
+--41 | NULL
+--42 | NULL
+--Single query: SELECT `vp_database5_146_source`.`c0date` FROM vp_database5_146_source ORDER BY `vp_database5_146_source`.`vp_rowid` LIMIT 8
+--Split query: SELECT `vp_database5_146_source`.`c0date` FROM `vp_database5_146_joined` `vp_database5_146_source` ORDER BY `vp_database5_146_source`.`vp_rowid` LIMIT 8
+--Single query plan:
+--EXPLAIN SELECT `vp_database5_146_source`.`c0date` FROM vp_database5_146_source ORDER BY `vp_database5_146_source`.`vp_rowid` LIMIT 8;
+--Limit
+--├── output columns: [vp_database5_146_source.vp_rowid (#0), vp_database5_146_source.c0date (#1)]
+--├── limit: 8
+--├── offset: 0
+--├── estimated rows: 8.00
+--└── Sort(Single)
+--    ├── output columns: [vp_database5_146_source.vp_rowid (#0), vp_database5_146_source.c0date (#1)]
+--    ├── sort keys: [vp_rowid ASC NULLS LAST]
+--    ├── estimated rows: 42.00
+--    └── TableScan
+--        ├── table: default.database5.vp_database5_146_source
+--        ├── scan id: 0
+--        ├── output columns: [vp_rowid (#0), c0date (#1)]
+--        ├── read rows: 42
+--        ├── read size: < 1 KiB
+--        ├── partitions total: 0
+--        ├── partitions scanned: 0
+--        ├── push downs: [filters: [], limit: 8]
+--        └── estimated rows: 42.00
+--Split query plan:
+--EXPLAIN SELECT `vp_database5_146_source`.`c0date` FROM `vp_database5_146_joined` `vp_database5_146_source` ORDER BY `vp_database5_146_source`.`vp_rowid` LIMIT 8;
+--RowFetch
+--├── output columns: [vp_database5_146_source.vp_rowid (#0), vp_database5_146_source._row_id (#4), vp_database5_146_source.c0date (#1)]
+--├── columns to fetch: [c0date]
+--├── estimated rows: 8.00
+--└── Limit
+--    ├── output columns: [vp_database5_146_source.vp_rowid (#0), vp_database5_146_source._row_id (#4)]
+--    ├── limit: 8
+--    ├── offset: 0
+--    ├── estimated rows: 8.00
+--    └── Sort(Single)
+--        ├── output columns: [vp_database5_146_source.vp_rowid (#0), vp_database5_146_source._row_id (#4)]
+--        ├── sort keys: [vp_rowid ASC NULLS LAST]
+--        ├── estimated rows: 42.00
+--        └── TableScan
+--            ├── table: default.database5.vp_database5_146_joined
+--            ├── scan id: 0
+--            ├── output columns: [vp_rowid (#0), _row_id (#4)]
+--            ├── read rows: 8
+--            ├── read size: < 1 KiB
+--            ├── partitions total: 10
+--            ├── partitions scanned: 4
+--            ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 10 to 10 cost: 1 ms, topn pruning: 10 to 4 cost: 1 ms>]
+--            ├── push downs: [filters: [], limit: 8]
+--            └── estimated rows: 42.00
+--Single result sample: S:10:1969-12-15; x1, S:10:1970-01-10; x2, S:10:1970-01-11; x1, S:10:1970-01-13; x2, S:10:1970-01-17; x1, S:10:2000-01-01; x1
+--Split result sample: S:10:1969-12-15; x1, S:10:1970-01-10; x2, S:10:1970-01-11; x1, N; x4
+--Only in single: S:10:1970-01-13; x2, S:10:1970-01-17; x1, S:10:2000-01-01; x1
+--Only in split: N; x4
+--
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.comparePair(DatabendVerticalPartitioningOracle.java:3092)
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.check(DatabendVerticalPartitioningOracle.java:551)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:487)
+--	at sqlancer.Main$2.run(Main.java:708)
+--	at sqlancer.Main$2.runThread(Main.java:690)
+--	at sqlancer.Main$2.run(Main.java:681)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/10/08 07:31:36
+-- Database: database5
+-- Database version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+-- seed value: 1791443211633
+DROP DATABASE IF EXISTS database5;
+CREATE DATABASE database5;
+USE database5;
+CREATE TABLE t0(c0DATE DATE NULL DEFAULT(NULL), c1DECIMAL DECIMAL(43, 8) NULL DEFAULT(CAST(1 AS DECIMAL(43, 8))), c2FLOAT FLOAT NULL DEFAULT(0.6591864228248596));
+INSERT INTO t0(c1decimal, c0date) VALUES (CAST(1 AS DECIMAL(43, 8)), DATE '2000-01-02'), (NULL, NULL), (CAST(0 AS DECIMAL(43, 8)), DATE '2000-01-01'), (CAST(0 AS DECIMAL(43, 8)), DATE '2000-01-01'), (CAST(0 AS DECIMAL(43, 8)), DATE '2000-01-01'), (NULL, NULL);
+INSERT INTO t0(c2float, c1decimal) VALUES (0, CAST(0 AS DECIMAL(43, 8))), (0, NULL);
+CREATE TABLE t49(c0FLOAT FLOAT NOT NULL DEFAULT(0.05671992152929306));
+INSERT INTO t49(c0float) VALUES (0.43087613582611084);
+INSERT INTO t49(c0float) VALUES (0.8844950199127197), (0.18293964862823486);
+INSERT INTO t49(c0float) VALUES (0.7814304828643799), (0.6328439712524414), (0.7533025741577148);
+INSERT INTO t49(c0float) VALUES (-1), (-2);
+INSERT INTO t49(c0float) VALUES (0.5913486480712891), (0.8844950199127197), (0.355308473110199);
+INSERT INTO t0(c1decimal, c2float) VALUES (CAST(-1 AS DECIMAL(43, 8)), -1), (NULL, 0);
+INSERT INTO t49(c0float) VALUES (0.43087613582611084);
+INSERT INTO t0(c2float, c1decimal, c0date) VALUES (0.8981454372406006, CAST(1 AS DECIMAL(43, 8)), DATE '1970-01-10');
+INSERT INTO t0(c2float) VALUES (0), (0);
+INSERT INTO t49(c0float) VALUES (0.8808310627937317), (0.7533025741577148), (0.8808310627937317);
+INSERT INTO t0(c2float, c0date) VALUES (2, DATE '2000-01-03'), (1, NULL), (-2, DATE '2000-01-03'), (NULL, DATE '2000-01-04');
+INSERT INTO t0(c2float, c1decimal, c0date) VALUES (7.821312E8, CAST(1 AS DECIMAL(43, 8)), DATE '1970-01-13'), (0.8146395087242126, CAST(1 AS DECIMAL(43, 8)), DATE '1970-01-13');
+INSERT INTO t49(c0float) VALUES (1.093134592E9);
+INSERT INTO t49(c0float) VALUES (0.2338581383228302);
+INSERT INTO t49(c0float) VALUES (0.030616942793130875);
+INSERT INTO t49(c0float) VALUES (1.093134592E9);
+INSERT INTO t0(c0date, c1decimal, c2float) VALUES (DATE '1970-01-17', CAST(1 AS DECIMAL(43, 8)), 7.821312E8);
+INSERT INTO t0(c2float, c0date) VALUES (0.8556254506111145, DATE '1969-12-15');
+INSERT INTO t0(c0date, c1decimal) VALUES (DATE '2000-01-01', CAST(0 AS DECIMAL(43, 8))), (NULL, NULL);
+INSERT INTO t0(c1decimal, c2float, c0date) VALUES (CAST(1 AS DECIMAL(43, 8)), 0.469486802816391, DATE '1970-01-10');
+INSERT INTO t49(c0float) VALUES (0.4249442517757416);
+INSERT INTO t0(c2float) VALUES (0.23118504881858826);
+INSERT INTO t0(c2float) VALUES (0.6223193407058716);
+INSERT INTO t0(c2float) VALUES (-3), (0);
+INSERT INTO t49(c0float) VALUES (0.6092277765274048);
+INSERT INTO t49(c0float) VALUES (3), (-3);
+INSERT INTO t0(c0date, c2float, c1decimal) VALUES (DATE '1970-01-11', 0.15438950061798096, CAST(1 AS DECIMAL(43, 8)));
+INSERT INTO t0(c1decimal) VALUES (CAST(0 AS DECIMAL(43, 8))), (NULL), (CAST(0 AS DECIMAL(43, 8))), (CAST(-2 AS DECIMAL(43, 8)));
+INSERT INTO t49(c0float) VALUES (0.9031642079353333);
+INSERT INTO t49(c0float) VALUES (0.60755854845047), (7.821312E8);
+INSERT INTO t49(c0float) VALUES (0), (2), (2), (0);
+INSERT INTO t0(c2float, c1decimal, c0date) VALUES (0, CAST(0 AS DECIMAL(43, 8)), DATE '2000-01-01'), (3, NULL, NULL);
+INSERT INTO t49(c0float) VALUES (0.32993727922439575);
+INSERT INTO t49(c0float) VALUES (0.31161466240882874);
+INSERT INTO t0(c2float) VALUES (0), (3);
+INSERT INTO t49(c0float) VALUES (0), (-3), (0), (0), (0), (0);
+INSERT INTO t0(c2float, c0date) VALUES (-3, DATE '2000-01-04'), (0, NULL), (0, DATE '2000-01-01'), (NULL, DATE '2000-01-01');
+INSERT INTO t0(c1decimal, c2float) VALUES (CAST(1 AS DECIMAL(43, 8)), 1.419568896E9);
+INSERT INTO t49(c0float) VALUES (0), (-3);
+DROP STREAM IF EXISTS `vp_database5_4_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_4_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_4_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_4_v`;
+DROP TABLE IF EXISTS `vp_database5_4_joined`;
+DROP TABLE IF EXISTS `vp_database5_4_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_4_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_4_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_4_r`;
+DROP TABLE IF EXISTS `vp_database5_4_l`;
+DROP TABLE IF EXISTS `vp_database5_4_source`;
+CREATE TABLE `vp_database5_4_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NOT NULL DEFAULT 0.05671993) ENGINE=MEMORY;
+INSERT INTO `vp_database5_4_source` (`vp_rowid`, `c0float`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`), `c0float` FROM `t49` LIMIT 4096;
+CREATE TABLE `vp_database5_4_l` (`vp_rowid` BIGINT NOT NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database5_4_r` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL) ENGINE=FUSE;
+INSERT INTO `vp_database5_4_l` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database5_4_source`;
+INSERT INTO `vp_database5_4_r` (`vp_rowid`, `c0float`) SELECT `vp_rowid`, `c0float` FROM `vp_database5_4_source`;
+DROP TABLE IF EXISTS `vp_database5_4_joined`;
+CREATE TEMPORARY TABLE `vp_database5_4_joined` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL);
+TRUNCATE TABLE `vp_database5_4_joined`;
+INSERT INTO `vp_database5_4_joined` (`vp_rowid`, `c0float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float` FROM `vp_database5_4_l` l JOIN `vp_database5_4_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_4_joined`;
+INSERT INTO `vp_database5_4_joined` (`vp_rowid`, `c0float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float` FROM `vp_database5_4_l` l JOIN `vp_database5_4_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_4_joined`;
+INSERT INTO `vp_database5_4_joined` (`vp_rowid`, `c0float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float` FROM `vp_database5_4_l` l JOIN `vp_database5_4_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_4_joined`;
+INSERT INTO `vp_database5_4_joined` (`vp_rowid`, `c0float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float` FROM `vp_database5_4_l` l JOIN `vp_database5_4_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_4_joined`;
+INSERT INTO `vp_database5_4_joined` (`vp_rowid`, `c0float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float` FROM `vp_database5_4_l` l JOIN `vp_database5_4_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_4_v`;
+CREATE VIEW `vp_database5_4_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float` FROM `vp_database5_4_l` l JOIN `vp_database5_4_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_4_v`;
+CREATE VIEW `vp_database5_4_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float` FROM `vp_database5_4_l` l JOIN `vp_database5_4_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_4_v`;
+CREATE VIEW `vp_database5_4_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float` FROM `vp_database5_4_l` l JOIN `vp_database5_4_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_4_v`;
+CREATE VIEW `vp_database5_4_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float` FROM `vp_database5_4_l` l JOIN `vp_database5_4_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_4_v`;
+CREATE VIEW `vp_database5_4_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float` FROM `vp_database5_4_l` l JOIN `vp_database5_4_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP STREAM IF EXISTS `vp_database5_4_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_4_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_4_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_4_v`;
+DROP TABLE IF EXISTS `vp_database5_4_joined`;
+DROP TABLE IF EXISTS `vp_database5_4_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_4_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_4_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_4_r`;
+DROP TABLE IF EXISTS `vp_database5_4_l`;
+DROP TABLE IF EXISTS `vp_database5_4_source`;
+DROP STREAM IF EXISTS `vp_database5_22_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_22_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_22_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_22_v`;
+DROP TABLE IF EXISTS `vp_database5_22_joined`;
+DROP TABLE IF EXISTS `vp_database5_22_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_22_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_22_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_22_r`;
+DROP TABLE IF EXISTS `vp_database5_22_l`;
+DROP TABLE IF EXISTS `vp_database5_22_source`;
+CREATE TABLE `vp_database5_22_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NOT NULL DEFAULT 0.05671993) ENGINE=MEMORY;
+INSERT INTO `vp_database5_22_source` (`vp_rowid`, `c0float`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`), `c0float` FROM `t49` LIMIT 4096;
+CREATE TABLE `vp_database5_22_l` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database5_22_r` (`vp_rowid` BIGINT NOT NULL) ENGINE=FUSE;
+INSERT INTO `vp_database5_22_l` (`vp_rowid`, `c0float`) SELECT `vp_rowid`, `c0float` FROM `vp_database5_22_source`;
+INSERT INTO `vp_database5_22_r` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database5_22_source`;
+DROP TABLE IF EXISTS `vp_database5_22_joined`;
+CREATE TEMPORARY TABLE `vp_database5_22_joined` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL);
+DROP VIEW IF EXISTS `vp_database5_22_v`;
+CREATE VIEW `vp_database5_22_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float` FROM `vp_database5_22_l` l JOIN `vp_database5_22_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_22_v`;
+CREATE VIEW `vp_database5_22_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float` FROM `vp_database5_22_l` l JOIN `vp_database5_22_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_22_v`;
+CREATE VIEW `vp_database5_22_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float` FROM `vp_database5_22_l` l JOIN `vp_database5_22_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_22_v`;
+CREATE VIEW `vp_database5_22_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float` FROM `vp_database5_22_l` l JOIN `vp_database5_22_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_22_v`;
+CREATE VIEW `vp_database5_22_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float` FROM `vp_database5_22_l` l JOIN `vp_database5_22_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+TRUNCATE TABLE `vp_database5_22_joined`;
+INSERT INTO `vp_database5_22_joined` (`vp_rowid`, `c0float`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float` FROM `vp_database5_22_l` l JOIN `vp_database5_22_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_22_joined`;
+INSERT INTO `vp_database5_22_joined` (`vp_rowid`, `c0float`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float` FROM `vp_database5_22_l` l JOIN `vp_database5_22_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_22_joined`;
+INSERT INTO `vp_database5_22_joined` (`vp_rowid`, `c0float`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float` FROM `vp_database5_22_l` l JOIN `vp_database5_22_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_22_joined`;
+INSERT INTO `vp_database5_22_joined` (`vp_rowid`, `c0float`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float` FROM `vp_database5_22_l` l JOIN `vp_database5_22_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_22_joined`;
+INSERT INTO `vp_database5_22_joined` (`vp_rowid`, `c0float`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float` FROM `vp_database5_22_l` l JOIN `vp_database5_22_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP STREAM IF EXISTS `vp_database5_22_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_22_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_22_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_22_v`;
+DROP TABLE IF EXISTS `vp_database5_22_joined`;
+DROP TABLE IF EXISTS `vp_database5_22_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_22_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_22_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_22_r`;
+DROP TABLE IF EXISTS `vp_database5_22_l`;
+DROP TABLE IF EXISTS `vp_database5_22_source`;
+DROP STREAM IF EXISTS `vp_database5_46_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_46_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_46_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_46_v`;
+DROP TABLE IF EXISTS `vp_database5_46_joined`;
+DROP TABLE IF EXISTS `vp_database5_46_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_46_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_46_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_46_r`;
+DROP TABLE IF EXISTS `vp_database5_46_l`;
+DROP TABLE IF EXISTS `vp_database5_46_source`;
+CREATE TABLE `vp_database5_46_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NOT NULL DEFAULT 0.05671993) ENGINE=FUSE;
+INSERT INTO `vp_database5_46_source` (`vp_rowid`, `c0float`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`), `c0float` FROM `t49` LIMIT 4096;
+UPDATE `vp_database5_46_source` SET `c0float` = CAST('-0.0' AS DOUBLE) WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database5_46_source`);
+REMOVE @~/vp_database5_46_copy;
+DROP TABLE IF EXISTS `vp_database5_46_copy_reference`;
+CREATE TEMPORARY TABLE `vp_database5_46_copy_reference` AS SELECT * FROM `vp_database5_46_source`;
+COPY INTO @~/vp_database5_46_copy FROM (SELECT * FROM `vp_database5_46_source`) FILE_FORMAT=(TYPE=PARQUET);
+TRUNCATE TABLE `vp_database5_46_source`;
+COPY INTO `vp_database5_46_source` FROM @~/vp_database5_46_copy FILE_FORMAT=(TYPE=PARQUET) FORCE=TRUE;
+DROP STREAM IF EXISTS `vp_database5_48_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_48_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_48_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_48_v`;
+DROP TABLE IF EXISTS `vp_database5_48_joined`;
+DROP TABLE IF EXISTS `vp_database5_48_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_48_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_48_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_48_r`;
+DROP TABLE IF EXISTS `vp_database5_48_l`;
+DROP TABLE IF EXISTS `vp_database5_48_source`;
+CREATE TABLE `vp_database5_48_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NOT NULL DEFAULT 0.05671993) ENGINE=FUSE;
+INSERT INTO `vp_database5_48_source` (`vp_rowid`, `c0float`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`), `c0float` FROM `t49` LIMIT 4096;
+UPDATE `vp_database5_48_source` SET `c0float` = CAST('-0.0' AS DOUBLE) WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database5_48_source`);
+REMOVE @~/vp_database5_48_copy;
+DROP TABLE IF EXISTS `vp_database5_48_copy_reference`;
+CREATE TEMPORARY TABLE `vp_database5_48_copy_reference` AS SELECT * FROM `vp_database5_48_source`;
+COPY INTO @~/vp_database5_48_copy FROM (SELECT * FROM `vp_database5_48_source`) FILE_FORMAT=(TYPE=PARQUET);
+TRUNCATE TABLE `vp_database5_48_source`;
+COPY INTO `vp_database5_48_source` FROM @~/vp_database5_48_copy FILE_FORMAT=(TYPE=PARQUET) FORCE=TRUE;
+DROP STREAM IF EXISTS `vp_database5_51_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_51_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_51_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_51_v`;
+DROP TABLE IF EXISTS `vp_database5_51_joined`;
+DROP TABLE IF EXISTS `vp_database5_51_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_51_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_51_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_51_r`;
+DROP TABLE IF EXISTS `vp_database5_51_l`;
+DROP TABLE IF EXISTS `vp_database5_51_source`;
+CREATE TABLE `vp_database5_51_source` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL DEFAULT 1.00000000, `c2float` DOUBLE NULL DEFAULT 0.6591864) ENGINE=MEMORY;
+INSERT INTO `vp_database5_51_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT ROW_NUMBER() OVER (ORDER BY `c0date`, `c1decimal`, `c2float`), `c0date`, `c1decimal`, `c2float` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database5_51_l` (`vp_rowid` BIGINT NOT NULL, `c2float` DOUBLE NULL, `c0date` DATE NULL) ENGINE=MEMORY;
+CREATE TABLE `vp_database5_51_r` (`vp_rowid` BIGINT NOT NULL, `c1decimal` DECIMAL(43, 8) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database5_51_l` (`vp_rowid`, `c2float`, `c0date`) SELECT `vp_rowid`, `c2float`, `c0date` FROM `vp_database5_51_source`;
+INSERT INTO `vp_database5_51_r` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_51_source`;
+DROP TABLE IF EXISTS `vp_database5_51_joined`;
+CREATE TEMPORARY TABLE `vp_database5_51_joined` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL);
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+TRUNCATE TABLE `vp_database5_51_joined`;
+INSERT INTO `vp_database5_51_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, r.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_51_l` l JOIN `vp_database5_51_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_51_joined`;
+INSERT INTO `vp_database5_51_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, r.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_51_l` l JOIN `vp_database5_51_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_51_joined`;
+INSERT INTO `vp_database5_51_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, r.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_51_l` l JOIN `vp_database5_51_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_51_joined`;
+INSERT INTO `vp_database5_51_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, r.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_51_l` l JOIN `vp_database5_51_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_51_joined`;
+INSERT INTO `vp_database5_51_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, r.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_51_l` l JOIN `vp_database5_51_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP VIEW IF EXISTS `vp_database5_51_v`;
+CREATE VIEW `vp_database5_51_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, r.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_51_l` l JOIN `vp_database5_51_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_51_v`;
+CREATE VIEW `vp_database5_51_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, r.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_51_l` l JOIN `vp_database5_51_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_51_v`;
+CREATE VIEW `vp_database5_51_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, r.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_51_l` l JOIN `vp_database5_51_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_51_v`;
+CREATE VIEW `vp_database5_51_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, r.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_51_l` l JOIN `vp_database5_51_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_51_v`;
+CREATE VIEW `vp_database5_51_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, r.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_51_l` l JOIN `vp_database5_51_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP STREAM IF EXISTS `vp_database5_51_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_51_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_51_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_51_v`;
+DROP TABLE IF EXISTS `vp_database5_51_joined`;
+DROP TABLE IF EXISTS `vp_database5_51_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_51_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_51_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_51_r`;
+DROP TABLE IF EXISTS `vp_database5_51_l`;
+DROP TABLE IF EXISTS `vp_database5_51_source`;
+DROP STREAM IF EXISTS `vp_database5_77_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_77_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_77_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_77_v`;
+DROP TABLE IF EXISTS `vp_database5_77_joined`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_77_r`;
+DROP TABLE IF EXISTS `vp_database5_77_l`;
+DROP TABLE IF EXISTS `vp_database5_77_source`;
+CREATE TABLE `vp_database5_77_source` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL DEFAULT 1.00000000, `c2float` DOUBLE NULL DEFAULT 0.6591864) ENGINE=FUSE;
+INSERT INTO `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT ROW_NUMBER() OVER (ORDER BY `c0date`, `c1decimal`, `c2float`), `c0date`, `c1decimal`, `c2float` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database5_77_l` (`vp_rowid` BIGINT NOT NULL, `c1decimal` DECIMAL(43, 8) NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database5_77_r` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c2float` DOUBLE NULL) ENGINE=FUSE;
+INSERT INTO `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source`;
+INSERT INTO `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source`;
+DROP TABLE IF EXISTS `vp_database5_77_joined`;
+CREATE TEMPORARY TABLE `vp_database5_77_joined` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL);
+DROP VIEW IF EXISTS `vp_database5_77_v`;
+CREATE VIEW `vp_database5_77_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float` FROM `vp_database5_77_l` l JOIN `vp_database5_77_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_77_v`;
+CREATE VIEW `vp_database5_77_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float` FROM `vp_database5_77_l` l JOIN `vp_database5_77_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_77_v`;
+CREATE VIEW `vp_database5_77_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float` FROM `vp_database5_77_l` l JOIN `vp_database5_77_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_77_v`;
+CREATE VIEW `vp_database5_77_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float` FROM `vp_database5_77_l` l JOIN `vp_database5_77_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_77_v`;
+CREATE VIEW `vp_database5_77_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float` FROM `vp_database5_77_l` l JOIN `vp_database5_77_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_77_joined`;
+INSERT INTO `vp_database5_77_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float` FROM `vp_database5_77_l` l JOIN `vp_database5_77_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_77_joined`;
+INSERT INTO `vp_database5_77_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float` FROM `vp_database5_77_l` l JOIN `vp_database5_77_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_source_stream_82`;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_left_stream_82`;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_right_stream_82`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_source_delta_82`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_left_delta_82`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_right_delta_82`;
+CREATE STREAM `vp_database5_77_mutation_source_stream_82` ON TABLE `vp_database5_77_source`;
+CREATE STREAM `vp_database5_77_mutation_left_stream_82` ON TABLE `vp_database5_77_l`;
+CREATE STREAM `vp_database5_77_mutation_right_stream_82` ON TABLE `vp_database5_77_r`;
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_source_delta_82` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL);
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_left_delta_82` (`vp_rowid` BIGINT NULL, `c1decimal` DECIMAL(43, 8) NULL);
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_right_delta_82` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c2float` DOUBLE NULL);
+INSERT INTO `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT 43, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source` WHERE `vp_rowid` = 43;
+INSERT INTO `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source` WHERE `vp_rowid` = 43;
+INSERT INTO `vp_database5_77_mutation_source_delta_82` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_mutation_source_stream_82`;
+INSERT INTO `vp_database5_77_mutation_left_delta_82` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_mutation_left_stream_82`;
+INSERT INTO `vp_database5_77_mutation_right_delta_82` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_mutation_right_stream_82`;
+DELETE FROM `vp_database5_77_source` WHERE `vp_rowid` = 1;
+DELETE FROM `vp_database5_77_l` WHERE `vp_rowid` = 1;
+DELETE FROM `vp_database5_77_r` WHERE `vp_rowid` = 1;
+INSERT OVERWRITE `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source`;
+INSERT OVERWRITE `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source`;
+INSERT OVERWRITE `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source`;
+OPTIMIZE TABLE `vp_database5_77_source` COMPACT;
+OPTIMIZE TABLE `vp_database5_77_l` COMPACT;
+OPTIMIZE TABLE `vp_database5_77_r` COMPACT;
+TRUNCATE TABLE `vp_database5_77_joined`;
+INSERT INTO `vp_database5_77_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float` FROM `vp_database5_77_l` l JOIN `vp_database5_77_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_77_joined`;
+INSERT INTO `vp_database5_77_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float` FROM `vp_database5_77_l` l JOIN `vp_database5_77_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP STREAM IF EXISTS `vp_database5_77_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_77_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_77_right_stream`;
+CREATE STREAM `vp_database5_77_source_stream` ON TABLE `vp_database5_77_source`;
+CREATE STREAM `vp_database5_77_left_stream` ON TABLE `vp_database5_77_l`;
+CREATE STREAM `vp_database5_77_right_stream` ON TABLE `vp_database5_77_r`;
+INSERT INTO `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT 44, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source` WHERE `vp_rowid` = 44;
+INSERT INTO `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source` WHERE `vp_rowid` = 44;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_source_stream_87`;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_left_stream_87`;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_right_stream_87`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_source_delta_87`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_left_delta_87`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_right_delta_87`;
+CREATE STREAM `vp_database5_77_mutation_source_stream_87` ON TABLE `vp_database5_77_source`;
+CREATE STREAM `vp_database5_77_mutation_left_stream_87` ON TABLE `vp_database5_77_l`;
+CREATE STREAM `vp_database5_77_mutation_right_stream_87` ON TABLE `vp_database5_77_r`;
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_source_delta_87` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL);
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_left_delta_87` (`vp_rowid` BIGINT NULL, `c1decimal` DECIMAL(43, 8) NULL);
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_right_delta_87` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c2float` DOUBLE NULL);
+INSERT INTO `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT 45, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source` WHERE `vp_rowid` = 45;
+INSERT INTO `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source` WHERE `vp_rowid` = 45;
+INSERT INTO `vp_database5_77_mutation_source_delta_87` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_mutation_source_stream_87`;
+INSERT INTO `vp_database5_77_mutation_left_delta_87` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_mutation_left_stream_87`;
+INSERT INTO `vp_database5_77_mutation_right_delta_87` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_mutation_right_stream_87`;
+DELETE FROM `vp_database5_77_source` WHERE `vp_rowid` = 2;
+DELETE FROM `vp_database5_77_l` WHERE `vp_rowid` = 2;
+DELETE FROM `vp_database5_77_r` WHERE `vp_rowid` = 2;
+INSERT OVERWRITE `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source`;
+INSERT OVERWRITE `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source`;
+INSERT OVERWRITE `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source`;
+OPTIMIZE TABLE `vp_database5_77_source` COMPACT;
+OPTIMIZE TABLE `vp_database5_77_l` COMPACT;
+OPTIMIZE TABLE `vp_database5_77_r` COMPACT;
+DROP STREAM IF EXISTS `vp_database5_77_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_77_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_77_right_stream`;
+CREATE STREAM `vp_database5_77_source_stream` ON TABLE `vp_database5_77_source`;
+CREATE STREAM `vp_database5_77_left_stream` ON TABLE `vp_database5_77_l`;
+CREATE STREAM `vp_database5_77_right_stream` ON TABLE `vp_database5_77_r`;
+INSERT INTO `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT 46, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source` WHERE `vp_rowid` = 46;
+INSERT INTO `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source` WHERE `vp_rowid` = 46;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_source_stream_92`;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_left_stream_92`;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_right_stream_92`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_source_delta_92`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_left_delta_92`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_right_delta_92`;
+CREATE STREAM `vp_database5_77_mutation_source_stream_92` ON TABLE `vp_database5_77_source`;
+CREATE STREAM `vp_database5_77_mutation_left_stream_92` ON TABLE `vp_database5_77_l`;
+CREATE STREAM `vp_database5_77_mutation_right_stream_92` ON TABLE `vp_database5_77_r`;
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_source_delta_92` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL);
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_left_delta_92` (`vp_rowid` BIGINT NULL, `c1decimal` DECIMAL(43, 8) NULL);
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_right_delta_92` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c2float` DOUBLE NULL);
+INSERT INTO `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT 47, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source` WHERE `vp_rowid` = 47;
+INSERT INTO `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source` WHERE `vp_rowid` = 47;
+INSERT INTO `vp_database5_77_mutation_source_delta_92` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_mutation_source_stream_92`;
+INSERT INTO `vp_database5_77_mutation_left_delta_92` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_mutation_left_stream_92`;
+INSERT INTO `vp_database5_77_mutation_right_delta_92` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_mutation_right_stream_92`;
+DELETE FROM `vp_database5_77_source` WHERE `vp_rowid` = 3;
+DELETE FROM `vp_database5_77_l` WHERE `vp_rowid` = 3;
+DELETE FROM `vp_database5_77_r` WHERE `vp_rowid` = 3;
+INSERT OVERWRITE `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source`;
+INSERT OVERWRITE `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source`;
+INSERT OVERWRITE `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source`;
+OPTIMIZE TABLE `vp_database5_77_source` COMPACT;
+OPTIMIZE TABLE `vp_database5_77_l` COMPACT;
+OPTIMIZE TABLE `vp_database5_77_r` COMPACT;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_source_stream_97`;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_left_stream_97`;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_right_stream_97`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_source_delta_97`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_left_delta_97`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_right_delta_97`;
+CREATE STREAM `vp_database5_77_mutation_source_stream_97` ON TABLE `vp_database5_77_source`;
+CREATE STREAM `vp_database5_77_mutation_left_stream_97` ON TABLE `vp_database5_77_l`;
+CREATE STREAM `vp_database5_77_mutation_right_stream_97` ON TABLE `vp_database5_77_r`;
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_source_delta_97` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL);
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_left_delta_97` (`vp_rowid` BIGINT NULL, `c1decimal` DECIMAL(43, 8) NULL);
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_right_delta_97` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c2float` DOUBLE NULL);
+INSERT INTO `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT 48, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source` WHERE `vp_rowid` = 48;
+INSERT INTO `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source` WHERE `vp_rowid` = 48;
+INSERT INTO `vp_database5_77_mutation_source_delta_97` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_mutation_source_stream_97`;
+INSERT INTO `vp_database5_77_mutation_left_delta_97` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_mutation_left_stream_97`;
+INSERT INTO `vp_database5_77_mutation_right_delta_97` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_mutation_right_stream_97`;
+DELETE FROM `vp_database5_77_source` WHERE `vp_rowid` = 4;
+DELETE FROM `vp_database5_77_l` WHERE `vp_rowid` = 4;
+DELETE FROM `vp_database5_77_r` WHERE `vp_rowid` = 4;
+INSERT OVERWRITE `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source`;
+INSERT OVERWRITE `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source`;
+INSERT OVERWRITE `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source`;
+OPTIMIZE TABLE `vp_database5_77_source` COMPACT;
+OPTIMIZE TABLE `vp_database5_77_l` COMPACT;
+OPTIMIZE TABLE `vp_database5_77_r` COMPACT;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_source_stream_102`;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_left_stream_102`;
+DROP STREAM IF EXISTS `vp_database5_77_mutation_right_stream_102`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_source_delta_102`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_left_delta_102`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_right_delta_102`;
+CREATE STREAM `vp_database5_77_mutation_source_stream_102` ON TABLE `vp_database5_77_source`;
+CREATE STREAM `vp_database5_77_mutation_left_stream_102` ON TABLE `vp_database5_77_l`;
+CREATE STREAM `vp_database5_77_mutation_right_stream_102` ON TABLE `vp_database5_77_r`;
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_source_delta_102` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL);
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_left_delta_102` (`vp_rowid` BIGINT NULL, `c1decimal` DECIMAL(43, 8) NULL);
+CREATE TEMPORARY TABLE `vp_database5_77_mutation_right_delta_102` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c2float` DOUBLE NULL);
+INSERT INTO `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT 49, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source` WHERE `vp_rowid` = 49;
+INSERT INTO `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source` WHERE `vp_rowid` = 49;
+INSERT INTO `vp_database5_77_mutation_source_delta_102` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_mutation_source_stream_102`;
+INSERT INTO `vp_database5_77_mutation_left_delta_102` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_mutation_left_stream_102`;
+INSERT INTO `vp_database5_77_mutation_right_delta_102` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_mutation_right_stream_102`;
+DELETE FROM `vp_database5_77_source` WHERE `vp_rowid` = 5;
+DELETE FROM `vp_database5_77_l` WHERE `vp_rowid` = 5;
+DELETE FROM `vp_database5_77_r` WHERE `vp_rowid` = 5;
+INSERT OVERWRITE `vp_database5_77_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float` FROM `vp_database5_77_source`;
+INSERT OVERWRITE `vp_database5_77_l` (`vp_rowid`, `c1decimal`) SELECT `vp_rowid`, `c1decimal` FROM `vp_database5_77_source`;
+INSERT OVERWRITE `vp_database5_77_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_77_source`;
+OPTIMIZE TABLE `vp_database5_77_source` COMPACT;
+OPTIMIZE TABLE `vp_database5_77_l` COMPACT;
+OPTIMIZE TABLE `vp_database5_77_r` COMPACT;
+DROP STREAM IF EXISTS `vp_database5_77_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_77_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_77_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_77_v`;
+DROP TABLE IF EXISTS `vp_database5_77_joined`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_77_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_77_r`;
+DROP TABLE IF EXISTS `vp_database5_77_l`;
+DROP TABLE IF EXISTS `vp_database5_77_source`;
+DROP STREAM IF EXISTS `vp_database5_108_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_108_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_108_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_108_v`;
+DROP TABLE IF EXISTS `vp_database5_108_joined`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_108_r`;
+DROP TABLE IF EXISTS `vp_database5_108_l`;
+DROP TABLE IF EXISTS `vp_database5_108_source`;
+CREATE TABLE `vp_database5_108_source` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL DEFAULT 1.00000000, `c2float` DOUBLE NULL DEFAULT 0.6591864) ENGINE=FUSE;
+INSERT INTO `vp_database5_108_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT ROW_NUMBER() OVER (ORDER BY `c0date`, `c1decimal`, `c2float`), `c0date`, `c1decimal`, `c2float` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database5_108_l` (`vp_rowid` BIGINT NOT NULL, `c2float` DOUBLE NULL, `c1decimal` DECIMAL(43, 8) NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database5_108_r` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c2float` DOUBLE NULL) ENGINE=FUSE;
+INSERT INTO `vp_database5_108_l` (`vp_rowid`, `c2float`, `c1decimal`) SELECT `vp_rowid`, `c2float`, `c1decimal` FROM `vp_database5_108_source`;
+INSERT INTO `vp_database5_108_r` (`vp_rowid`, `c0date`, `c2float`) SELECT `vp_rowid`, `c0date`, `c2float` FROM `vp_database5_108_source`;
+DROP TABLE IF EXISTS `vp_database5_108_joined`;
+CREATE TEMPORARY TABLE `vp_database5_108_joined` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL);
+ALTER TABLE `vp_database5_108_source` ADD COLUMN `vp_database5_108_evolved_110` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database5_108_l` ADD COLUMN `vp_database5_108_evolved_110` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database5_108_r` ADD COLUMN `vp_database5_108_evolved_110` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database5_108_joined`;
+CREATE TEMPORARY TABLE `vp_database5_108_joined` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL, `vp_database5_108_evolved_110` BIGINT NULL);
+TRUNCATE TABLE `vp_database5_108_joined`;
+INSERT INTO `vp_database5_108_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float`, r.`vp_database5_108_evolved_110` AS `vp_database5_108_evolved_110` FROM `vp_database5_108_l` l JOIN `vp_database5_108_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_108_joined`;
+INSERT INTO `vp_database5_108_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float`, l.`vp_database5_108_evolved_110` AS `vp_database5_108_evolved_110` FROM `vp_database5_108_l` l JOIN `vp_database5_108_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_108_joined`;
+INSERT INTO `vp_database5_108_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float`, r.`vp_database5_108_evolved_110` AS `vp_database5_108_evolved_110` FROM `vp_database5_108_l` l JOIN `vp_database5_108_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_108_joined`;
+INSERT INTO `vp_database5_108_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float`, r.`vp_database5_108_evolved_110` AS `vp_database5_108_evolved_110` FROM `vp_database5_108_l` l JOIN `vp_database5_108_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_108_joined`;
+INSERT INTO `vp_database5_108_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float`, l.`vp_database5_108_evolved_110` AS `vp_database5_108_evolved_110` FROM `vp_database5_108_l` l JOIN `vp_database5_108_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP STREAM IF EXISTS `vp_database5_108_mutation_source_stream_116`;
+DROP STREAM IF EXISTS `vp_database5_108_mutation_left_stream_116`;
+DROP STREAM IF EXISTS `vp_database5_108_mutation_right_stream_116`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_source_delta_116`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_left_delta_116`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_right_delta_116`;
+CREATE STREAM `vp_database5_108_mutation_source_stream_116` ON TABLE `vp_database5_108_source`;
+CREATE STREAM `vp_database5_108_mutation_left_stream_116` ON TABLE `vp_database5_108_l`;
+CREATE STREAM `vp_database5_108_mutation_right_stream_116` ON TABLE `vp_database5_108_r`;
+CREATE TEMPORARY TABLE `vp_database5_108_mutation_source_delta_116` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL, `vp_database5_108_evolved_110` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database5_108_mutation_left_delta_116` (`vp_rowid` BIGINT NULL, `c2float` DOUBLE NULL, `c1decimal` DECIMAL(43, 8) NULL, `vp_database5_108_evolved_110` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database5_108_mutation_right_delta_116` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c2float` DOUBLE NULL, `vp_database5_108_evolved_110` BIGINT NULL);
+INSERT INTO `vp_database5_108_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT 43, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database5_108_l` (`vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source` WHERE `vp_rowid` = 43;
+INSERT INTO `vp_database5_108_r` (`vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source` WHERE `vp_rowid` = 43;
+INSERT INTO `vp_database5_108_mutation_source_delta_116` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_mutation_source_stream_116`;
+INSERT INTO `vp_database5_108_mutation_left_delta_116` (`vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110` FROM `vp_database5_108_mutation_left_stream_116`;
+INSERT INTO `vp_database5_108_mutation_right_delta_116` (`vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_mutation_right_stream_116`;
+DELETE FROM `vp_database5_108_source` WHERE `vp_rowid` = 1;
+DELETE FROM `vp_database5_108_l` WHERE `vp_rowid` = 1;
+DELETE FROM `vp_database5_108_r` WHERE `vp_rowid` = 1;
+INSERT OVERWRITE `vp_database5_108_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source`;
+INSERT OVERWRITE `vp_database5_108_l` (`vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source`;
+INSERT OVERWRITE `vp_database5_108_r` (`vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source`;
+OPTIMIZE TABLE `vp_database5_108_source` COMPACT;
+OPTIMIZE TABLE `vp_database5_108_l` COMPACT;
+OPTIMIZE TABLE `vp_database5_108_r` COMPACT;
+DROP STREAM IF EXISTS `vp_database5_108_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_108_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_108_right_stream`;
+CREATE STREAM `vp_database5_108_source_stream` ON TABLE `vp_database5_108_source`;
+CREATE STREAM `vp_database5_108_left_stream` ON TABLE `vp_database5_108_l`;
+CREATE STREAM `vp_database5_108_right_stream` ON TABLE `vp_database5_108_r`;
+INSERT INTO `vp_database5_108_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT 44, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database5_108_l` (`vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source` WHERE `vp_rowid` = 44;
+INSERT INTO `vp_database5_108_r` (`vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source` WHERE `vp_rowid` = 44;
+DROP VIEW IF EXISTS `vp_database5_108_v`;
+CREATE VIEW `vp_database5_108_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float`, r.`vp_database5_108_evolved_110` AS `vp_database5_108_evolved_110` FROM `vp_database5_108_l` l JOIN `vp_database5_108_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_108_v`;
+CREATE VIEW `vp_database5_108_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float`, l.`vp_database5_108_evolved_110` AS `vp_database5_108_evolved_110` FROM `vp_database5_108_l` l JOIN `vp_database5_108_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_108_v`;
+CREATE VIEW `vp_database5_108_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, r.`c2float` AS `c2float`, l.`vp_database5_108_evolved_110` AS `vp_database5_108_evolved_110` FROM `vp_database5_108_l` l JOIN `vp_database5_108_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_108_v`;
+CREATE VIEW `vp_database5_108_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float`, l.`vp_database5_108_evolved_110` AS `vp_database5_108_evolved_110` FROM `vp_database5_108_l` l JOIN `vp_database5_108_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_108_v`;
+CREATE VIEW `vp_database5_108_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float`, l.`vp_database5_108_evolved_110` AS `vp_database5_108_evolved_110` FROM `vp_database5_108_l` l JOIN `vp_database5_108_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP STREAM IF EXISTS `vp_database5_108_mutation_source_stream_125`;
+DROP STREAM IF EXISTS `vp_database5_108_mutation_left_stream_125`;
+DROP STREAM IF EXISTS `vp_database5_108_mutation_right_stream_125`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_source_delta_125`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_left_delta_125`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_right_delta_125`;
+CREATE STREAM `vp_database5_108_mutation_source_stream_125` ON TABLE `vp_database5_108_source`;
+CREATE STREAM `vp_database5_108_mutation_left_stream_125` ON TABLE `vp_database5_108_l`;
+CREATE STREAM `vp_database5_108_mutation_right_stream_125` ON TABLE `vp_database5_108_r`;
+CREATE TEMPORARY TABLE `vp_database5_108_mutation_source_delta_125` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL, `vp_database5_108_evolved_110` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database5_108_mutation_left_delta_125` (`vp_rowid` BIGINT NULL, `c2float` DOUBLE NULL, `c1decimal` DECIMAL(43, 8) NULL, `vp_database5_108_evolved_110` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database5_108_mutation_right_delta_125` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c2float` DOUBLE NULL, `vp_database5_108_evolved_110` BIGINT NULL);
+INSERT INTO `vp_database5_108_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT 45, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database5_108_l` (`vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source` WHERE `vp_rowid` = 45;
+INSERT INTO `vp_database5_108_r` (`vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source` WHERE `vp_rowid` = 45;
+INSERT INTO `vp_database5_108_mutation_source_delta_125` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_mutation_source_stream_125`;
+INSERT INTO `vp_database5_108_mutation_left_delta_125` (`vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110` FROM `vp_database5_108_mutation_left_stream_125`;
+INSERT INTO `vp_database5_108_mutation_right_delta_125` (`vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_mutation_right_stream_125`;
+DELETE FROM `vp_database5_108_source` WHERE `vp_rowid` = 2;
+DELETE FROM `vp_database5_108_l` WHERE `vp_rowid` = 2;
+DELETE FROM `vp_database5_108_r` WHERE `vp_rowid` = 2;
+INSERT OVERWRITE `vp_database5_108_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source`;
+INSERT OVERWRITE `vp_database5_108_l` (`vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source`;
+INSERT OVERWRITE `vp_database5_108_r` (`vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`) SELECT `vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110` FROM `vp_database5_108_source`;
+OPTIMIZE TABLE `vp_database5_108_source` COMPACT;
+OPTIMIZE TABLE `vp_database5_108_l` COMPACT;
+OPTIMIZE TABLE `vp_database5_108_r` COMPACT;
+ALTER TABLE `vp_database5_108_source` ADD COLUMN `vp_database5_108_evolved_130` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database5_108_l` ADD COLUMN `vp_database5_108_evolved_130` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database5_108_r` ADD COLUMN `vp_database5_108_evolved_130` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database5_108_joined`;
+CREATE TEMPORARY TABLE `vp_database5_108_joined` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL, `vp_database5_108_evolved_110` BIGINT NULL, `vp_database5_108_evolved_130` BIGINT NULL);
+DROP STREAM IF EXISTS `vp_database5_108_mutation_source_stream_133`;
+DROP STREAM IF EXISTS `vp_database5_108_mutation_left_stream_133`;
+DROP STREAM IF EXISTS `vp_database5_108_mutation_right_stream_133`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_source_delta_133`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_left_delta_133`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_right_delta_133`;
+CREATE STREAM `vp_database5_108_mutation_source_stream_133` ON TABLE `vp_database5_108_source`;
+CREATE STREAM `vp_database5_108_mutation_left_stream_133` ON TABLE `vp_database5_108_l`;
+CREATE STREAM `vp_database5_108_mutation_right_stream_133` ON TABLE `vp_database5_108_r`;
+CREATE TEMPORARY TABLE `vp_database5_108_mutation_source_delta_133` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL, `vp_database5_108_evolved_110` BIGINT NULL, `vp_database5_108_evolved_130` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database5_108_mutation_left_delta_133` (`vp_rowid` BIGINT NULL, `c2float` DOUBLE NULL, `c1decimal` DECIMAL(43, 8) NULL, `vp_database5_108_evolved_110` BIGINT NULL, `vp_database5_108_evolved_130` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database5_108_mutation_right_delta_133` (`vp_rowid` BIGINT NULL, `c0date` DATE NULL, `c2float` DOUBLE NULL, `vp_database5_108_evolved_110` BIGINT NULL, `vp_database5_108_evolved_130` BIGINT NULL);
+INSERT INTO `vp_database5_108_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130`) SELECT 46, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130` FROM `vp_database5_108_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database5_108_l` (`vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130`) SELECT `vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130` FROM `vp_database5_108_source` WHERE `vp_rowid` = 46;
+INSERT INTO `vp_database5_108_r` (`vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130`) SELECT `vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130` FROM `vp_database5_108_source` WHERE `vp_rowid` = 46;
+INSERT INTO `vp_database5_108_mutation_source_delta_133` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130` FROM `vp_database5_108_mutation_source_stream_133`;
+INSERT INTO `vp_database5_108_mutation_left_delta_133` (`vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130`) SELECT `vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130` FROM `vp_database5_108_mutation_left_stream_133`;
+INSERT INTO `vp_database5_108_mutation_right_delta_133` (`vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130`) SELECT `vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130` FROM `vp_database5_108_mutation_right_stream_133`;
+DELETE FROM `vp_database5_108_source` WHERE `vp_rowid` = 3;
+DELETE FROM `vp_database5_108_l` WHERE `vp_rowid` = 3;
+DELETE FROM `vp_database5_108_r` WHERE `vp_rowid` = 3;
+INSERT OVERWRITE `vp_database5_108_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130`) SELECT `vp_rowid`, `c0date`, `c1decimal`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130` FROM `vp_database5_108_source`;
+INSERT OVERWRITE `vp_database5_108_l` (`vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130`) SELECT `vp_rowid`, `c2float`, `c1decimal`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130` FROM `vp_database5_108_source`;
+INSERT OVERWRITE `vp_database5_108_r` (`vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130`) SELECT `vp_rowid`, `c0date`, `c2float`, `vp_database5_108_evolved_110`, `vp_database5_108_evolved_130` FROM `vp_database5_108_source`;
+OPTIMIZE TABLE `vp_database5_108_source` COMPACT;
+OPTIMIZE TABLE `vp_database5_108_l` COMPACT;
+OPTIMIZE TABLE `vp_database5_108_r` COMPACT;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP STREAM IF EXISTS `vp_database5_108_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_108_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_108_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_108_v`;
+DROP TABLE IF EXISTS `vp_database5_108_joined`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_108_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_108_r`;
+DROP TABLE IF EXISTS `vp_database5_108_l`;
+DROP TABLE IF EXISTS `vp_database5_108_source`;
+DROP STREAM IF EXISTS `vp_database5_146_source_stream`;
+DROP STREAM IF EXISTS `vp_database5_146_left_stream`;
+DROP STREAM IF EXISTS `vp_database5_146_right_stream`;
+DROP VIEW IF EXISTS `vp_database5_146_v`;
+DROP TABLE IF EXISTS `vp_database5_146_joined`;
+DROP TABLE IF EXISTS `vp_database5_146_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database5_146_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database5_146_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database5_146_r`;
+DROP TABLE IF EXISTS `vp_database5_146_l`;
+DROP TABLE IF EXISTS `vp_database5_146_source`;
+CREATE TABLE `vp_database5_146_source` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL DEFAULT 1.00000000, `c2float` DOUBLE NULL DEFAULT 0.6591864) ENGINE=MEMORY;
+INSERT INTO `vp_database5_146_source` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT ROW_NUMBER() OVER (ORDER BY `c0date`, `c1decimal`, `c2float`), `c0date`, `c1decimal`, `c2float` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database5_146_l` (`vp_rowid` BIGINT NOT NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database5_146_r` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database5_146_l` (`vp_rowid`, `c1decimal`, `c2float`) SELECT `vp_rowid`, `c1decimal`, `c2float` FROM `vp_database5_146_source`;
+INSERT INTO `vp_database5_146_r` (`vp_rowid`, `c0date`) SELECT `vp_rowid`, `c0date` FROM `vp_database5_146_source`;
+DROP TABLE IF EXISTS `vp_database5_146_joined`;
+CREATE TEMPORARY TABLE `vp_database5_146_joined` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1decimal` DECIMAL(43, 8) NULL, `c2float` DOUBLE NULL);
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP VIEW IF EXISTS `vp_database5_146_v`;
+CREATE VIEW `vp_database5_146_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_146_v`;
+CREATE VIEW `vp_database5_146_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_146_v`;
+CREATE VIEW `vp_database5_146_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_146_v`;
+CREATE VIEW `vp_database5_146_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database5_146_v`;
+CREATE VIEW `vp_database5_146_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+TRUNCATE TABLE `vp_database5_146_joined`;
+INSERT INTO `vp_database5_146_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_146_joined`;
+INSERT INTO `vp_database5_146_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_146_joined`;
+INSERT INTO `vp_database5_146_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_146_joined`;
+INSERT INTO `vp_database5_146_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database5_146_joined`;
+INSERT INTO `vp_database5_146_joined` (`vp_rowid`, `c0date`, `c1decimal`, `c2float`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1decimal` AS `c1decimal`, l.`c2float` AS `c2float` FROM `vp_database5_146_l` l JOIN `vp_database5_146_r` r ON l.`vp_rowid` = r.`vp_rowid`;

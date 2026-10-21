@@ -1,0 +1,102 @@
+https://bugs.mysql.com/bug.php?id=120968&thanks=4
+This is fixed in the upcoming MySQL-9.7 LTS release. Marking this as duplicate of Bug#120429.
+
+DROP DATABASE IF EXISTS repro_mysql714_db15;
+CREATE DATABASE repro_mysql714_db15;
+USE repro_mysql714_db15;
+
+DROP TABLE IF EXISTS t, l, r;
+
+-- 基础表：两列，2 行数据（模拟原 VP 的 EVEN_SPLIT 场景）
+CREATE TABLE t (
+    id BIGINT PRIMARY KEY,
+    c0 DECIMAL(65, 30) NULL,
+    c1 DECIMAL(65, 30) NULL
+) ENGINE = InnoDB;
+
+INSERT INTO t VALUES (1, NULL, NULL), (2, 1422858474, NULL);
+
+-- left(c1) 和 right(c0)，模拟 split 后的两张分区表
+CREATE TABLE l (id BIGINT PRIMARY KEY, c1 DECIMAL(65, 30) NULL) ENGINE = InnoDB;
+CREATE TABLE r (id BIGINT PRIMARY KEY, c0 DECIMAL(65, 30) NULL) ENGINE = InnoDB;
+
+INSERT INTO l SELECT id, c1 FROM t;
+INSERT INTO r SELECT id, c0 FROM t;
+
+CREATE INDEX r_idx ON r(c0, id);
+
+-- 单表查询（正确 baseline）
+SELECT IFNULL(c1, c0) AS ref2 FROM t ORDER BY id;
+
+-- JOIN 查询（模拟 VP split query：RIGHT JOIN + ORDER BY → IFNULL 返回 NULL）
+SELECT IFNULL(l.c1, r.c0) AS ref2
+FROM l RIGHT JOIN r ON l.id = r.id
+ORDER BY l.id;
+
+=== 单表（正确） ===
+| NULL                               |
+| 1422858474.000000000000000000000000 |
+
+=== RIGHT JOIN + ORDER BY（BUG） ===
+| NULL |
+| NULL |    ← 第二行应为 1422858474，实际为 NULL
+
+单表（正确）：
+
+-> Index scan on t using PRIMARY
+
+RIGHT JOIN + ORDER BY（BUG）：
+
+-> Sort: l.id
+    -> Stream results
+        -> Left hash join (l.id = r.id)
+            -> Covering index scan on r using r_idx
+            -> Hash
+                -> Table scan on l
+
+RIGHT JOIN 被优化为 Left hash join，加上 ORDER BY 后外层包裹了 Sort + Stream results，导致 SELECT 列表中 IFNULL(nullable_expr, non_null_value) 的 non-null fallback 值在 Sort/Stream 阶段丢失。而 INNER JOIN（Inner hash join）在同样包裹 Sort + Stream results 时不受影响。
+
+1. 查询重写：RIGHT JOIN → LEFT JOIN
+优化器内部会把：
+
+sql
+l RIGHT JOIN r ON l.id = r.id
+等价转换为：
+
+sql
+r LEFT JOIN l ON l.id = r.id
+驱动表变为 r（原右表，结果集保留所有行）
+
+被驱动表变为 l（原左表，无匹配时补 NULL）
+
+所有列引用都必须重新映射到新的表位置。
+
+执行计划也印证了这一点：
+
+text
+-> Sort: l.id
+    -> Stream results
+        -> Left hash join (l.id = r.id)   -- 注意这里 l 是右表，r 是左表
+            -> Covering index scan on r using r_idx
+            -> Hash
+                -> Table scan on l
+Left hash join 的左侧是 r，右侧是 l，符合 r LEFT JOIN l。
+
+2. 字段映射残留 Bug（根因）
+在 RIGHT JOIN 被重写为 LEFT JOIN 的过程中，SELECT 列表中的表达式 IFNULL(l.c1, r.c0) 里对 r.c0 的引用可能未被完全纠正，导致它仍然指向“旧右表（现在的内表 l）”的某个字段槽位。
+
+原始语义：
+
+l.c1 来自原左表（重写后变为内表，可 NULL）
+
+r.c0 来自原右表（重写后变为外表，一定非 NULL）
+
+执行时内部列存储顺序大致为：
+
+外表 r 的列（id, c0）
+
+内表 l 的列（id, c1），无匹配时所有内表字段均为 NULL
+
+如果 r.c0 的引用被错误地绑定到了内表 l 的某个字段（很可能是 l.c1 所在位置，因为 l 没有 c0 列），那么它读取的就是 l.c1 的值。
+
+对于匹配行（id=2），l.c1 恰好是 NULL，于是 IFNULL(NULL, 误读为NULL的l.c1) → NULL，非 NULL 的 fallback 值 1422858474 彻底丢失。

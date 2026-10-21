@@ -1,0 +1,21 @@
+{
+  "database": "Oceanbase",
+  "source": "/home/lwm/sqlancer/Bugs/Oceanbase/2421.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- Single table: 走 c1 索引顺序\nSELECT 'single' AS q,\n       (-1) <= CAST((concat(src.c1, '')) && NULL AS SIGNED) AS e\nFROM src FORCE INDEX(i_c1)\nGROUP BY (-1) <= CAST((concat(src.c1, '')) && NULL AS SIGNED)\nWITH ROLLUP\nORDER BY (-1) <= CAST((concat(src.c1, '')) && NULL AS SIGNED)\nLIMIT 3",
+      "ok": true,
+      "rows": [
+        "single\tNULL",
+        "single\tNULL",
+        "single\t1"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 14,
+  "target_query": "-- Single table: 走 c1 索引顺序\nSELECT 'single' AS q,\n       (-1) <= CAST((concat(src.c1, '')) && NULL AS SIGNED) AS e\nFROM src FORCE INDEX(i_c1)\nGROUP BY (-1) <= CAST((concat(src.c1, '')) && NULL AS SIGNED)\nWITH ROLLUP\nORDER BY (-1) <= CAST((concat(src.c1, '')) && NULL AS SIGNED)\nLIMIT 3;",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

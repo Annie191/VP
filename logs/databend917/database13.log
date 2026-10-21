@@ -1,0 +1,798 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=TYPE_DIRECTED_SPLIT, reconstruction=JSON_PACK, shape=MULTI_COLUMN, prefix=vp_database13_261_
+--Strategy counts: split={EMPTY_SPLIT=2, SINGLE_REPLICATED=6, SINGLE_RIGHT_ROW_ID_ONLY=8, SINGLE_LEFT_ROW_ID_ONLY=12, EVEN_SPLIT=14, OVERLAPPED_SPLIT=14, SKEWED_SPLIT=17, TYPE_DIRECTED_SPLIT=15}, reconstruction={JOIN=390, LEFT_RIGHT_JOIN=403, FULL_OUTER_SIMULATION=405, SCALAR_SUBQUERY=390, EXISTS_FILTER=403, IN_FILTER=398, NOT_EXISTS_ANTI=385, DERIVED_TABLE=395, CTE=387, VIEW=410, TEMP_TABLE=296, AGGREGATE_THEN_MERGE=391, ROW_NUMBER_ALIGNMENT=409, JSON_PACK=398, STRING_PACK=400, NATURAL_OR_USING=400, LATERAL_DERIVED=405}
+--Database: database13
+--Databend version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+--Base table: t1
+--Base table DDL: CREATE TABLE t1 (
+--  c0array ARRAY(BIGINT NULL) NULL DEFAULT [1, 2, 3],
+--  c1timestamp TIMESTAMP NULL DEFAULT '1969-12-29 15:07:37.000000',
+--  c2variant VARIANT NULL DEFAULT '{"sqlancer":true}',
+--  c3varchar VARCHAR NULL
+--) ENGINE=FUSE
+--Base table engine: FUSE
+--VP source engine: FUSE
+--VP left engine: MEMORY
+--VP right engine: FUSE
+--Base row count: 50
+--Base shape: MULTI_COLUMN
+--Stable row order: `c1timestamp`, `c3varchar`
+--Prefix: vp_database13_261_
+--Split strategy: TYPE_DIRECTED_SPLIT
+--Left columns: {c3varchar, c2variant}
+--Right columns: {c1timestamp, c0array}
+--Overlap columns: {}
+--Physical foreign key: false
+--Schema profile: NULL_DEFAULT
+--Source schema fidelity: column types, nullability, and defaults; keys/constraints/generated expressions omitted
+--Helper schema fidelity: projection-only; columns are nullable and constraints/defaults are not copied
+--Copied source constraints: []
+--Reconstruction strategy: JSON_PACK
+--Description: shape=MULTI_COLUMN, split=TYPE_DIRECTED_SPLIT, reconstruction=JSON_PACK
+--Databend session settings: default_order_by_null=nulls_last, disable_join_reorder=0, enable_bloom_runtime_filter=1, enable_cbo=1, enable_join_runtime_filter=1, enable_query_result_cache=0, max_threads=40, numeric_cast_option=rounding, sql_dialect=PostgreSQL, timezone=UTC
+--Session SET statements:
+--SET default_order_by_null = 'nulls_last';
+--SET disable_join_reorder = 0;
+--SET enable_bloom_runtime_filter = 1;
+--SET enable_cbo = 1;
+--SET enable_join_runtime_filter = 1;
+--SET enable_query_result_cache = 0;
+--SET max_threads = 40;
+--SET numeric_cast_option = 'rounding';
+--SET sql_dialect = 'PostgreSQL';
+--SET timezone = 'UTC';
+--Setup statements:
+---- source schema profile: NULL_DEFAULT;
+---- copied source column nullability and defaults from SHOW CREATE TABLE;
+---- helper columns intentionally remain nullable projections for outer-join reconstruction;
+--CREATE TABLE `vp_database13_261_source` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL, `c1timestamp` TIMESTAMP NULL DEFAULT '1969-12-29 15:07:37.000000', `c2variant` VARIANT NULL, `c3varchar` VARCHAR NULL) ENGINE=FUSE;
+--INSERT INTO `vp_database13_261_source` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT ROW_NUMBER() OVER (ORDER BY `c1timestamp`, `c3varchar`), `c0array`, `c1timestamp`, `c2variant`, `c3varchar` FROM `t1` LIMIT 4096;
+--CREATE TABLE `vp_database13_261_l` (`vp_rowid` BIGINT NOT NULL, `c3varchar` VARCHAR NULL, `c2variant` VARIANT NULL) ENGINE=MEMORY;
+--CREATE TABLE `vp_database13_261_r` (`vp_rowid` BIGINT NOT NULL, `c1timestamp` TIMESTAMP NULL, `c0array` ARRAY(BIGINT NULL) NULL) ENGINE=FUSE;
+--INSERT INTO `vp_database13_261_l` (`vp_rowid`, `c3varchar`, `c2variant`) SELECT `vp_rowid`, `c3varchar`, `c2variant` FROM `vp_database13_261_source`;
+--INSERT INTO `vp_database13_261_r` (`vp_rowid`, `c1timestamp`, `c0array`) SELECT `vp_rowid`, `c1timestamp`, `c0array` FROM `vp_database13_261_source`;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+--DROP TABLE IF EXISTS `vp_database13_261_joined`;
+--CREATE TEMPORARY TABLE `vp_database13_261_joined` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL, `c1timestamp` TIMESTAMP NULL, `c2variant` VARIANT NULL, `c3varchar` VARCHAR NULL);
+--SET force_aggregate_data_spill = 1;
+--SET force_sort_data_spill = 1;
+--DROP VIEW IF EXISTS `vp_database13_261_v`;
+--CREATE VIEW `vp_database13_261_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database13_261_v`;
+--CREATE VIEW `vp_database13_261_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database13_261_v`;
+--CREATE VIEW `vp_database13_261_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database13_261_v`;
+--CREATE VIEW `vp_database13_261_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP VIEW IF EXISTS `vp_database13_261_v`;
+--CREATE VIEW `vp_database13_261_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database13_261_joined`;
+--INSERT INTO `vp_database13_261_joined` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database13_261_joined`;
+--INSERT INTO `vp_database13_261_joined` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database13_261_joined`;
+--INSERT INTO `vp_database13_261_joined` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database13_261_joined`;
+--INSERT INTO `vp_database13_261_joined` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--TRUNCATE TABLE `vp_database13_261_joined`;
+--INSERT INTO `vp_database13_261_joined` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--VP source snapshot:
+--SELECT `vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar` FROM `vp_database13_261_source` ORDER BY `vp_rowid` LIMIT 256;
+--1 | [1,2,3] | 1969-12-09 03:55:35 | {"sqlancer":true} | C 3p><켝}W
+--2 | [1,2,3] | 1969-12-10 11:46:12 | {"sqlancer":true} | 
+--3 | [1,2,3] | 1969-12-10 11:46:12 | {"sqlancer":true} | %īO7QT0M
+--4 | [1,2,3] | 1969-12-10 11:46:12 | {"sqlancer":true} | w8LRT}E
+--5 | [1,2,3] | 1969-12-10 12:59:36 | {"sqlancer":true} | mmY7m?k
+--6 | [1,2,3] | 1969-12-13 06:20:57 | {"sqlancer":true} | NULL
+--7 | [1,2,3] | 1969-12-14 04:19:18 | {"sqlancer":true} | NULL
+--8 | [1,2,3] | 1969-12-19 00:39:02 | {"sqlancer":true} | 3-O
+--9 | [1,2,3] | 1969-12-21 12:29:11 | {"sqlancer":true} | NULL
+--10 | [1,2,3] | 1969-12-21 12:29:11 | {"sqlancer":true} | NULL
+--11 | [1,2,3] | 1969-12-21 19:27:27 | {"sqlancer":true} | 
+--12 | [1,2,3] | 1969-12-22 00:01:27 | {"sqlancer":true} | NULL
+--13 | [1,2,3] | 1969-12-23 06:55:17 | {"sqlancer":true} | 
+--14 | [1,2,3] | 1969-12-26 23:23:18 | {"sqlancer":true} | 
+--15 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | 
+--16 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | 
+--17 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | -47185621
+--18 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | D&
+--19 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | TRUE
+--20 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | lUpykD
+--21 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | |1B2gi*
+--22 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | ~Nr7룖C
+--23 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | NULL
+--24 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | NULL
+--25 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | NULL
+--26 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | NULL
+--27 | [1,2,3] | 1969-12-29 15:07:37 | {"sqlancer":true} | NULL
+--28 | NULL | 1969-12-29 15:07:37 | {"sqlancer":true} | NULL
+--29 | [1,1] | 1969-12-29 15:07:37 | {"sqlancer":true} | NULL
+--30 | [1,2,3] | 1969-12-31 10:53:34 | {"sqlancer":true} | D&
+--31 | [1,2,3] | 1970-01-04 12:51:21 | {"sqlancer":true} | %īO7QT0M
+--32 | [1,2,3] | 1970-01-05 23:53:54 | {"sqlancer":true} | 1109059522
+--33 | [1,2,3] | 1970-01-07 05:00:44 | {"sqlancer":true} | .\ὬcZ
+--34 | [1,2,3] | 1970-01-07 05:00:44 | {"sqlancer":true} | ?H,垛91<ʞ
+--35 | [1,2,3] | 1970-01-10 10:42:24 | {"sqlancer":true} | [0CNj
+--36 | [1,2,3] | 1970-01-10 23:54:55 | {"sqlancer":true} | Q  .e]\
+--37 | [1,2,3] | 1970-01-14 17:36:57 | {"sqlancer":true} | xT
+--38 | [1,2,3] | 1970-01-18 01:19:37 | {"sqlancer":true} | 816144820
+--39 | [1,2,3] | 2000-01-01 00:00:00 | {"vp":0} | vp_0
+--40 | [0,0] | 2000-01-01 00:00:00 | {"vp":0} | vp_0
+--41 | [-1,-1] | 2000-01-02 00:00:00 | {"sqlancer":true} | NULL
+--42 | [-2,-2] | 2000-01-03 00:00:00 | {"sqlancer":true} | vp_-2
+--43 | [2,2] | 2000-01-03 00:00:00 | {"vp":2} | vp_2
+--44 | [-3,-3] | 2000-01-04 00:00:00 | {"vp":-3} | vp_-3
+--45 | NULL | NULL | {"vp":0} | vp_0
+--46 | [1,2,3] | NULL | {"vp":0} | vp_0
+--47 | NULL | NULL | {"vp":0} | vp_0
+--48 | NULL | NULL | {"vp":0} | vp_0
+--49 | NULL | NULL | {"sqlancer":true} | vp_3
+--50 | NULL | NULL | {"sqlancer":true} | NULL
+--VP left snapshot:
+--SELECT `vp_rowid`, `c3varchar`, `c2variant` FROM `vp_database13_261_l` ORDER BY `vp_rowid` LIMIT 256;
+--1 | C 3p><켝}W | {"sqlancer":true}
+--2 |  | {"sqlancer":true}
+--3 | %īO7QT0M | {"sqlancer":true}
+--4 | w8LRT}E | {"sqlancer":true}
+--5 | mmY7m?k | {"sqlancer":true}
+--6 | NULL | {"sqlancer":true}
+--7 | NULL | {"sqlancer":true}
+--8 | 3-O | {"sqlancer":true}
+--9 | NULL | {"sqlancer":true}
+--10 | NULL | {"sqlancer":true}
+--11 |  | {"sqlancer":true}
+--12 | NULL | {"sqlancer":true}
+--13 |  | {"sqlancer":true}
+--14 |  | {"sqlancer":true}
+--15 |  | {"sqlancer":true}
+--16 |  | {"sqlancer":true}
+--17 | -47185621 | {"sqlancer":true}
+--18 | D& | {"sqlancer":true}
+--19 | TRUE | {"sqlancer":true}
+--20 | lUpykD | {"sqlancer":true}
+--21 | |1B2gi* | {"sqlancer":true}
+--22 | ~Nr7룖C | {"sqlancer":true}
+--23 | NULL | {"sqlancer":true}
+--24 | NULL | {"sqlancer":true}
+--25 | NULL | {"sqlancer":true}
+--26 | NULL | {"sqlancer":true}
+--27 | NULL | {"sqlancer":true}
+--28 | NULL | {"sqlancer":true}
+--29 | NULL | {"sqlancer":true}
+--30 | D& | {"sqlancer":true}
+--31 | %īO7QT0M | {"sqlancer":true}
+--32 | 1109059522 | {"sqlancer":true}
+--33 | .\ὬcZ | {"sqlancer":true}
+--34 | ?H,垛91<ʞ | {"sqlancer":true}
+--35 | [0CNj | {"sqlancer":true}
+--36 | Q  .e]\ | {"sqlancer":true}
+--37 | xT | {"sqlancer":true}
+--38 | 816144820 | {"sqlancer":true}
+--39 | vp_0 | {"vp":0}
+--40 | vp_0 | {"vp":0}
+--41 | NULL | {"sqlancer":true}
+--42 | vp_-2 | {"sqlancer":true}
+--43 | vp_2 | {"vp":2}
+--44 | vp_-3 | {"vp":-3}
+--45 | vp_0 | {"vp":0}
+--46 | vp_0 | {"vp":0}
+--47 | vp_0 | {"vp":0}
+--48 | vp_0 | {"vp":0}
+--49 | vp_3 | {"sqlancer":true}
+--50 | NULL | {"sqlancer":true}
+--VP right snapshot:
+--SELECT `vp_rowid`, `c1timestamp`, `c0array` FROM `vp_database13_261_r` ORDER BY `vp_rowid` LIMIT 256;
+--1 | 1969-12-09 03:55:35 | [1,2,3]
+--2 | 1969-12-10 11:46:12 | [1,2,3]
+--3 | 1969-12-10 11:46:12 | [1,2,3]
+--4 | 1969-12-10 11:46:12 | [1,2,3]
+--5 | 1969-12-10 12:59:36 | [1,2,3]
+--6 | 1969-12-13 06:20:57 | [1,2,3]
+--7 | 1969-12-14 04:19:18 | [1,2,3]
+--8 | 1969-12-19 00:39:02 | [1,2,3]
+--9 | 1969-12-21 12:29:11 | [1,2,3]
+--10 | 1969-12-21 12:29:11 | [1,2,3]
+--11 | 1969-12-21 19:27:27 | [1,2,3]
+--12 | 1969-12-22 00:01:27 | [1,2,3]
+--13 | 1969-12-23 06:55:17 | [1,2,3]
+--14 | 1969-12-26 23:23:18 | [1,2,3]
+--15 | 1969-12-29 15:07:37 | [1,2,3]
+--16 | 1969-12-29 15:07:37 | [1,2,3]
+--17 | 1969-12-29 15:07:37 | [1,2,3]
+--18 | 1969-12-29 15:07:37 | [1,2,3]
+--19 | 1969-12-29 15:07:37 | [1,2,3]
+--20 | 1969-12-29 15:07:37 | [1,2,3]
+--21 | 1969-12-29 15:07:37 | [1,2,3]
+--22 | 1969-12-29 15:07:37 | [1,2,3]
+--23 | 1969-12-29 15:07:37 | [1,2,3]
+--24 | 1969-12-29 15:07:37 | [1,2,3]
+--25 | 1969-12-29 15:07:37 | [1,2,3]
+--26 | 1969-12-29 15:07:37 | [1,2,3]
+--27 | 1969-12-29 15:07:37 | [1,2,3]
+--28 | 1969-12-29 15:07:37 | NULL
+--29 | 1969-12-29 15:07:37 | [1,1]
+--30 | 1969-12-31 10:53:34 | [1,2,3]
+--31 | 1970-01-04 12:51:21 | [1,2,3]
+--32 | 1970-01-05 23:53:54 | [1,2,3]
+--33 | 1970-01-07 05:00:44 | [1,2,3]
+--34 | 1970-01-07 05:00:44 | [1,2,3]
+--35 | 1970-01-10 10:42:24 | [1,2,3]
+--36 | 1970-01-10 23:54:55 | [1,2,3]
+--37 | 1970-01-14 17:36:57 | [1,2,3]
+--38 | 1970-01-18 01:19:37 | [1,2,3]
+--39 | 2000-01-01 00:00:00 | [1,2,3]
+--40 | 2000-01-01 00:00:00 | [0,0]
+--41 | 2000-01-02 00:00:00 | [-1,-1]
+--42 | 2000-01-03 00:00:00 | [-2,-2]
+--43 | 2000-01-03 00:00:00 | [2,2]
+--44 | 2000-01-04 00:00:00 | [-3,-3]
+--45 | NULL | NULL
+--46 | NULL | [1,2,3]
+--47 | NULL | NULL
+--48 | NULL | NULL
+--49 | NULL | NULL
+--50 | NULL | NULL
+--Single query: SELECT `vp_database13_261_source`.`c0array`, `vp_database13_261_source`.`c3varchar`, `vp_database13_261_source`.`c0array` FROM vp_database13_261_source WHERE ((((`vp_database13_261_source`.`c3varchar` IS NULL) <> (`vp_database13_261_source`.`c0array` IS NULL)))AND((((('')like(`vp_database13_261_source`.`c3varchar`)))AND((('')like(`vp_database13_261_source`.`c3varchar`))))))
+--Split query: SELECT `vp_database13_261_source`.`c0array`, `vp_database13_261_source`.`c3varchar`, `vp_database13_261_source`.`c0array` FROM (SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN (SELECT `vp_rowid`, JSON_OBJECT('vp', `vp_rowid`) AS payload FROM `vp_database13_261_r`) jp ON l.`vp_rowid` = CAST(jp.payload:vp AS BIGINT) JOIN `vp_database13_261_r` r ON r.`vp_rowid` = CAST(jp.payload:vp AS BIGINT)) `vp_database13_261_source` WHERE ((((`vp_database13_261_source`.`c3varchar` IS NULL) <> (`vp_database13_261_source`.`c0array` IS NULL)))and((((('')LIKE(`vp_database13_261_source`.`c3varchar`)))AND((('')like(`vp_database13_261_source`.`c3varchar`))))))
+--Single query plan:
+--EXPLAIN SELECT `vp_database13_261_source`.`c0array`, `vp_database13_261_source`.`c3varchar`, `vp_database13_261_source`.`c0array` FROM vp_database13_261_source WHERE ((((`vp_database13_261_source`.`c3varchar` IS NULL) <> (`vp_database13_261_source`.`c0array` IS NULL)))AND((((('')like(`vp_database13_261_source`.`c3varchar`)))AND((('')like(`vp_database13_261_source`.`c3varchar`))))));
+--TableScan
+--├── table: default.database13.vp_database13_261_source
+--├── scan id: 0
+--├── output columns: [c0array (#1), c3varchar (#4)]
+--├── read rows: 50
+--├── read size: < 1 KiB
+--├── partitions total: 1
+--├── partitions scanned: 1
+--├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 1 to 1 cost: 1 ms>]
+--├── push downs: [filters: [(NOT is_not_null(vp_database13_261_source.c3varchar (#4))) <> (NOT is_not_null(vp_database13_261_source.c0array (#1))) and like('', vp_database13_261_source.c3varchar (#4))], limit: NONE]
+--└── estimated rows: 10.00
+--Split query plan:
+--EXPLAIN SELECT `vp_database13_261_source`.`c0array`, `vp_database13_261_source`.`c3varchar`, `vp_database13_261_source`.`c0array` FROM (SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN (SELECT `vp_rowid`, JSON_OBJECT('vp', `vp_rowid`) AS payload FROM `vp_database13_261_r`) jp ON l.`vp_rowid` = CAST(jp.payload:vp AS BIGINT) JOIN `vp_database13_261_r` r ON r.`vp_rowid` = CAST(jp.payload:vp AS BIGINT)) `vp_database13_261_source` WHERE ((((`vp_database13_261_source`.`c3varchar` IS NULL) <> (`vp_database13_261_source`.`c0array` IS NULL)))and((((('')LIKE(`vp_database13_261_source`.`c3varchar`)))AND((('')like(`vp_database13_261_source`.`c3varchar`))))));
+--HashJoin
+--├── output columns: [l.c3varchar (#1), r.c0array (#9)]
+--├── join type: INNER
+--├── build keys: [r.vp_rowid (#7)]
+--├── probe keys: [l.vp_rowid (#0)]
+--├── keys is null equal: [false]
+--├── filters: [(NOT is_not_null(l.c3varchar (#1))) <> (NOT is_not_null(r.c0array (#9)))]
+--├── build join filters:
+--│   └── filter id:0, build key:r.vp_rowid (#7), probe targets:[l.vp_rowid (#0)@scan0], filter type:bloom,inlist,min_max
+--├── estimated rows: 25000.00
+--├── TableScan(Build)
+--│   ├── table: default.database13.vp_database13_261_r
+--│   ├── scan id: 2
+--│   ├── output columns: [vp_rowid (#7), c0array (#9)]
+--│   ├── read rows: 50
+--│   ├── read size: < 1 KiB
+--│   ├── partitions total: 1
+--│   ├── partitions scanned: 1
+--│   ├── pruning stats: [segments: <read cost: 6 ms, decompress cost: 12 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 1 to 1 cost: 1 ms>]
+--│   ├── push downs: [filters: [], limit: NONE]
+--│   └── estimated rows: 50.00
+--└── HashJoin(Probe)
+--    ├── output columns: [l.vp_rowid (#0), l.c3varchar (#1)]
+--    ├── join type: INNER
+--    ├── build keys: [CAST(l.vp_rowid (#0) AS Int64 NULL)]
+--    ├── probe keys: [CAST(get_by_keypath(jp.payload (#6), '{"vp"}') AS Int64 NULL)]
+--    ├── keys is null equal: [false]
+--    ├── filters: []
+--    ├── estimated rows: 500.00
+--    ├── Filter(Build)
+--    │   ├── output columns: [l.vp_rowid (#0), l.c3varchar (#1)]
+--    │   ├── filters: [is_true(like('', l.c3varchar (#1)))]
+--    │   ├── estimated rows: 10.00
+--    │   └── TableScan
+--    │       ├── table: default.database13.vp_database13_261_l
+--    │       ├── scan id: 0
+--    │       ├── output columns: [vp_rowid (#0), c3varchar (#1)]
+--    │       ├── read rows: 50
+--    │       ├── read size: 1.50 KiB
+--    │       ├── partitions total: 0
+--    │       ├── partitions scanned: 0
+--    │       ├── push downs: [filters: [is_true(like('', vp_database13_261_l.c3varchar (#1)))], limit: NONE]
+--    │       ├── apply join filters: [#0]
+--    │       └── estimated rows: 50.00
+--    └── EvalScalar(Probe)
+--        ├── output columns: [payload (#6)]
+--        ├── expressions: [object_construct('vp', vp_database13_261_r.vp_rowid (#3))]
+--        ├── estimated rows: 50.00
+--        └── TableScan
+--            ├── table: default.database13.vp_database13_261_r
+--            ├── scan id: 1
+--            ├── output columns: [vp_rowid (#3)]
+--            ├── read rows: 50
+--            ├── read size: < 1 KiB
+--            ├── partitions total: 1
+--            ├── partitions scanned: 1
+--            ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 1 to 1 cost: 1 ms>]
+--            ├── push downs: [filters: [], limit: NONE]
+--            └── estimated rows: 50.00
+--Single result sample: 
+--Split result sample: N;S:4:vp_0;N; x3, N;S:4:vp_3;N; x1
+--Only in single: 
+--Only in split: N;S:4:vp_0;N; x3, N;S:4:vp_3;N; x1
+--
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.comparePair(DatabendVerticalPartitioningOracle.java:3092)
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.check(DatabendVerticalPartitioningOracle.java:551)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:487)
+--	at sqlancer.Main$2.run(Main.java:708)
+--	at sqlancer.Main$2.runThread(Main.java:690)
+--	at sqlancer.Main$2.run(Main.java:681)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/10/08 07:48:46
+-- Database: database13
+-- Database version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+-- seed value: 1791443211644
+DROP DATABASE IF EXISTS database13;
+CREATE DATABASE database13;
+USE database13;
+CREATE TABLE t0(c0TIMESTAMP TIMESTAMP NOT NULL, c1BITMAP BITMAP NULL, c2INT TINYINT NULL DEFAULT(-204742407), c3MAP MAP(VARCHAR, INT64) NOT NULL, c4TIMESTAMP DATETIME NULL, c5TIMESTAMP DATETIME NULL DEFAULT(TIMESTAMP '1970-01-01 00:00:00'));
+CREATE TABLE t0(c0ARRAY ARRAY(INT64) NULL DEFAULT([1, 2, 3]));
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]), ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+CREATE TABLE t1(c0ARRAY ARRAY(INT64) NULL DEFAULT([1, 2, 3]), c1TIMESTAMP TIMESTAMP NULL DEFAULT(TIMESTAMP '1969-12-29 15:07:37'), c2VARIANT VARIANT NULL DEFAULT(PARSE_JSON('{"sqlancer":true}')), c3VARCHAR VARCHAR NULL);
+INSERT INTO t1(c0array, c2variant) VALUES ([1, 2, 3], PARSE_JSON('{"sqlancer":true}')), ([1, 2, 3], PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t1(c0array, c3varchar, c2variant) VALUES ([1, 2, 3], '', PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t1(c1timestamp, c2variant, c3varchar) VALUES (NULL, PARSE_JSON('{"vp":0}'), 'vp_0'), (TIMESTAMP '2000-01-01 00:00:00', PARSE_JSON('{"vp":0}'), 'vp_0');
+INSERT INTO t1(c1timestamp, c3varchar) VALUES (TIMESTAMP '1969-12-31 10:53:34', 'D&');
+INSERT INTO t1(c1timestamp, c2variant, c3varchar) VALUES (TIMESTAMP '1969-12-29 15:07:37', PARSE_JSON('{"sqlancer":true}'), 'D&'), (TIMESTAMP '1969-12-10 11:46:12', PARSE_JSON('{"sqlancer":true}'), ''), (TIMESTAMP '1969-12-10 11:46:12', PARSE_JSON('{"sqlancer":true}'), '%īO7QT0M');
+INSERT INTO t1(c0array, c3varchar) VALUES ([1, 2, 3], '~Nr7룖C');
+INSERT INTO t1(c3varchar, c0array, c1timestamp, c2variant) VALUES ('vp_0', NULL, NULL, PARSE_JSON('{"vp":0}')), ('vp_-3', [-3, -3], TIMESTAMP '2000-01-04 00:00:00', PARSE_JSON('{"vp":-3}'));
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]), ([1, 2, 3]), ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES (NULL), ([0, 0]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t1(c3varchar, c2variant) VALUES ('lUpykD', PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t1(c1timestamp, c3varchar, c0array) VALUES (TIMESTAMP '1970-01-04 12:51:21', '%īO7QT0M', [1, 2, 3]);
+INSERT INTO t1(c0array, c1timestamp, c3varchar, c2variant) VALUES ([1, 2, 3], TIMESTAMP '1970-01-10 10:42:24', '[0CNj', PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]), ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]), ([1, 2, 3]), ([1, 2, 3]);
+INSERT INTO t1(c2variant, c0array) VALUES (PARSE_JSON('{"sqlancer":true}'), [1, 2, 3]);
+INSERT INTO t0(c0array) VALUES (NULL), ([3, 3]);
+INSERT INTO t1(c2variant, c0array, c3varchar, c1timestamp) VALUES (PARSE_JSON('{"sqlancer":true}'), [1, 2, 3], '', TIMESTAMP '1969-12-23 06:55:17');
+INSERT INTO t1(c3varchar, c2variant, c0array, c1timestamp) VALUES ('', PARSE_JSON('{"sqlancer":true}'), [1, 2, 3], TIMESTAMP '1969-12-26 23:23:18'), ('1109059522', PARSE_JSON('{"sqlancer":true}'), [1, 2, 3], TIMESTAMP '1970-01-05 23:53:54');
+INSERT INTO t1(c0array, c3varchar) VALUES ([1, 2, 3], '-47185621');
+INSERT INTO t1(c2variant, c1timestamp, c0array) VALUES (PARSE_JSON('{"sqlancer":true}'), TIMESTAMP '1969-12-21 12:29:11', [1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t1(c1timestamp, c0array, c2variant) VALUES (TIMESTAMP '1969-12-14 04:19:18', [1, 2, 3], PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t1(c2variant, c0array, c1timestamp, c3varchar) VALUES (PARSE_JSON('{"vp":0}'), NULL, NULL, 'vp_0'), (PARSE_JSON('{"vp":2}'), [2, 2], TIMESTAMP '2000-01-03 00:00:00', 'vp_2');
+INSERT INTO t1(c1timestamp, c0array) VALUES (NULL, NULL), (TIMESTAMP '2000-01-02 00:00:00', [-1, -1]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]), ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t1(c3varchar, c2variant) VALUES ('TRUE', PARSE_JSON('{"sqlancer":true}')), ('|1B2gi*', PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t1(c1timestamp, c0array, c3varchar) VALUES (NULL, NULL, 'vp_3'), (TIMESTAMP '2000-01-03 00:00:00', [-2, -2], 'vp_-2');
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t1(c1timestamp, c2variant, c3varchar) VALUES (TIMESTAMP '1969-12-19 00:39:02', PARSE_JSON('{"sqlancer":true}'), '3-O'), (TIMESTAMP '1970-01-18 01:19:37', PARSE_JSON('{"sqlancer":true}'), '816144820');
+INSERT INTO t1(c0array, c3varchar, c1timestamp, c2variant) VALUES ([1, 2, 3], 'w8LRT}E', TIMESTAMP '1969-12-10 11:46:12', PARSE_JSON('{"sqlancer":true}')), ([1, 2, 3], 'xT', TIMESTAMP '1970-01-14 17:36:57', PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t1(c2variant) VALUES (PARSE_JSON('{"sqlancer":true}')), (PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t1(c0array, c1timestamp) VALUES ([1, 2, 3], TIMESTAMP '1969-12-22 00:01:27');
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]), ([1, 2, 3]), ([1, 2, 3]);
+INSERT INTO t1(c3varchar, c1timestamp, c0array, c2variant) VALUES ('C 3p><켝}W', TIMESTAMP '1969-12-09 03:55:35', [1, 2, 3], PARSE_JSON('{"sqlancer":true}')), ('mmY7m?k', TIMESTAMP '1969-12-10 12:59:36', [1, 2, 3], PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t1(c0array, c3varchar, c2variant, c1timestamp) VALUES ([1, 2, 3], 'Q  .e]\r\\', PARSE_JSON('{"sqlancer":true}'), TIMESTAMP '1970-01-10 23:54:55');
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t1(c0array, c3varchar, c1timestamp, c2variant) VALUES ([1, 2, 3], '.\\ὬcZ', TIMESTAMP '1970-01-07 05:00:44', PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]), ([1, 2, 3]);
+INSERT INTO t1(c2variant, c1timestamp, c0array) VALUES (PARSE_JSON('{"sqlancer":true}'), TIMESTAMP '1969-12-21 12:29:11', [1, 2, 3]);
+INSERT INTO t1(c0array, c1timestamp, c2variant, c3varchar) VALUES (NULL, NULL, PARSE_JSON('{"vp":0}'), 'vp_0'), ([0, 0], TIMESTAMP '2000-01-01 00:00:00', PARSE_JSON('{"vp":0}'), 'vp_0');
+INSERT INTO t1(c3varchar, c1timestamp, c0array) VALUES ('?H,垛91<ʞ', TIMESTAMP '1970-01-07 05:00:44', [1, 2, 3]);
+INSERT INTO t1(c3varchar, c2variant, c0array, c1timestamp) VALUES ('', PARSE_JSON('{"sqlancer":true}'), [1, 2, 3], TIMESTAMP '1969-12-21 19:27:27');
+INSERT INTO t1(c0array, c3varchar) VALUES ([1, 2, 3], '');
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+INSERT INTO t0(c0array) VALUES (NULL), ([-2, -2]);
+INSERT INTO t0(c0array) VALUES (NULL), ([0, 0]), ([3, 3]), ([0, 0]);
+INSERT INTO t1(c0array) VALUES (NULL), ([1, 1]);
+INSERT INTO t1(c1timestamp) VALUES (TIMESTAMP '1969-12-13 06:20:57');
+INSERT INTO t0(c0array) VALUES ([1, 2, 3]);
+DROP STREAM IF EXISTS `vp_database13_199_source_stream`;
+DROP STREAM IF EXISTS `vp_database13_199_left_stream`;
+DROP STREAM IF EXISTS `vp_database13_199_right_stream`;
+DROP VIEW IF EXISTS `vp_database13_199_v`;
+DROP TABLE IF EXISTS `vp_database13_199_joined`;
+DROP TABLE IF EXISTS `vp_database13_199_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database13_199_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database13_199_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database13_199_r`;
+DROP TABLE IF EXISTS `vp_database13_199_l`;
+DROP TABLE IF EXISTS `vp_database13_199_source`;
+CREATE TABLE `vp_database13_199_source` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL, `c1timestamp` TIMESTAMP NULL DEFAULT '1969-12-29 15:07:37.000000', `c2variant` VARIANT NULL, `c3varchar` VARCHAR NULL) ENGINE=FUSE;
+INSERT INTO `vp_database13_199_source` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT ROW_NUMBER() OVER (ORDER BY `c1timestamp`, `c3varchar`), `c0array`, `c1timestamp`, `c2variant`, `c3varchar` FROM `t1` LIMIT 4096;
+UPDATE `vp_database13_199_source` SET `c0array` = [] WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database13_199_source`);
+UPDATE `vp_database13_199_source` SET `c1timestamp` = TIMESTAMP '2026-10-03 03:17:18.123456' WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database13_199_source`);
+UPDATE `vp_database13_199_source` SET `c2variant` = PARSE_JSON('{"sqlancer":[null,[]],"n":1}') WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database13_199_source`);
+UPDATE `vp_database13_199_source` SET `c0array` = NULL WHERE `vp_rowid` = (SELECT MAX(`vp_rowid`) FROM `vp_database13_199_source` WHERE `vp_rowid` <> (SELECT MIN(`vp_rowid`) FROM `vp_database13_199_source`));
+REMOVE @~/vp_database13_199_copy;
+DROP TABLE IF EXISTS `vp_database13_199_copy_reference`;
+CREATE TEMPORARY TABLE `vp_database13_199_copy_reference` AS SELECT * FROM `vp_database13_199_source`;
+COPY INTO @~/vp_database13_199_copy FROM (SELECT * FROM `vp_database13_199_source`) FILE_FORMAT=(TYPE=PARQUET);
+TRUNCATE TABLE `vp_database13_199_source`;
+COPY INTO `vp_database13_199_source` FROM @~/vp_database13_199_copy FILE_FORMAT=(TYPE=PARQUET) FORCE=TRUE;
+DROP STREAM IF EXISTS `vp_database13_203_source_stream`;
+DROP STREAM IF EXISTS `vp_database13_203_left_stream`;
+DROP STREAM IF EXISTS `vp_database13_203_right_stream`;
+DROP VIEW IF EXISTS `vp_database13_203_v`;
+DROP TABLE IF EXISTS `vp_database13_203_joined`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database13_203_r`;
+DROP TABLE IF EXISTS `vp_database13_203_l`;
+DROP TABLE IF EXISTS `vp_database13_203_source`;
+CREATE TABLE `vp_database13_203_source` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL) ENGINE=FUSE CLUSTER BY (`vp_rowid`);
+INSERT INTO `vp_database13_203_source` (`vp_rowid`, `c0array`) SELECT ROW_NUMBER() OVER (ORDER BY 1), `c0array` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database13_203_l` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL) ENGINE=FUSE CLUSTER BY (`vp_rowid`);
+CREATE TABLE `vp_database13_203_r` (`vp_rowid` BIGINT NOT NULL) ENGINE=FUSE CLUSTER BY (`vp_rowid`);
+INSERT INTO `vp_database13_203_l` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_source`;
+INSERT INTO `vp_database13_203_r` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_203_source`;
+DROP TABLE IF EXISTS `vp_database13_203_joined`;
+CREATE TEMPORARY TABLE `vp_database13_203_joined` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+DROP VIEW IF EXISTS `vp_database13_203_v`;
+CREATE VIEW `vp_database13_203_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0array` AS `c0array` FROM `vp_database13_203_l` l JOIN `vp_database13_203_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_203_v`;
+CREATE VIEW `vp_database13_203_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0array` AS `c0array` FROM `vp_database13_203_l` l JOIN `vp_database13_203_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_203_v`;
+CREATE VIEW `vp_database13_203_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0array` AS `c0array` FROM `vp_database13_203_l` l JOIN `vp_database13_203_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_203_v`;
+CREATE VIEW `vp_database13_203_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0array` AS `c0array` FROM `vp_database13_203_l` l JOIN `vp_database13_203_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_203_v`;
+CREATE VIEW `vp_database13_203_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0array` AS `c0array` FROM `vp_database13_203_l` l JOIN `vp_database13_203_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP STREAM IF EXISTS `vp_database13_203_mutation_source_stream_208`;
+DROP STREAM IF EXISTS `vp_database13_203_mutation_left_stream_208`;
+DROP STREAM IF EXISTS `vp_database13_203_mutation_right_stream_208`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_source_delta_208`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_left_delta_208`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_right_delta_208`;
+CREATE STREAM `vp_database13_203_mutation_source_stream_208` ON TABLE `vp_database13_203_source`;
+CREATE STREAM `vp_database13_203_mutation_left_stream_208` ON TABLE `vp_database13_203_l`;
+CREATE STREAM `vp_database13_203_mutation_right_stream_208` ON TABLE `vp_database13_203_r`;
+CREATE TEMPORARY TABLE `vp_database13_203_mutation_source_delta_208` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+CREATE TEMPORARY TABLE `vp_database13_203_mutation_left_delta_208` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+CREATE TEMPORARY TABLE `vp_database13_203_mutation_right_delta_208` (`vp_rowid` BIGINT NULL);
+INSERT INTO `vp_database13_203_source` (`vp_rowid`, `c0array`) SELECT 46, `c0array` FROM `vp_database13_203_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database13_203_l` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_source` WHERE `vp_rowid` = 46;
+INSERT INTO `vp_database13_203_r` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_203_source` WHERE `vp_rowid` = 46;
+INSERT INTO `vp_database13_203_mutation_source_delta_208` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_mutation_source_stream_208`;
+INSERT INTO `vp_database13_203_mutation_left_delta_208` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_mutation_left_stream_208`;
+INSERT INTO `vp_database13_203_mutation_right_delta_208` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_203_mutation_right_stream_208`;
+DELETE FROM `vp_database13_203_source` WHERE `vp_rowid` = 1;
+DELETE FROM `vp_database13_203_l` WHERE `vp_rowid` = 1;
+DELETE FROM `vp_database13_203_r` WHERE `vp_rowid` = 1;
+INSERT OVERWRITE `vp_database13_203_source` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_source`;
+INSERT OVERWRITE `vp_database13_203_l` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_source`;
+INSERT OVERWRITE `vp_database13_203_r` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_203_source`;
+OPTIMIZE TABLE `vp_database13_203_source` COMPACT;
+OPTIMIZE TABLE `vp_database13_203_l` COMPACT;
+OPTIMIZE TABLE `vp_database13_203_r` COMPACT;
+OPTIMIZE TABLE `vp_database13_203_source` COMPACT;
+OPTIMIZE TABLE `vp_database13_203_l` COMPACT;
+OPTIMIZE TABLE `vp_database13_203_r` COMPACT;
+DROP STREAM IF EXISTS `vp_database13_203_mutation_source_stream_214`;
+DROP STREAM IF EXISTS `vp_database13_203_mutation_left_stream_214`;
+DROP STREAM IF EXISTS `vp_database13_203_mutation_right_stream_214`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_source_delta_214`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_left_delta_214`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_right_delta_214`;
+CREATE STREAM `vp_database13_203_mutation_source_stream_214` ON TABLE `vp_database13_203_source`;
+CREATE STREAM `vp_database13_203_mutation_left_stream_214` ON TABLE `vp_database13_203_l`;
+CREATE STREAM `vp_database13_203_mutation_right_stream_214` ON TABLE `vp_database13_203_r`;
+CREATE TEMPORARY TABLE `vp_database13_203_mutation_source_delta_214` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+CREATE TEMPORARY TABLE `vp_database13_203_mutation_left_delta_214` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+CREATE TEMPORARY TABLE `vp_database13_203_mutation_right_delta_214` (`vp_rowid` BIGINT NULL);
+INSERT INTO `vp_database13_203_source` (`vp_rowid`, `c0array`) SELECT 47, `c0array` FROM `vp_database13_203_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database13_203_l` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_source` WHERE `vp_rowid` = 47;
+INSERT INTO `vp_database13_203_r` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_203_source` WHERE `vp_rowid` = 47;
+INSERT INTO `vp_database13_203_mutation_source_delta_214` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_mutation_source_stream_214`;
+INSERT INTO `vp_database13_203_mutation_left_delta_214` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_mutation_left_stream_214`;
+INSERT INTO `vp_database13_203_mutation_right_delta_214` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_203_mutation_right_stream_214`;
+DELETE FROM `vp_database13_203_source` WHERE `vp_rowid` = 2;
+DELETE FROM `vp_database13_203_l` WHERE `vp_rowid` = 2;
+DELETE FROM `vp_database13_203_r` WHERE `vp_rowid` = 2;
+INSERT OVERWRITE `vp_database13_203_source` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_source`;
+INSERT OVERWRITE `vp_database13_203_l` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_source`;
+INSERT OVERWRITE `vp_database13_203_r` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_203_source`;
+OPTIMIZE TABLE `vp_database13_203_source` COMPACT;
+OPTIMIZE TABLE `vp_database13_203_l` COMPACT;
+OPTIMIZE TABLE `vp_database13_203_r` COMPACT;
+DROP STREAM IF EXISTS `vp_database13_203_mutation_source_stream_217`;
+DROP STREAM IF EXISTS `vp_database13_203_mutation_left_stream_217`;
+DROP STREAM IF EXISTS `vp_database13_203_mutation_right_stream_217`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_source_delta_217`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_left_delta_217`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_right_delta_217`;
+CREATE STREAM `vp_database13_203_mutation_source_stream_217` ON TABLE `vp_database13_203_source`;
+CREATE STREAM `vp_database13_203_mutation_left_stream_217` ON TABLE `vp_database13_203_l`;
+CREATE STREAM `vp_database13_203_mutation_right_stream_217` ON TABLE `vp_database13_203_r`;
+CREATE TEMPORARY TABLE `vp_database13_203_mutation_source_delta_217` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+CREATE TEMPORARY TABLE `vp_database13_203_mutation_left_delta_217` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+CREATE TEMPORARY TABLE `vp_database13_203_mutation_right_delta_217` (`vp_rowid` BIGINT NULL);
+INSERT INTO `vp_database13_203_source` (`vp_rowid`, `c0array`) SELECT 48, `c0array` FROM `vp_database13_203_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database13_203_l` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_source` WHERE `vp_rowid` = 48;
+INSERT INTO `vp_database13_203_r` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_203_source` WHERE `vp_rowid` = 48;
+INSERT INTO `vp_database13_203_mutation_source_delta_217` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_mutation_source_stream_217`;
+INSERT INTO `vp_database13_203_mutation_left_delta_217` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_mutation_left_stream_217`;
+INSERT INTO `vp_database13_203_mutation_right_delta_217` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_203_mutation_right_stream_217`;
+DELETE FROM `vp_database13_203_source` WHERE `vp_rowid` = 3;
+DELETE FROM `vp_database13_203_l` WHERE `vp_rowid` = 3;
+DELETE FROM `vp_database13_203_r` WHERE `vp_rowid` = 3;
+INSERT OVERWRITE `vp_database13_203_source` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_source`;
+INSERT OVERWRITE `vp_database13_203_l` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_203_source`;
+INSERT OVERWRITE `vp_database13_203_r` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_203_source`;
+OPTIMIZE TABLE `vp_database13_203_source` COMPACT;
+OPTIMIZE TABLE `vp_database13_203_l` COMPACT;
+OPTIMIZE TABLE `vp_database13_203_r` COMPACT;
+TRUNCATE TABLE `vp_database13_203_joined`;
+INSERT INTO `vp_database13_203_joined` (`vp_rowid`, `c0array`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0array` AS `c0array` FROM `vp_database13_203_l` l JOIN `vp_database13_203_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_203_joined`;
+INSERT INTO `vp_database13_203_joined` (`vp_rowid`, `c0array`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0array` AS `c0array` FROM `vp_database13_203_l` l JOIN `vp_database13_203_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_203_joined`;
+INSERT INTO `vp_database13_203_joined` (`vp_rowid`, `c0array`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0array` AS `c0array` FROM `vp_database13_203_l` l JOIN `vp_database13_203_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_203_joined`;
+INSERT INTO `vp_database13_203_joined` (`vp_rowid`, `c0array`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0array` AS `c0array` FROM `vp_database13_203_l` l JOIN `vp_database13_203_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+OPTIMIZE TABLE `vp_database13_203_l` COMPACT;
+OPTIMIZE TABLE `vp_database13_203_r` COMPACT;
+DROP STREAM IF EXISTS `vp_database13_203_source_stream`;
+DROP STREAM IF EXISTS `vp_database13_203_left_stream`;
+DROP STREAM IF EXISTS `vp_database13_203_right_stream`;
+DROP VIEW IF EXISTS `vp_database13_203_v`;
+DROP TABLE IF EXISTS `vp_database13_203_joined`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database13_203_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database13_203_r`;
+DROP TABLE IF EXISTS `vp_database13_203_l`;
+DROP TABLE IF EXISTS `vp_database13_203_source`;
+DROP STREAM IF EXISTS `vp_database13_227_source_stream`;
+DROP STREAM IF EXISTS `vp_database13_227_left_stream`;
+DROP STREAM IF EXISTS `vp_database13_227_right_stream`;
+DROP VIEW IF EXISTS `vp_database13_227_v`;
+DROP TABLE IF EXISTS `vp_database13_227_joined`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database13_227_r`;
+DROP TABLE IF EXISTS `vp_database13_227_l`;
+DROP TABLE IF EXISTS `vp_database13_227_source`;
+CREATE TABLE `vp_database13_227_source` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database13_227_source` (`vp_rowid`, `c0array`) SELECT ROW_NUMBER() OVER (ORDER BY 1), `c0array` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database13_227_l` (`vp_rowid` BIGINT NOT NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database13_227_r` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database13_227_l` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_source`;
+INSERT INTO `vp_database13_227_r` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source`;
+DROP TABLE IF EXISTS `vp_database13_227_joined`;
+CREATE TEMPORARY TABLE `vp_database13_227_joined` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+DROP STREAM IF EXISTS `vp_database13_227_mutation_source_stream_229`;
+DROP STREAM IF EXISTS `vp_database13_227_mutation_left_stream_229`;
+DROP STREAM IF EXISTS `vp_database13_227_mutation_right_stream_229`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_source_delta_229`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_left_delta_229`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_right_delta_229`;
+CREATE STREAM `vp_database13_227_mutation_source_stream_229` ON TABLE `vp_database13_227_source`;
+CREATE STREAM `vp_database13_227_mutation_left_stream_229` ON TABLE `vp_database13_227_l`;
+CREATE STREAM `vp_database13_227_mutation_right_stream_229` ON TABLE `vp_database13_227_r`;
+CREATE TEMPORARY TABLE `vp_database13_227_mutation_source_delta_229` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+CREATE TEMPORARY TABLE `vp_database13_227_mutation_left_delta_229` (`vp_rowid` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database13_227_mutation_right_delta_229` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+INSERT INTO `vp_database13_227_source` (`vp_rowid`, `c0array`) SELECT 46, `c0array` FROM `vp_database13_227_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database13_227_l` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_source` WHERE `vp_rowid` = 46;
+INSERT INTO `vp_database13_227_r` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source` WHERE `vp_rowid` = 46;
+INSERT INTO `vp_database13_227_mutation_source_delta_229` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_mutation_source_stream_229`;
+INSERT INTO `vp_database13_227_mutation_left_delta_229` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_mutation_left_stream_229`;
+INSERT INTO `vp_database13_227_mutation_right_delta_229` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_mutation_right_stream_229`;
+DELETE FROM `vp_database13_227_source` WHERE `vp_rowid` = 1;
+DELETE FROM `vp_database13_227_l` WHERE `vp_rowid` = 1;
+DELETE FROM `vp_database13_227_r` WHERE `vp_rowid` = 1;
+INSERT OVERWRITE `vp_database13_227_source` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source`;
+INSERT OVERWRITE `vp_database13_227_l` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_source`;
+INSERT OVERWRITE `vp_database13_227_r` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source`;
+OPTIMIZE TABLE `vp_database13_227_source` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_l` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_r` COMPACT;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP STREAM IF EXISTS `vp_database13_227_source_stream`;
+DROP STREAM IF EXISTS `vp_database13_227_left_stream`;
+DROP STREAM IF EXISTS `vp_database13_227_right_stream`;
+CREATE STREAM `vp_database13_227_source_stream` ON TABLE `vp_database13_227_source`;
+CREATE STREAM `vp_database13_227_left_stream` ON TABLE `vp_database13_227_l`;
+CREATE STREAM `vp_database13_227_right_stream` ON TABLE `vp_database13_227_r`;
+INSERT INTO `vp_database13_227_source` (`vp_rowid`, `c0array`) SELECT 47, `c0array` FROM `vp_database13_227_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database13_227_l` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_source` WHERE `vp_rowid` = 47;
+INSERT INTO `vp_database13_227_r` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source` WHERE `vp_rowid` = 47;
+DROP STREAM IF EXISTS `vp_database13_227_source_stream`;
+DROP STREAM IF EXISTS `vp_database13_227_left_stream`;
+DROP STREAM IF EXISTS `vp_database13_227_right_stream`;
+CREATE STREAM `vp_database13_227_source_stream` ON TABLE `vp_database13_227_source`;
+CREATE STREAM `vp_database13_227_left_stream` ON TABLE `vp_database13_227_l`;
+CREATE STREAM `vp_database13_227_right_stream` ON TABLE `vp_database13_227_r`;
+INSERT INTO `vp_database13_227_source` (`vp_rowid`, `c0array`) SELECT 48, `c0array` FROM `vp_database13_227_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database13_227_l` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_source` WHERE `vp_rowid` = 48;
+INSERT INTO `vp_database13_227_r` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source` WHERE `vp_rowid` = 48;
+DROP STREAM IF EXISTS `vp_database13_227_mutation_source_stream_234`;
+DROP STREAM IF EXISTS `vp_database13_227_mutation_left_stream_234`;
+DROP STREAM IF EXISTS `vp_database13_227_mutation_right_stream_234`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_source_delta_234`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_left_delta_234`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_right_delta_234`;
+CREATE STREAM `vp_database13_227_mutation_source_stream_234` ON TABLE `vp_database13_227_source`;
+CREATE STREAM `vp_database13_227_mutation_left_stream_234` ON TABLE `vp_database13_227_l`;
+CREATE STREAM `vp_database13_227_mutation_right_stream_234` ON TABLE `vp_database13_227_r`;
+CREATE TEMPORARY TABLE `vp_database13_227_mutation_source_delta_234` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+CREATE TEMPORARY TABLE `vp_database13_227_mutation_left_delta_234` (`vp_rowid` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database13_227_mutation_right_delta_234` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+INSERT INTO `vp_database13_227_source` (`vp_rowid`, `c0array`) SELECT 49, `c0array` FROM `vp_database13_227_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database13_227_l` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_source` WHERE `vp_rowid` = 49;
+INSERT INTO `vp_database13_227_r` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source` WHERE `vp_rowid` = 49;
+INSERT INTO `vp_database13_227_mutation_source_delta_234` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_mutation_source_stream_234`;
+INSERT INTO `vp_database13_227_mutation_left_delta_234` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_mutation_left_stream_234`;
+INSERT INTO `vp_database13_227_mutation_right_delta_234` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_mutation_right_stream_234`;
+DELETE FROM `vp_database13_227_source` WHERE `vp_rowid` = 2;
+DELETE FROM `vp_database13_227_l` WHERE `vp_rowid` = 2;
+DELETE FROM `vp_database13_227_r` WHERE `vp_rowid` = 2;
+INSERT OVERWRITE `vp_database13_227_source` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source`;
+INSERT OVERWRITE `vp_database13_227_l` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_source`;
+INSERT OVERWRITE `vp_database13_227_r` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source`;
+OPTIMIZE TABLE `vp_database13_227_source` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_l` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_r` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_source` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_l` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_r` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_source` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_l` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_r` COMPACT;
+DROP VIEW IF EXISTS `vp_database13_227_v`;
+CREATE VIEW `vp_database13_227_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array` FROM `vp_database13_227_l` l JOIN `vp_database13_227_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_227_v`;
+CREATE VIEW `vp_database13_227_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array` FROM `vp_database13_227_l` l JOIN `vp_database13_227_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_227_v`;
+CREATE VIEW `vp_database13_227_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array` FROM `vp_database13_227_l` l JOIN `vp_database13_227_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_227_v`;
+CREATE VIEW `vp_database13_227_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array` FROM `vp_database13_227_l` l JOIN `vp_database13_227_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_227_v`;
+CREATE VIEW `vp_database13_227_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array` FROM `vp_database13_227_l` l JOIN `vp_database13_227_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_227_joined`;
+INSERT INTO `vp_database13_227_joined` (`vp_rowid`, `c0array`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array` FROM `vp_database13_227_l` l JOIN `vp_database13_227_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_227_joined`;
+INSERT INTO `vp_database13_227_joined` (`vp_rowid`, `c0array`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array` FROM `vp_database13_227_l` l JOIN `vp_database13_227_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_227_joined`;
+INSERT INTO `vp_database13_227_joined` (`vp_rowid`, `c0array`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array` FROM `vp_database13_227_l` l JOIN `vp_database13_227_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_227_joined`;
+INSERT INTO `vp_database13_227_joined` (`vp_rowid`, `c0array`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array` FROM `vp_database13_227_l` l JOIN `vp_database13_227_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_227_joined`;
+INSERT INTO `vp_database13_227_joined` (`vp_rowid`, `c0array`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array` FROM `vp_database13_227_l` l JOIN `vp_database13_227_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP STREAM IF EXISTS `vp_database13_227_mutation_source_stream_244`;
+DROP STREAM IF EXISTS `vp_database13_227_mutation_left_stream_244`;
+DROP STREAM IF EXISTS `vp_database13_227_mutation_right_stream_244`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_source_delta_244`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_left_delta_244`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_right_delta_244`;
+CREATE STREAM `vp_database13_227_mutation_source_stream_244` ON TABLE `vp_database13_227_source`;
+CREATE STREAM `vp_database13_227_mutation_left_stream_244` ON TABLE `vp_database13_227_l`;
+CREATE STREAM `vp_database13_227_mutation_right_stream_244` ON TABLE `vp_database13_227_r`;
+CREATE TEMPORARY TABLE `vp_database13_227_mutation_source_delta_244` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+CREATE TEMPORARY TABLE `vp_database13_227_mutation_left_delta_244` (`vp_rowid` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database13_227_mutation_right_delta_244` (`vp_rowid` BIGINT NULL, `c0array` ARRAY(BIGINT NULL) NULL);
+INSERT INTO `vp_database13_227_source` (`vp_rowid`, `c0array`) SELECT 50, `c0array` FROM `vp_database13_227_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database13_227_l` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_source` WHERE `vp_rowid` = 50;
+INSERT INTO `vp_database13_227_r` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source` WHERE `vp_rowid` = 50;
+INSERT INTO `vp_database13_227_mutation_source_delta_244` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_mutation_source_stream_244`;
+INSERT INTO `vp_database13_227_mutation_left_delta_244` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_mutation_left_stream_244`;
+INSERT INTO `vp_database13_227_mutation_right_delta_244` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_mutation_right_stream_244`;
+DELETE FROM `vp_database13_227_source` WHERE `vp_rowid` = 3;
+DELETE FROM `vp_database13_227_l` WHERE `vp_rowid` = 3;
+DELETE FROM `vp_database13_227_r` WHERE `vp_rowid` = 3;
+INSERT OVERWRITE `vp_database13_227_source` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source`;
+INSERT OVERWRITE `vp_database13_227_l` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database13_227_source`;
+INSERT OVERWRITE `vp_database13_227_r` (`vp_rowid`, `c0array`) SELECT `vp_rowid`, `c0array` FROM `vp_database13_227_source`;
+OPTIMIZE TABLE `vp_database13_227_source` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_l` COMPACT;
+OPTIMIZE TABLE `vp_database13_227_r` COMPACT;
+DROP STREAM IF EXISTS `vp_database13_227_source_stream`;
+DROP STREAM IF EXISTS `vp_database13_227_left_stream`;
+DROP STREAM IF EXISTS `vp_database13_227_right_stream`;
+DROP VIEW IF EXISTS `vp_database13_227_v`;
+DROP TABLE IF EXISTS `vp_database13_227_joined`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database13_227_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database13_227_r`;
+DROP TABLE IF EXISTS `vp_database13_227_l`;
+DROP TABLE IF EXISTS `vp_database13_227_source`;
+DROP STREAM IF EXISTS `vp_database13_250_source_stream`;
+DROP STREAM IF EXISTS `vp_database13_250_left_stream`;
+DROP STREAM IF EXISTS `vp_database13_250_right_stream`;
+DROP VIEW IF EXISTS `vp_database13_250_v`;
+DROP TABLE IF EXISTS `vp_database13_250_joined`;
+DROP TABLE IF EXISTS `vp_database13_250_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database13_250_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database13_250_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database13_250_r`;
+DROP TABLE IF EXISTS `vp_database13_250_l`;
+DROP TABLE IF EXISTS `vp_database13_250_source`;
+CREATE TABLE `vp_database13_250_source` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database13_250_source` (`vp_rowid`, `c0array`) SELECT ROW_NUMBER() OVER (ORDER BY 1), `c0array` FROM `t0` LIMIT 4096;
+UPDATE `vp_database13_250_source` SET `c0array` = [] WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database13_250_source`);
+UPDATE `vp_database13_250_source` SET `c0array` = NULL WHERE `vp_rowid` = (SELECT MAX(`vp_rowid`) FROM `vp_database13_250_source` WHERE `vp_rowid` <> (SELECT MIN(`vp_rowid`) FROM `vp_database13_250_source`));
+REMOVE @~/vp_database13_250_copy;
+DROP TABLE IF EXISTS `vp_database13_250_copy_reference`;
+CREATE TEMPORARY TABLE `vp_database13_250_copy_reference` AS SELECT * FROM `vp_database13_250_source`;
+COPY INTO @~/vp_database13_250_copy FROM (SELECT * FROM `vp_database13_250_source`) FILE_FORMAT=(TYPE=PARQUET);
+TRUNCATE TABLE `vp_database13_250_source`;
+COPY INTO `vp_database13_250_source` FROM @~/vp_database13_250_copy FILE_FORMAT=(TYPE=PARQUET) FORCE=TRUE;
+DROP STREAM IF EXISTS `vp_database13_255_source_stream`;
+DROP STREAM IF EXISTS `vp_database13_255_left_stream`;
+DROP STREAM IF EXISTS `vp_database13_255_right_stream`;
+DROP VIEW IF EXISTS `vp_database13_255_v`;
+DROP TABLE IF EXISTS `vp_database13_255_joined`;
+DROP TABLE IF EXISTS `vp_database13_255_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database13_255_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database13_255_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database13_255_r`;
+DROP TABLE IF EXISTS `vp_database13_255_l`;
+DROP TABLE IF EXISTS `vp_database13_255_source`;
+CREATE TABLE `vp_database13_255_source` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database13_255_source` (`vp_rowid`, `c0array`) SELECT ROW_NUMBER() OVER (ORDER BY 1), `c0array` FROM `t0` LIMIT 4096;
+UPDATE `vp_database13_255_source` SET `c0array` = [] WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database13_255_source`);
+UPDATE `vp_database13_255_source` SET `c0array` = NULL WHERE `vp_rowid` = (SELECT MAX(`vp_rowid`) FROM `vp_database13_255_source` WHERE `vp_rowid` <> (SELECT MIN(`vp_rowid`) FROM `vp_database13_255_source`));
+REMOVE @~/vp_database13_255_copy;
+DROP TABLE IF EXISTS `vp_database13_255_copy_reference`;
+CREATE TEMPORARY TABLE `vp_database13_255_copy_reference` AS SELECT * FROM `vp_database13_255_source`;
+COPY INTO @~/vp_database13_255_copy FROM (SELECT * FROM `vp_database13_255_source`) FILE_FORMAT=(TYPE=PARQUET);
+TRUNCATE TABLE `vp_database13_255_source`;
+COPY INTO `vp_database13_255_source` FROM @~/vp_database13_255_copy FILE_FORMAT=(TYPE=PARQUET) FORCE=TRUE;
+DROP STREAM IF EXISTS `vp_database13_261_source_stream`;
+DROP STREAM IF EXISTS `vp_database13_261_left_stream`;
+DROP STREAM IF EXISTS `vp_database13_261_right_stream`;
+DROP VIEW IF EXISTS `vp_database13_261_v`;
+DROP TABLE IF EXISTS `vp_database13_261_joined`;
+DROP TABLE IF EXISTS `vp_database13_261_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database13_261_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database13_261_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database13_261_r`;
+DROP TABLE IF EXISTS `vp_database13_261_l`;
+DROP TABLE IF EXISTS `vp_database13_261_source`;
+CREATE TABLE `vp_database13_261_source` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL, `c1timestamp` TIMESTAMP NULL DEFAULT '1969-12-29 15:07:37.000000', `c2variant` VARIANT NULL, `c3varchar` VARCHAR NULL) ENGINE=FUSE;
+INSERT INTO `vp_database13_261_source` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT ROW_NUMBER() OVER (ORDER BY `c1timestamp`, `c3varchar`), `c0array`, `c1timestamp`, `c2variant`, `c3varchar` FROM `t1` LIMIT 4096;
+CREATE TABLE `vp_database13_261_l` (`vp_rowid` BIGINT NOT NULL, `c3varchar` VARCHAR NULL, `c2variant` VARIANT NULL) ENGINE=MEMORY;
+CREATE TABLE `vp_database13_261_r` (`vp_rowid` BIGINT NOT NULL, `c1timestamp` TIMESTAMP NULL, `c0array` ARRAY(BIGINT NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database13_261_l` (`vp_rowid`, `c3varchar`, `c2variant`) SELECT `vp_rowid`, `c3varchar`, `c2variant` FROM `vp_database13_261_source`;
+INSERT INTO `vp_database13_261_r` (`vp_rowid`, `c1timestamp`, `c0array`) SELECT `vp_rowid`, `c1timestamp`, `c0array` FROM `vp_database13_261_source`;
+DROP TABLE IF EXISTS `vp_database13_261_joined`;
+CREATE TEMPORARY TABLE `vp_database13_261_joined` (`vp_rowid` BIGINT NOT NULL, `c0array` ARRAY(BIGINT NULL) NULL, `c1timestamp` TIMESTAMP NULL, `c2variant` VARIANT NULL, `c3varchar` VARCHAR NULL);
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP VIEW IF EXISTS `vp_database13_261_v`;
+CREATE VIEW `vp_database13_261_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_261_v`;
+CREATE VIEW `vp_database13_261_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_261_v`;
+CREATE VIEW `vp_database13_261_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_261_v`;
+CREATE VIEW `vp_database13_261_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database13_261_v`;
+CREATE VIEW `vp_database13_261_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_261_joined`;
+INSERT INTO `vp_database13_261_joined` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_261_joined`;
+INSERT INTO `vp_database13_261_joined` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_261_joined`;
+INSERT INTO `vp_database13_261_joined` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_261_joined`;
+INSERT INTO `vp_database13_261_joined` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database13_261_joined`;
+INSERT INTO `vp_database13_261_joined` (`vp_rowid`, `c0array`, `c1timestamp`, `c2variant`, `c3varchar`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0array` AS `c0array`, r.`c1timestamp` AS `c1timestamp`, l.`c2variant` AS `c2variant`, l.`c3varchar` AS `c3varchar` FROM `vp_database13_261_l` l JOIN `vp_database13_261_r` r ON l.`vp_rowid` = r.`vp_rowid`;

@@ -1,0 +1,17 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120802.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT DISTINCTROW c0 AS ref0\nFROM s\nWHERE c1 IN (COALESCE(0.36047097332362965, NULL, NULL, 275915752))",
+      "ok": true,
+      "rows": [],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 13,
+  "target_query": "SELECT DISTINCTROW c0 AS ref0\nFROM s\nWHERE c1 IN (COALESCE(0.36047097332362965, NULL, NULL, 275915752));",
+  "skip_reason": "DISTINCT is not handled by this batch rewriter"
+}

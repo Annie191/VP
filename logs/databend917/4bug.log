@@ -1,0 +1,113 @@
+https://github.com/databendlabs/databend/issues/20627 20568同族
+
+DROP DATABASE IF EXISTS repro_databend917_db4_min;
+CREATE DATABASE repro_databend917_db4_min;
+USE repro_databend917_db4_min;
+
+CREATE TABLE source (
+    vp_rowid BIGINT NOT NULL,
+    c0geometry VARCHAR NOT NULL,
+    c1varchar VARCHAR NOT NULL,
+    c2date DATE NULL
+) ENGINE=MEMORY;
+
+CREATE TABLE left_part (
+    vp_rowid BIGINT NOT NULL,
+    c1varchar VARCHAR NULL,
+    c0geometry VARCHAR NULL
+) ENGINE=FUSE;
+
+CREATE TABLE right_part (
+    vp_rowid BIGINT NOT NULL,
+    c2date DATE NULL,
+    c0geometry VARCHAR NULL
+) ENGINE=FUSE;
+
+INSERT INTO source VALUES
+(1, 'POINT(1 2)', 'abc', DATE '2020-01-01'),
+(2, 'POINT(1 2)', '', NULL),
+(3, 'POINT(1 2)', 'fX02|', NULL),
+(4, 'POINT(1 2)', 'fX02|', NULL);
+
+INSERT INTO left_part
+SELECT vp_rowid, c1varchar, c0geometry FROM source;
+
+INSERT INTO right_part
+SELECT vp_rowid, c2date, c0geometry FROM source;
+
+SELECT AVG(vp_rowid), s.c1varchar, s.c1varchar
+FROM source s
+WHERE (
+    ((s.c1varchar IS NULL) <> (s.c2date IS NULL))
+    AND ('fX02|' LIKE s.c1varchar)
+)
+GROUP BY s.c1varchar, s.c1varchar;
+
+SELECT AVG(s.vp_rowid), s.c1varchar, s.c1varchar
+FROM (
+    SELECT l.vp_rowid, l.c0geometry, l.c1varchar, r.c2date
+    FROM left_part l
+    LEFT JOIN right_part r
+        ON l.vp_rowid = r.vp_rowid
+) s
+WHERE (
+    ((s.c1varchar IS NULL) <> (s.c2date IS NULL))
+    AND ('fX02|' LIKE s.c1varchar)
+)
+GROUP BY s.c1varchar, s.c1varchar;
+
+单表查询结果：
+3.5 | fX02| | fX02|
+
+
+多表 LEFT_RIGHT_JOIN 重构查询：
+3.5 | fX02| | fX02|
+2.0 |        |
+
+单表执行计划核心部分：
+AggregateFinal
+├── group by: [c1varchar]
+├── aggregate functions: [sum(vp_rowid), count()]
+└── AggregatePartial
+    └── Filter
+        ├── filters:
+        │   [false <> (NOT is_not_null(c2date)),
+        │    like('fX02|', c1varchar)]
+        └── TableScan(source)
+            ├── read rows: 4
+            └── push downs:
+                [false <> (NOT is_not_null(source.c2date))
+                 AND like('fX02|', source.c1varchar)]
+重构查询执行计划核心部分：
+AggregateFinal
+├── group by: [c1varchar]
+├── aggregate functions: [sum(vp_rowid), count()]
+└── AggregatePartial
+    └── Filter
+        ├── filters:
+        │   [(NOT is_not_null(c1varchar))
+        │    <> (NOT is_not_null(c2date))]
+        └── HashJoin
+            ├── join type: RIGHT OUTER
+            ├── build keys: [left_part.vp_rowid]
+            ├── probe keys: [right_part.vp_rowid]
+            ├── TableScan(Build)
+            │   ├── filters:
+            │   │   [is_true(like('fX02|', left_part.c1varchar))]
+            │   └── read rows: 4
+            └── TableScan(Probe)
+                ├── output columns: [vp_rowid, c2date]
+                └── read rows: 4
+关键差异是优化器把原始 LEFT JOIN 重写成了 RIGHT OUTER，并把 LIKE 下推到 build 侧，但 NULL 比较谓词仍在 join 结果上执行。
+
+更具体地说：
+
+原始是 left_part LEFT JOIN right_part，应保留左表。
+
+优化器改成了 RIGHT OUTER JOIN，变成保留右表。
+
+同时把 LIKE 下推到左表扫描，过滤掉了左表的 vp_rowid=2。
+
+但 RIGHT OUTER JOIN 又保留了右表的 vp_rowid=2，并给左表列补空值。
+
+后置过滤只剩 NULL 异或条件，恰好让 vp_rowid=2 通过。

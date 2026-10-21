@@ -1,0 +1,19 @@
+{
+  "database": "Databend",
+  "source": "/home/lwm/sqlancer/Bugs/Databend/20603.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT ARRAY_AGG(a)\nFROM source",
+      "ok": true,
+      "rows": [
+        "[]"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "SELECT ARRAY_AGG(a)\nFROM source;",
+  "skip_reason": "aggregate ARRAYAGG is not supported by this TLP rewrite"
+}

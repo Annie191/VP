@@ -1,0 +1,26 @@
+{
+  "database": "CockroachDB",
+  "source": "/home/lwm/sqlancer/Bugs/CockroachDB/174729.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- single（等价于原查询的 GROUP BY 常量分组）\nSELECT STDDEV(vp_computed) FROM src GROUP BY CAST(NULL AS INT8)",
+      "ok": true,
+      "rows": [
+        "SET",
+        "SET",
+        "SET",
+        "SET",
+        "SET",
+        "SET",
+        "SET",
+        "4.8989794855663561964"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 18,
+  "target_query": "-- single（等价于原查询的 GROUP BY 常量分组）\nSELECT STDDEV(vp_computed) FROM src GROUP BY CAST(NULL AS INT8);",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

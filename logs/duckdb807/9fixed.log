@@ -1,0 +1,216 @@
+https://github.com/duckdb/duckdb/issues/24796 already fixed on 1.5.5 and current main.
+
+# 空输入标量子查询中的 COUNT(*) 被错误推导为 HUGEINT，导致内部绑定错误（BIGINT != HUGEINT）
+
+## 问题描述
+
+执行包含两个 `FILTER` 聚合和一个对空输入子查询进行 `COUNT(*)` 的查询时，DuckDB 触发内部错误：
+
+```text
+Invalid Input Error: Attempting to execute an unsuccessful or closed pending query result
+INTERNAL Error: Failed to bind column reference "empty_count" [17.4]:
+inequal types (BIGINT != HUGEINT)
+```
+
+单表版本的查询返回正确结果，但多表重构版本失败。错误原因是右侧 `UNGROUPED_AGGREGATE` 在空结果上的 `COUNT(*)` 输出被错误推导为 `HUGEINT`，而不是声明的 `BIGINT`。根投影期望 `BIGINT`，导致列绑定解析器发现类型不匹配。
+
+## 复现步骤
+
+在 DuckDB v1.5.4（或更高版本）中执行以下 SQL。查询使用 schema 和带有 `repro_duckdb_db9_min` 前缀的表名，以反映原始日志编号。
+
+```sql
+CREATE SCHEMA repro_duckdb_db9_min;
+SET schema 'repro_duckdb_db9_min';
+
+CREATE TABLE repro_duckdb_db9_min_source(
+    vp_rowid BIGINT,
+    c0 TIMESTAMP
+);
+
+INSERT INTO repro_duckdb_db9_min_source VALUES
+    (0, TIMESTAMP '1970-01-01'),
+    (1, TIMESTAMP '1969-12-23 16:25:55');
+
+-- 单表版本（正常工作）
+SELECT
+    COUNT(*) FILTER (WHERE vp_rowid % 2 = 0) AS even_count,
+    COUNT(c0) FILTER (WHERE vp_rowid % 2 = 0) AS even_nonnull,
+    (
+        SELECT COUNT(*)
+        FROM (
+            SELECT *
+            FROM repro_duckdb_db9_min_source
+            WHERE FALSE
+        ) empty_input
+    ) AS empty_count
+FROM repro_duckdb_db9_min_source;
+```
+
+单表版本返回：
+
+```text
+even_count = 1
+even_nonnull = 1
+empty_count = 0
+```
+
+现在运行触发 bug 的多表重构版本：
+
+```sql
+CREATE TABLE repro_duckdb_db9_min_l(
+    vp_rowid BIGINT,
+    c0 TIMESTAMP
+);
+
+CREATE TABLE repro_duckdb_db9_min_r(
+    vp_rowid BIGINT,
+    c0 TIMESTAMP
+);
+
+INSERT INTO repro_duckdb_db9_min_l VALUES
+    (0, TIMESTAMP '1970-01-01'),
+    (1, TIMESTAMP '1969-12-23 16:25:55');
+
+INSERT INTO repro_duckdb_db9_min_r
+SELECT * FROM repro_duckdb_db9_min_l;
+
+SET threads TO 4;
+SET disabled_optimizers = 'filter_pushdown,join_order';
+
+SELECT
+    COUNT(*) FILTER (WHERE vp_rowid % 2 = 0) AS even_count,
+    COUNT(c0) FILTER (WHERE vp_rowid % 2 = 0) AS even_nonnull,
+    (
+        SELECT COUNT(*)
+        FROM (
+            SELECT *
+            FROM (
+                SELECT
+                    l.vp_rowid,
+                    r.c0
+                FROM repro_duckdb_db9_min_l l
+                JOIN (
+                    SELECT
+                        vp_rowid,
+                        JSON_OBJECT('vp', vp_rowid) AS payload
+                    FROM repro_duckdb_db9_min_r
+                ) jp ON l.vp_rowid = jp.vp_rowid
+                JOIN repro_duckdb_db9_min_r r
+                    ON r.vp_rowid = jp.vp_rowid
+            ) reconstructed
+            WHERE FALSE
+        ) empty_input
+    ) AS empty_count
+FROM (
+    SELECT
+        l.vp_rowid,
+        r.c0
+    FROM repro_duckdb_db9_min_l l
+    JOIN (
+        SELECT
+            vp_rowid,
+            JSON_OBJECT('vp', vp_rowid) AS payload
+        FROM repro_duckdb_db9_min_r
+    ) jp ON l.vp_rowid = jp.vp_rowid
+    JOIN repro_duckdb_db9_min_r r
+        ON r.vp_rowid = jp.vp_rowid
+) reconstructed;
+```
+
+实际结果：
+
+```text
+Invalid Input Error: Attempting to execute an unsuccessful or closed pending query result
+INTERNAL Error: Failed to bind column reference "empty_count" [17.4]:
+inequal types (BIGINT != HUGEINT)
+```
+
+预期结果（与单表版本一致）：
+
+```text
+even_count = 1
+even_nonnull = 1
+empty_count = 0
+```
+
+## 必要条件
+
+复现此问题需要以下要素：
+
+1. 两个 `FILTER` 聚合必须同时存在：
+   - `COUNT(*) FILTER (...)`
+   - `COUNT(c0) FILTER (...)`
+2. 一个返回空输入（内层查询带 `WHERE FALSE`）的标量子查询。
+3. 多表 join 重构（外层查询连接 `repro_duckdb_db9_min_l` 和 `repro_duckdb_db9_min_r`）。
+4. `JSON_OBJECT` 辅助 join 必须保留。
+
+移除 `JSON_OBJECT` 或任一 `FILTER` 聚合后错误消失。
+
+## 执行计划结构
+
+简化的计划结构为：
+
+```text
+PROJECTION
+└── CROSS_PRODUCT
+    ├── UNGROUPED_AGGREGATE
+    │   ├── count_star() FILTER (...)
+    │   └── count(c0) FILTER (...)
+    └── UNGROUPED_AGGREGATE
+        └── EMPTY_RESULT
+```
+
+主输入路径：
+
+```text
+HASH_JOIN
+├── HASH_JOIN
+│   ├── SEQ_SCAN l
+│   └── SEQ_SCAN r  -- JSON_OBJECT 辅助关系
+└── SEQ_SCAN r
+```
+
+## 根因分析
+
+在此查询中，所有三个输出列的类型都应为 `BIGINT`：
+
+```sql
+COUNT(*) FILTER (...)          -- BIGINT
+COUNT(c0) FILTER (...)         -- BIGINT
+(SELECT COUNT(*) FROM (...) )  -- BIGINT
+```
+
+`COUNT(*)` 和 `COUNT(expr)` 在 DuckDB 中都返回 `BIGINT`。因此根投影应期望：
+
+```text
+even_count    BIGINT
+even_nonnull  BIGINT
+empty_count   BIGINT
+```
+
+然而，在展平无关联标量聚合子查询的过程中，右侧 `EMPTY_RESULT` 上的 `COUNT(*)` 聚合被错误地分配为类型 `HUGEINT`，而不是其声明的 `BIGINT`。根投影仍将 `empty_count` 绑定为 `BIGINT`，因此 `ColumnBindingResolver` 检测到不匹配：
+
+```text
+inequal types (BIGINT != HUGEINT)
+```
+
+这就是内部错误的根源。该缺陷似乎出现在标量子查询的类型推断或展平逻辑中，尤其是当子查询包含空输入并处于交叉连接中时。
+
+## 环境信息
+
+- OS: Ubuntu 20.04.6 LTS, x86_64
+- DuckDB Version: v1.5.4
+- DuckDB Client: Java JDBC（同时可通过 DuckDB CLI 复现）
+- Hardware: Intel Xeon Gold 5218R, 80 cores, 1486G RAM
+- JVM: OpenJDK 17.0.15（与此内部错误无关）
+
+## 提交前确认
+
+- 是，我已包含相关配置（操作系统、架构、DuckDB 版本）。
+- 是，我已包含复现问题所需的全部代码。
+- 是，我已包含相关数据集（上方已提供 SQL DDL/DML）。
+
+## 身份信息
+
+Full Name: [Your Name]  
+Affiliation: [Your Affiliation]

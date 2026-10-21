@@ -1,0 +1,79 @@
+DROP DATABASE IF EXISTS repro_db44;
+CREATE DATABASE repro_db44;
+USE repro_db44;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+-- MULTI_COLUMN, SKEWED_SPLIT, 3 行
+CREATE TABLE vp_s (vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, c0 DOUBLE, c1 DECIMAL(65,30));
+INSERT INTO vp_s(c0, c1) VALUES (NULL, 0.16380877049254772), (1.120582799E9, 0.3017323512515532), (1.0E-16, 0.5782575243419944);
+CREATE INDEX i_c1 ON vp_s(c1, vp_rowid);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 DOUBLE);
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c1 DECIMAL(65,30));
+INSERT INTO vp_l SELECT vp_rowid, c0 FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c1 FROM vp_s;
+
+DROP VIEW IF EXISTS vp_v;
+CREATE VIEW vp_v AS SELECT l.vp_rowid, l.c0, r.c1 FROM vp_l l JOIN vp_r r ON l.vp_rowid = r.vp_rowid;
+
+-- Single: pushdown 二级索引 → COUNT(NULL) = 3（错误）
+SELECT COUNT(((c1 = 0.3581373405788466) XOR (c1 OR NULL)) IN ((- (c1 NOT IN (NULL, c1))), (- (-1864605995 AND NULL))))
+FROM vp_s;
+
+-- Split: VIEW → MERGE JOIN 阻止 pushdown → 0（正确）
+SELECT COUNT(((c1 = 0.3581373405788466) XOR (c1 OR NULL)) IN ((- (c1 NOT IN (NULL, c1))), (- (-1864605995 AND NULL))))
+FROM vp_v;
+
+表达式分解：c1 ≠ 0.358... → 0 XOR 1(c1 OR NULL) → 1，c1 NOT IN (NULL,c1) = NULL → IN (NULL, NULL) = NULL → COUNT(NULL) 应为 0。
+
+查询	COUNT 结果	正确?	pushdown?
+Single	3	❌	✅ pushdown_aggregation（二级索引 i_c1）
+Split	0	✅	❌ MERGE JOIN 层聚合
+执行计划
+
+Single（二级索引 + pushdown_aggregation → 错误 = 3）
+
+|ID|OPERATOR         |NAME      |EST.ROWS|
+|0 |SCALAR GROUP BY  |          |1       |
+|1 |└─TABLE FULL SCAN|vp_s(i_c1)|3       |
+
+  1 - range_key([vp_s.c1], [vp_s.vp_rowid]), range(MIN,MIN ; MAX,MAX)
+      pushdown_aggregation([T_FUN_COUNT(vp_s.c1 = ... XOR ... IN (...))])
+
+Split（MERGE JOIN → 无 pushdown → 正确 = 0）
+
+|ID|OPERATOR           |NAME|EST.ROWS|
+|0 |SCALAR GROUP BY    |    |1       |
+|1 |└─MERGE JOIN       |    |3       |
+|2 |  ├─TABLE FULL SCAN|l   |3       |
+|3 |  └─TABLE FULL SCAN|r   |3       |
+
+  0 - agg_func([T_FUN_COUNT(r.c1 = ... XOR ... IN (...))])
+
+查询中的聚合表达式为：
+
+sql
+COUNT(((c1 = 0.3581373405788466) XOR (c1 OR NULL)) IN ((- (c1 NOT IN (NULL, c1))), (- (-1864605995 AND NULL))))
+逐层拆解其求值逻辑：
+
+子表达式	求值过程	最终结果
+c1 = 0.3581373405788466	表中所有 c1 值都不等于 0.358...	0 (FALSE)
+c1 OR NULL	c1 均为非零数值（0.163..., 1.12e9, 1e-16），在布尔上下文中为 TRUE；TRUE OR NULL → TRUE	1 (TRUE)
+(c1 = ...) XOR (c1 OR NULL)	0 XOR 1 → 1	1 (TRUE)
+c1 NOT IN (NULL, c1)	c1 与 NULL 比较永远返回 NULL，因此整个 NOT IN 结果为 NULL	NULL
+- (c1 NOT IN (NULL, c1))	-NULL → NULL	NULL
+-1864605995 AND NULL	任何值与 NULL 做 AND 结果都为 NULL，再取负仍为 NULL	NULL
+IN 的取值列表	(NULL, NULL)	两个元素均为 NULL
+最外层 IN	1 IN (NULL, NULL) → 由于列表中存在 NULL，无法确定左值是否匹配，结果为 NULL	NULL
+COUNT(NULL)	COUNT 忽略 NULL，因此最终结果应为 0	0
+结论：标准 SQL 语义下，该查询应返回 0。Split 查询正确地得到了 0。
+
+Single 查询（错误）
+
+优化器选择了覆盖索引 i_c1(c1, vp_rowid) 进行 TABLE FULL SCAN。
+
+同时触发了 pushdown_aggregation，将整个 COUNT(...) 计算下推到存储引擎（TiKV）执行。
+
+执行计划显示 range_key([vp_s.c1], [vp_s.vp_rowid]), range(MIN,MIN ; MAX,MAX)，并在 TABLE FULL SCAN 算子中直接完成聚合，返回一行结果 3。
+

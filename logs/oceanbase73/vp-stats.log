@@ -1,0 +1,8 @@
+-- [vp-stats] event=process-final dbms=oceanbase
+-- [vp-stats] oracle-runs completed=779 checkedPairs=176890 attempts=205200
+-- [vp-stats] schema-shape samples=29 schema-total=58 schema-empty=11 schema-single=46 schema-multi=12 schema-empty-single=10 schema-empty-multi=1 schema-nonempty-single=36 schema-nonempty-multi=11
+-- [vp-stats] split-counts EMPTY_SPLIT=141, SINGLE_REPLICATED=423, SINGLE_RIGHT_ROW_ID_ONLY=419, SINGLE_LEFT_ROW_ID_ONLY=421, EVEN_SPLIT=227, OVERLAPPED_SPLIT=229, SKEWED_SPLIT=228, TYPE_DIRECTED_SPLIT=226
+-- [vp-stats] selected-shape-counts EMPTY=141, SINGLE_COLUMN=429, MULTI_COLUMN=231
+-- [vp-stats] reconstruction-counts JOIN=11499, LEFT_RIGHT_JOIN=11502, FULL_OUTER_SIMULATION=11510, SCALAR_SUBQUERY=11501, EXISTS_FILTER=11506, IN_FILTER=11515, NOT_EXISTS_ANTI=11521, DERIVED_TABLE=11495, CTE=11510, VIEW=11512, TEMP_TABLE=11511, AGGREGATE_THEN_MERGE=11491, ROW_NUMBER_ALIGNMENT=11507, JSON_PACK=11511, STRING_PACK=11509, NATURAL_OR_USING=11522, STRAIGHT_JOIN=11510, LATERAL_DERIVED=11501
+-- [vp-stats] known-suppressed-counts 
+-- [vp-stats] advanced-feature-counts ROLLUP=0, CORRELATED_SUBQUERY=0, GROUP_CONCAT=0, ASYMMETRIC_INDEX=0, CHARSET_COLLATION_COLUMN=0, BOUNDARY_MUTATION=0

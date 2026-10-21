@@ -1,0 +1,157 @@
+https://github.com/databendlabs/databend/issues/20639 20612同族
+
+DROP DATABASE IF EXISTS repro_databend917_db20_min5;
+CREATE DATABASE repro_databend917_db20_min5;
+USE repro_databend917_db20_min5;
+
+SET enable_query_result_cache = 0;
+SET max_threads = 40;
+SET max_push_down_limit = 10000;
+
+CREATE TABLE source (
+    id BIGINT NOT NULL,
+    g GEOMETRY NULL
+) ENGINE=MEMORY;
+
+CREATE TABLE l (
+    id BIGINT NOT NULL,
+    g GEOMETRY NULL
+) ENGINE=FUSE;
+
+CREATE TABLE r (
+    id BIGINT NOT NULL
+) ENGINE=MEMORY;
+
+INSERT INTO source VALUES
+    (4, ST_GEOMETRYFROMWKT('POINT(4 4)')),
+    (3, ST_GEOMETRYFROMWKT('POINT(3 3)'));
+
+INSERT INTO source VALUES
+    (5, ST_GEOMETRYFROMWKT('POINT(5 5)')),
+    (1, ST_GEOMETRYFROMWKT('POINT(1 1)'));
+
+INSERT INTO source VALUES
+    (2, ST_GEOMETRYFROMWKT('POINT(2 2)'));
+
+INSERT INTO l SELECT * FROM source;
+INSERT INTO r SELECT id FROM source;
+
+DROP TABLE IF EXISTS jt;
+
+CREATE TEMPORARY TABLE jt (
+    id BIGINT NOT NULL,
+    g GEOMETRY NULL
+);
+
+INSERT INTO jt
+SELECT l.id, l.g
+FROM l JOIN r ON l.id = r.id;
+
+-- Verify row count and uniqueness: expected 5 / 5.
+SELECT COUNT(*), COUNT(DISTINCT id) FROM source;
+SELECT COUNT(*), COUNT(DISTINCT id) FROM jt;
+
+-- Verify stored values: expected 0 mismatches.
+SELECT COUNT(*) AS mismatches
+FROM source s
+FULL OUTER JOIN jt j ON s.id = j.id
+WHERE s.id IS NULL
+   OR j.id IS NULL
+   OR HEX(ST_ASWKB(s.g)) IS DISTINCT FROM HEX(ST_ASWKB(j.g));
+
+-- Reference query.
+SELECT HEX(ST_ASWKB(g))
+FROM source
+ORDER BY id
+LIMIT 3;
+
+-- Incorrect result.
+SELECT HEX(ST_ASWKB(g))
+FROM jt
+ORDER BY id
+LIMIT 3;
+
+-- Geometry projection is not required to reproduce.
+SELECT id FROM jt ORDER BY id LIMIT 3;
+
+EXPLAIN SELECT id FROM jt ORDER BY id LIMIT 3;
+
+-- Disable limit pushdown: result becomes correct.
+SET max_push_down_limit = 0;
+
+SELECT id FROM jt ORDER BY id LIMIT 3;
+
+
+预期与实际结果
+数据检查实际返回：
+source: COUNT(*) = 5, COUNT(DISTINCT id) = 5
+jt:     COUNT(*) = 5, COUNT(DISTINCT id) = 5
+mismatches = 0
+GEOMETRY 投影：
+Expected / source:
+0101000000000000000000f03f000000000000f03f  -- POINT(1 1)
+010100000000000000000000400000000000000040  -- POINT(2 2)
+010100000000000000000008400000000000000840  -- POINT(3 3)
+
+Actual / jt:
+0101000000000000000000f03f000000000000f03f  -- POINT(1 1)
+010100000000000000000000400000000000000040  -- POINT(2 2)
+010100000000000000000014400000000000001440  -- POINT(5 5)
+仅查询排序键也出错：
+设置	预期 id	实际 id
+max_push_down_limit = 10000	1,2,3	1,2,5
+max_push_down_limit = 0	1,2,3	1,2,3
+
+
+查询计划
+以下为实测核心计划，省略列编号、估算及耗时。
+启用 Limit 下推，仅查询 id，无 RowFetch：
+Limit: 3
+└── Sort(Single)
+    ├── sort keys: [id ASC NULLS LAST]
+    └── TableScan
+        ├── output columns: [id]
+        ├── read rows: 3
+        ├── partitions total: 3
+        ├── partitions scanned: 2
+        ├── pruning stats:
+        │   [range pruning: 3 to 3,
+        │    topn pruning: 3 to 2]
+        └── push downs: [filters: [], limit: 3]
+GEOMETRY 投影错误查询：
+RowFetch
+├── columns to fetch: [g]
+└── Limit: 3
+    └── Sort(Single): id ASC NULLS LAST
+        └── EvalScalar: hex(st_aswkb(jt.g))
+            └── TableScan
+                ├── output columns: [id, g, _row_id]
+                ├── read rows: 3
+                ├── partitions total: 3
+                ├── partitions scanned: 2
+                ├── topn pruning: 3 to 2
+                └── push downs: [filters: [], limit: 3]
+禁用 Limit 下推后，仅查询 id：
+Limit: 3
+└── Sort(Single)
+    ├── sort keys: [id ASC NULLS LAST]
+    └── TableScan
+        ├── output columns: [id]
+        ├── read rows: 5
+        ├── partitions total: 3
+        ├── partitions scanned: 3
+        ├── range pruning: 3 to 3
+        └── push downs: [filters: [], limit: NONE]
+块布局与定位证据
+在另一次普通 FUSE 表对照中，通过下面查询核实了实际块内数据：
+SELECT id, _block_name FROM jt_normal ORDER BY id;
+块分布为：
+块	实际 id	根据数据计算的 min/max
+A	2	2 / 2
+B	3,4	3 / 4
+C	1,5	1 / 5
+
+
+错误结果 1,2,5 对应 A、C 中的数据，遗漏了包含 id 3 的 B。关闭 Limit 下推后读取全部三个块并恢复正确结果。
+
+完整数据正确，但启用 Limit 下推时，Top-N 查询遗漏应入选的行；关闭下推后结果恢复正确。证据指向 FUSE Top-N 扫描/裁剪路径。

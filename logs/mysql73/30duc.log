@@ -1,0 +1,72 @@
+https://bugs.mysql.com/bug.php?id=120862&thanks=4  a duplicate of Bug#120429 which is fixed in the upcoming MySQL-9.7 LTS release.
+
+DROP DATABASE IF EXISTS repro30;
+CREATE DATABASE repro30;
+USE repro30;
+
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+INSERT INTO src (c0) VALUES (NULL), (NULL), (NULL), (1), (574442044);
+ALTER TABLE src ADD UNIQUE KEY i5 (c0 DESC);
+
+CREATE TABLE l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 DECIMAL(65,30) NULL) ENGINE=InnoDB;
+CREATE TABLE r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 DECIMAL(65,30) NULL) ENGINE=InnoDB;
+INSERT INTO l SELECT vp_rowid, c0 FROM src;
+INSERT INTO r SELECT vp_rowid, c0 FROM src;
+
+-- Single: 覆盖索引 → SUM=2 ✓
+SELECT SUM((BIT_COUNT(vp_rowid)) NOT IN (0.499)) AS ref0 FROM src
+WHERE (- ((vp_rowid) != (IFNULL(NULL, c0))));
+
+-- Split: LEFT_RIGHT_JOIN → SUM=NULL ❌
+SELECT SUM((BIT_COUNT(vp_rowid)) NOT IN (0.499)) AS ref0
+FROM (SELECT l.vp_rowid, l.c0 FROM l LEFT JOIN r ON l.vp_rowid = r.vp_rowid) AS src
+WHERE (- ((vp_rowid) != (IFNULL(NULL, c0))));
+
+
+single: 2    ✓
+split:  NULL ❌
+
+-- Single: 覆盖索引 → SUM=2
+-> Aggregate: sum((bit_count(src.vp_rowid) <> 0.499))
+    -> Filter: (0 <> -((vp_rowid <> ifnull(NULL, c0))))
+        -> Covering index scan on src using i5(c0 DESC)
+
+-- Split: LEFT_RIGHT_JOIN (NLJ left join) → SUM=NULL
+-> Aggregate: sum((bit_count(l.vp_rowid) <> 0.499))
+    -> Nested loop left join
+        -> Filter: (0 <> -((vp_rowid <> ifnull(NULL, l.c0))))
+            -> Table scan on l
+        -> Single-row covering index lookup on r using PRIMARY (vp_rowid = l.vp_rowid)
+
+单表查询
+WHERE (- ((vp_rowid) != (IFNULL(NULL, c0)))) 等价于 -(vp_rowid != c0)。
+非 NULL 比较返回 1（TRUE）时，-1 非零，条件成立；若 c0 为 NULL，比较得 NULL，-NULL 仍为 NULL，条件不成立。
+数据：
+
+vp_rowid=1,2,3 对应 c0=NULL → 过滤
+
+vp_rowid=4, c0=1 → 条件成立，BIT_COUNT(4)=1 NOT IN (0.499) 为 TRUE(1)
+
+vp_rowid=5, c0=574442044 → 条件成立，BIT_COUNT(5)=2 NOT IN (0.499) 为 TRUE(1)
+SUM 结果为 2。✓
+
+分表重构
+派生表 src 由 l LEFT JOIN r ON l.vp_rowid = r.vp_rowid 产生，因主键完全匹配，行数据与 l（即原表）完全相同。
+外层查询相同的表达式和逻辑，理应得到 2，实际却返回 NULL，表明没有任何行通过 WHERE 过滤（无行时 SUM 返回 NULL）。
+
+在 LEFT_RIGHT_JOIN 优化（允许优化器调整左右连接顺序或翻转连接）与条件下推的交互中，优化器会重写查询树。
+
+Filter 原本引用 l.c0，但重写过程里可能：
+
+错误地将 l.c0 重新绑定到了 右表 r 的某个列（即使 r.c0 在 SELECT 中并未出现，内部仍存在），
+
+或者绑定到一个 未初始化的中间临时列。
+
+当 Filter 在 Table scan on l 之后立即执行时，若它实际读取的是右表列的占位符，而此时右表尚未被读取，该列值就是 NULL（或空字段的默认 NULL）。
+
+因此 IFNULL(NULL, <错误列>) 总是返回 NULL，导致 vp_rowid != NULL 得到 NULL，整个过滤条件为 NULL，所有行被丢弃。
+
+最终聚合没有输入行，SUM 返回 NULL。

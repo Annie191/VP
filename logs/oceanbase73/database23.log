@@ -1,0 +1,741 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: OCEANBASE_MYSQL_RANDOM_TABLE_REWRITE
+--Strategy summary: split=SKEWED_SPLIT, reconstruction=JSON_PACK, shape=MULTI_COLUMN, prefix=vp_database23_665_
+--Strategy counts: split={EMPTY_SPLIT=43, SINGLE_REPLICATED=119, SINGLE_RIGHT_ROW_ID_ONLY=120, SINGLE_LEFT_ROW_ID_ONLY=118, EVEN_SPLIT=67, OVERLAPPED_SPLIT=67, SKEWED_SPLIT=67, TYPE_DIRECTED_SPLIT=67}, reconstruction={JOIN=3315, LEFT_RIGHT_JOIN=3315, FULL_OUTER_SIMULATION=3312, SCALAR_SUBQUERY=3324, EXISTS_FILTER=3324, IN_FILTER=3322, NOT_EXISTS_ANTI=3318, DERIVED_TABLE=3313, CTE=3316, VIEW=3324, TEMP_TABLE=3324, AGGREGATE_THEN_MERGE=3310, ROW_NUMBER_ALIGNMENT=3321, JSON_PACK=3323, STRING_PACK=3323, NATURAL_OR_USING=3318, STRAIGHT_JOIN=3316, LATERAL_DERIVED=3312}
+--Database: database23
+--OceanBase version: 5.7.25-OceanBase_CE-v4.4.2.1
+--Base table: t0
+--Base table DDL: CREATE TABLE `t0` (
+--  `c0` decimal(31,13) unsigned zerofill DEFAULT NULL,
+--  `c1` decimal(10,0) unsigned zerofill DEFAULT NULL COMMENT 'asdf',
+--  KEY `i6` (`c1`, `c0`) BLOCK_SIZE 16384 LOCAL,
+--  KEY `i1` (`c1`) BLOCK_SIZE 16384 LOCAL,
+--  KEY `i5` (`c1`) BLOCK_SIZE 16384 LOCAL
+--) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+-- partition by key(`c1`)
+--(partition `p0`)
+--Base table engine: InnoDB
+--VP source engine: InnoDB
+--VP left engine: InnoDB
+--VP right engine: InnoDB
+--Base row count: 5
+--Base shape: MULTI_COLUMN
+--Stable row order: `c0`, `c1`
+--Prefix: vp_database23_665_
+--Split strategy: SKEWED_SPLIT
+--Left columns: c1
+--Right columns: c0
+--Overlap columns: 
+--Physical foreign key: true
+--Reconstruction strategy: JSON_PACK
+--Description: shape=MULTI_COLUMN, split=SKEWED_SPLIT, reconstruction=JSON_PACK
+--Session vars: sql_mode=STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER, time_zone=+00:00, optimizer_switch=, group_concat_max_len=1048576
+--Session SET statements:
+--SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER';
+--SET SESSION time_zone = '+00:00';
+--SET SESSION optimizer_switch = '';
+--SET SESSION group_concat_max_len = 1048576;
+--Setup statements:
+--CREATE TABLE `vp_database23_665_source` (`vp_rowid` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, `c0` DECIMAL(65,30) NULL, `c1` DECIMAL(65,30) NULL) ENGINE=InnoDB;
+--INSERT INTO `vp_database23_665_source` (`c0`, `c1`) SELECT `c0`, `c1` FROM `t0` ORDER BY `c0`, `c1` LIMIT 256;
+--ALTER TABLE `vp_database23_665_source` ADD KEY `vp_database23_665_src_idx_0` (`c1`, `c0`) BLOCK_SIZE 16384 LOCAL;
+--ALTER TABLE `vp_database23_665_source` ADD KEY `vp_database23_665_src_idx_1` (`c1`) BLOCK_SIZE 16384 LOCAL;
+--ALTER TABLE `vp_database23_665_source` ADD KEY `vp_database23_665_src_idx_2` (`c1`) BLOCK_SIZE 16384 LOCAL
+--) ORGANIZATION INDEX DEFAULT CHARSET = utf8mb4 ROW_FORMAT = DYNAMIC COMPRESSION = 'zstd_1.3.8' REPLICA_NUM = 1 BLOCK_SIZE = 16384 USE_BLOOM_FILTER = FALSE ENABLE_MACRO_BLOCK_BLOOM_FILTER = FALSE TABLET_SIZE = 134217728 PCTFREE = 0
+-- partition by key(`c1`)
+--(partition `p0`;
+--CREATE TABLE `vp_database23_665_l` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c1` DECIMAL(65,30) NULL) ENGINE=InnoDB;
+--CREATE TABLE `vp_database23_665_r` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` DECIMAL(65,30) NULL) ENGINE=InnoDB;
+--INSERT INTO `vp_database23_665_l` (`vp_rowid`, `c1`) SELECT `vp_rowid`, `c1` FROM `vp_database23_665_source`;
+--INSERT INTO `vp_database23_665_r` (`vp_rowid`, `c0`) SELECT `vp_rowid`, `c0` FROM `vp_database23_665_source`;
+--ALTER TABLE `vp_database23_665_r` ADD CONSTRAINT `vp_database23_665_fk_r_l` FOREIGN KEY (`vp_rowid`) REFERENCES `vp_database23_665_l`(`vp_rowid`);
+--DROP TEMPORARY TABLE IF EXISTS `vp_database23_665_joined`;
+--CREATE TEMPORARY TABLE `vp_database23_665_joined` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, l.`c1` AS `c1` FROM `vp_database23_665_l` l JOIN `vp_database23_665_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP TEMPORARY TABLE IF EXISTS `vp_database23_665_joined`;
+--CREATE TEMPORARY TABLE `vp_database23_665_joined` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, l.`c1` AS `c1` FROM `vp_database23_665_l` l JOIN `vp_database23_665_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP TEMPORARY TABLE IF EXISTS `vp_database23_665_joined`;
+--CREATE TEMPORARY TABLE `vp_database23_665_joined` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, l.`c1` AS `c1` FROM `vp_database23_665_l` l JOIN `vp_database23_665_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP TEMPORARY TABLE IF EXISTS `vp_database23_665_joined`;
+--CREATE TEMPORARY TABLE `vp_database23_665_joined` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, l.`c1` AS `c1` FROM `vp_database23_665_l` l JOIN `vp_database23_665_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--DROP TEMPORARY TABLE IF EXISTS `vp_database23_665_joined`;
+--CREATE TEMPORARY TABLE `vp_database23_665_joined` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, l.`c1` AS `c1` FROM `vp_database23_665_l` l JOIN `vp_database23_665_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--VP source snapshot:
+--SELECT `vp_rowid`, `c0`, `c1` FROM `vp_database23_665_source` ORDER BY `vp_rowid`;
+--[vp_rowid=1, c0=null, c1=null]
+--[vp_rowid=2, c0=0.222640281389400000000000000000, c1=0E-30]
+--[vp_rowid=3, c0=0.623458086836200000000000000000, c1=0E-30]
+--[vp_rowid=4, c0=0.710858450936300000000000000000, c1=1.000000000000000000000000000000]
+--[vp_rowid=5, c0=0.746961713556800000000000000000, c1=null]
+--VP left snapshot:
+--SELECT `vp_rowid`, `c1` FROM `vp_database23_665_l` ORDER BY `vp_rowid`;
+--[vp_rowid=1, c1=null]
+--[vp_rowid=2, c1=0E-30]
+--[vp_rowid=3, c1=0E-30]
+--[vp_rowid=4, c1=1.000000000000000000000000000000]
+--[vp_rowid=5, c1=null]
+--VP right snapshot:
+--SELECT `vp_rowid`, `c0` FROM `vp_database23_665_r` ORDER BY `vp_rowid`;
+--[vp_rowid=1, c0=null]
+--[vp_rowid=2, c0=0.222640281389400000000000000000]
+--[vp_rowid=3, c0=0.623458086836200000000000000000]
+--[vp_rowid=4, c0=0.710858450936300000000000000000]
+--[vp_rowid=5, c0=0.746961713556800000000000000000]
+--Single query: SELECT DISTINCT AVG((('-726911741') NOT IN ((363140572) IS NOT FALSE)) IN (((- (vp_database23_665_source.c1))) IN ((vp_database23_665_source.c1) > (NULL),  EXISTS (SELECT 1 from dual wHERE FALSE), 0.30629758711845567))) FROM vp_database23_665_source
+--Split query: SELECT DISTINCT AVG((('-726911741') NOT IN ((363140572) IS NOT FALSE)) IN (((- (vp_database23_665_source.c1))) IN ((vp_database23_665_source.c1) > (NULL),  EXISTS (SELECT 1 from dual wHERE FALSE), 0.30629758711845567))) FROM (SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, l.`c1` AS `c1` FROM `vp_database23_665_l` l JOIN (SELECT `vp_rowid`, JSON_OBJECT('vp', `vp_rowid`) AS payload FROM `vp_database23_665_r`) jp ON l.`vp_rowid` = jp.`vp_rowid` JOIN `vp_database23_665_r` r ON r.`vp_rowid` = jp.`vp_rowid`) `vp_database23_665_source`
+--Single query plan:
+--EXPLAIN SELECT DISTINCT AVG((('-726911741') NOT IN ((363140572) IS NOT FALSE)) IN (((- (vp_database23_665_source.c1))) IN ((vp_database23_665_source.c1) > (NULL),  EXISTS (SELECT 1 from dual wHERE FALSE), 0.30629758711845567))) FROM vp_database23_665_source;
+--[Query Plan===================================================================================================]
+--[Query Plan=|ID|OPERATOR         |NAME                                                 |EST.ROWS|EST.TIME(us)|]
+--[Query Plan=--------------------------------------------------------------------------------------------------]
+--[Query Plan=|0 |SCALAR GROUP BY  |                                                     |1       |3           |]
+--[Query Plan=|1 |└─TABLE FULL SCAN|vp_database23_665_source(vp_database23_665_src_idx_1)|5       |3           |]
+--[Query Plan===================================================================================================]
+--[Query Plan=Outputs & filters:]
+--[Query Plan=-------------------------------------]
+--[Query Plan=  0 - output([cast(cast(T_FUN_SUM(T_FUN_SUM(cast('-726911741', DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1, 0)) = (T_OP_NEG, vp_database23_665_source.c1) ]
+--[Query Plan=      IN (cast(vp_database23_665_source.c1 > NULL, DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) OR (T_OP_NEG, vp_database23_665_source.c1) = cast(0.30629758711845567,]
+--[Query Plan=       DECIMAL_INT(66, 30)))), DECIMAL_INT(65, 32)) / cast(T_FUN_COUNT_SUM(T_FUN_COUNT(cast('-726911741', DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1,]
+--[Query Plan=       0)) = (T_OP_NEG, vp_database23_665_source.c1) IN (cast(vp_database23_665_source.c1 > NULL, DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) OR (T_OP_NEG,]
+--[Query Plan=       vp_database23_665_source.c1) = cast(0.30629758711845567, DECIMAL_INT(66, 30)))), DECIMAL_INT(20, 0)), DECIMAL(5, 4))]), filter(nil), rowset=16]
+--[Query Plan=      group(nil), agg_func([T_FUN_SUM(T_FUN_SUM(cast('-726911741', DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1, 0)) = (T_OP_NEG, vp_database23_665_source.c1) ]
+--[Query Plan=      IN (cast(vp_database23_665_source.c1 > NULL, DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) OR (T_OP_NEG, vp_database23_665_source.c1) = cast(0.30629758711845567,]
+--[Query Plan=       DECIMAL_INT(66, 30))))], [T_FUN_COUNT_SUM(T_FUN_COUNT(cast('-726911741', DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1, 0)) = (T_OP_NEG, vp_database23_665_source.c1) ]
+--[Query Plan=      IN (cast(vp_database23_665_source.c1 > NULL, DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) OR (T_OP_NEG, vp_database23_665_source.c1) = cast(0.30629758711845567,]
+--[Query Plan=       DECIMAL_INT(66, 30))))])]
+--[Query Plan=  1 - output([T_FUN_SUM(cast('-726911741', DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1, 0)) = (T_OP_NEG, vp_database23_665_source.c1) IN (cast(vp_database23_665_source.c1 ]
+--[Query Plan=      > NULL, DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) OR (T_OP_NEG, vp_database23_665_source.c1) = cast(0.30629758711845567, DECIMAL_INT(66, 30)))],]
+--[Query Plan=       [T_FUN_COUNT(cast('-726911741', DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1, 0)) = (T_OP_NEG, vp_database23_665_source.c1) IN (cast(vp_database23_665_source.c1 ]
+--[Query Plan=      > NULL, DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) OR (T_OP_NEG, vp_database23_665_source.c1) = cast(0.30629758711845567, DECIMAL_INT(66, 30)))]), filter(nil), rowset=16]
+--[Query Plan=      access([vp_database23_665_source.c1]), partitions(p0)]
+--[Query Plan=      is_index_back=false, is_global_index=false, ]
+--[Query Plan=      range_key([vp_database23_665_source.c1], [vp_database23_665_source.vp_rowid]), range(MIN,MIN ; MAX,MAX)always true, ]
+--[Query Plan=      pushdown_aggregation([T_FUN_SUM(cast('-726911741', DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1, 0)) = (T_OP_NEG, vp_database23_665_source.c1) ]
+--[Query Plan=      IN (cast(vp_database23_665_source.c1 > NULL, DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) OR (T_OP_NEG, vp_database23_665_source.c1) = cast(0.30629758711845567,]
+--[Query Plan=       DECIMAL_INT(66, 30)))], [T_FUN_COUNT(cast('-726911741', DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1, 0)) = (T_OP_NEG, vp_database23_665_source.c1) ]
+--[Query Plan=      IN (cast(vp_database23_665_source.c1 > NULL, DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) OR (T_OP_NEG, vp_database23_665_source.c1) = cast(0.30629758711845567,]
+--[Query Plan=       DECIMAL_INT(66, 30)))])]
+--Split query plan:
+--EXPLAIN SELECT DISTINCT AVG((('-726911741') NOT IN ((363140572) IS NOT FALSE)) IN (((- (vp_database23_665_source.c1))) IN ((vp_database23_665_source.c1) > (NULL),  EXISTS (SELECT 1 from dual wHERE FALSE), 0.30629758711845567))) FROM (SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0`, l.`c1` AS `c1` FROM `vp_database23_665_l` l JOIN (SELECT `vp_rowid`, JSON_OBJECT('vp', `vp_rowid`) AS payload FROM `vp_database23_665_r`) jp ON l.`vp_rowid` = jp.`vp_rowid` JOIN `vp_database23_665_r` r ON r.`vp_rowid` = jp.`vp_rowid`) `vp_database23_665_source`;
+--[Query Plan===================================================================]
+--[Query Plan=|ID|OPERATOR           |NAME               |EST.ROWS|EST.TIME(us)|]
+--[Query Plan=------------------------------------------------------------------]
+--[Query Plan=|0 |SCALAR GROUP BY    |                   |1       |6           |]
+--[Query Plan=|1 |└─MERGE JOIN       |                   |5       |5           |]
+--[Query Plan=|2 |  ├─TABLE FULL SCAN|vp_database23_665_r|5       |3           |]
+--[Query Plan=|3 |  └─TABLE FULL SCAN|l                  |5       |3           |]
+--[Query Plan===================================================================]
+--[Query Plan=Outputs & filters:]
+--[Query Plan=-------------------------------------]
+--[Query Plan=  0 - output([cast(cast(T_FUN_SUM(cast('-726911741', DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1, 0)) = (T_OP_NEG, l.c1) IN (cast(l.c1 > NULL,]
+--[Query Plan=       DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) OR (T_OP_NEG, l.c1) = cast(0.30629758711845567, DECIMAL_INT(66, 30))), DECIMAL_INT(65, 32)) / cast(T_FUN_COUNT(cast('-726911741',]
+--[Query Plan=       DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1, 0)) = (T_OP_NEG, l.c1) IN (cast(l.c1 > NULL, DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) ]
+--[Query Plan=      OR (T_OP_NEG, l.c1) = cast(0.30629758711845567, DECIMAL_INT(66, 30))), DECIMAL_INT(20, 0)), DECIMAL(5, 4))]), filter(nil), rowset=16]
+--[Query Plan=      group(nil), agg_func([T_FUN_SUM(cast('-726911741', DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1, 0)) = (T_OP_NEG, l.c1) IN (cast(l.c1 > NULL,]
+--[Query Plan=       DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) OR (T_OP_NEG, l.c1) = cast(0.30629758711845567, DECIMAL_INT(66, 30)))], [T_FUN_COUNT(cast('-726911741',]
+--[Query Plan=       DECIMAL(1, -1)) != cast(363140572 IS NOT 0, DECIMAL(1, 0)) = (T_OP_NEG, l.c1) IN (cast(l.c1 > NULL, DECIMAL_INT(66, 30)), cast(0, DECIMAL_INT(66, 30))) ]
+--[Query Plan=      OR (T_OP_NEG, l.c1) = cast(0.30629758711845567, DECIMAL_INT(66, 30)))])]
+--[Query Plan=  1 - output([l.c1]), filter(nil), rowset=16]
+--[Query Plan=      equal_conds([l.vp_rowid = vp_database23_665_r.vp_rowid]), other_conds(nil)]
+--[Query Plan=      merge_directions([ASC])]
+--[Query Plan=  2 - output([vp_database23_665_r.vp_rowid]), filter(nil), rowset=16]
+--[Query Plan=      access([vp_database23_665_r.vp_rowid]), partitions(p0)]
+--[Query Plan=      is_index_back=false, is_global_index=false, ]
+--[Query Plan=      range_key([vp_database23_665_r.vp_rowid]), range(MIN ; MAX)always true]
+--[Query Plan=  3 - output([l.vp_rowid], [l.c1]), filter(nil), rowset=16]
+--[Query Plan=      access([l.vp_rowid], [l.c1]), partitions(p0)]
+--[Query Plan=      is_index_back=false, is_global_index=false, ]
+--[Query Plan=      range_key([l.vp_rowid]), range(MIN ; MAX)always true]
+--Single result sample: S:6:0.6667; x1
+--Split result sample: S:1:1; x1
+--Only in single: S:6:0.6667; x1
+--Only in split: S:1:1; x1
+--
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.comparePair(OceanBaseVerticalPartitioningOracle.java:1420)
+--	at sqlancer.oceanbase.oracle.OceanBaseVerticalPartitioningOracle.check(OceanBaseVerticalPartitioningOracle.java:292)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:468)
+--	at sqlancer.Main$2.run(Main.java:685)
+--	at sqlancer.Main$2.runThread(Main.java:667)
+--	at sqlancer.Main$2.run(Main.java:658)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/07/03 09:02:54
+-- Database: database23
+-- Database version: 5.7.25
+-- seed value: 1783046831200
+DROP DATABASE IF EXISTS database23;
+CREATE DATABASE database23;
+USE database23;
+CREATE TABLE t0(c0 FLOAT ZEROFILL  COMMENT 'asdf'   UNIQUE , c1 FLOAT   UNIQUE, c2 DOUBLE ZEROFILL  UNIQUE KEY , c3 FLOAT(24, 24) UNSIGNED ZEROFILL )  PARTITION BY HASH(c1) partitions 8;
+CREATE TABLE t0(c0 VARCHAR(500)  COMMENT 'asdf'  , c1 SMALLINT )  PARTITION BY KEY (c0, c1);
+OPTIMIZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+REPLACE INTO `t0`(`c0`, `c1`) VALUES ('', 1924569080);
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0`;
+UPDATE `t0` SET `c0`='', `c1`=952221737 WHERE (+ (t0.c0));
+ANALYZE TABLE `t0`;
+REPLACE INTO `t0`(`c0`, `c1`) VALUES ("", -1278584991);
+CHECKSUM TABLE `t0`;
+CHECKSUM TABLE `t0`;
+REPLACE INTO `t0`(`c0`, `c1`) VALUES ("-1278584991", 1924569080);
+ANALYZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0`;
+CREATE INDEX i0 ON `t0`(`c1`);
+REPAIR TABLE `t0`;
+DROP INDEX i0 ON `t0`;
+OPTIMIZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+CHECKSUM TABLE `t0`;
+CREATE INDEX i0 ON `t0`(`c1`);
+UPDATE `t0` SET `c0`=9.52221737E8;
+ANALYZE TABLE `t0`;
+CREATE TABLE t1(c0 VARCHAR(500) , c1 VARCHAR(500)  NULL)  PARTITION BY HASH(c0) partitions 17;
+CREATE TABLE IF NOT EXISTS t1(c0 FLOAT(17, 17) ZEROFILL , c1 FLOAT )  PARTITION BY HASH(c0) partitions 13;
+CREATE TABLE IF NOT EXISTS t1(c0 VARCHAR(500)  COMMENT 'asdf'  , c1 DECIMAL(14, 14) UNSIGNED  NULL  COMMENT 'asdf' , c2 FLOAT(51, 8) ZEROFILL  , c3 DECIMAL ZEROFILL   COMMENT 'asdf'  )  PARTITION BY HASH(c1) partitions 16;
+CREATE TABLE t1(c0 VARCHAR(500)  COMMENT 'asdf' )  PARTITION BY HASH(c0) partitions 10;
+CREATE TABLE IF NOT EXISTS t1(c0 DOUBLE ZEROFILL  UNIQUE COMMENT 'asdf'   , c1 VARCHAR(500) )  PARTITION BY KEY (c1, c0);
+CREATE TABLE t1(c0 FLOAT UNSIGNED ZEROFILL  COMMENT 'asdf'  PRIMARY KEY, c1 VARCHAR(500)  NULL COMMENT 'asdf' )  PARTITION BY HASH(c1) partitions 19;
+CREATE TABLE IF NOT EXISTS t1(c0 INT(17) ZEROFILL  NULL  COMMENT 'asdf' , c1 DECIMAL(34, 13) UNSIGNED  UNIQUE NULL , c2 DOUBLE(6, 2)  , c3 VARCHAR(500)  NULL COMMENT 'asdf' )  PARTITION BY HASH(c2) partitions 6;
+CREATE TABLE IF NOT EXISTS t1(c0 FLOAT(22, 22) ZEROFILL  UNIQUE KEY, c1 FLOAT(10, 10) UNSIGNED )  PARTITION BY HASH(c0) partitions 15;
+CREATE TABLE t1(c0 MEDIUMINT(156) ZEROFILL  UNIQUE KEY NULL COMMENT 'asdf'  , c1 VARCHAR(500)  NULL, c2 SMALLINT ZEROFILL , c3 VARCHAR(500) )  PARTITION BY HASH(c0) partitions 17;
+CHECKSUM TABLE `t1` QUICK;
+REPLACE INTO `t1`(`c1`) VALUES ('-1278584991');
+OPTIMIZE TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED;
+DROP INDEX c0 ON `t1`;
+OPTIMIZE TABLE `t1`;
+INSERT INTO `t1`(`c3`) VALUES ("");
+INSERT INTO `t1`(`c3`, `c1`) VALUES (']yktt\r', '');
+OPTIMIZE TABLE `t1`;
+INSERT INTO `t1`(`c3`) VALUES ('bq');
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+REPAIR TABLE `t1`;
+CREATE INDEX i69 ON `t1`(`c0`, `c2` ASC);
+ANALYZE TABLE `t1`;
+UPDATE `t1` SET `c2`=(((! ('xl韸#'))) && ((-1665913349) IN (-1436820583))) IN (CAST((-994149684) != (NULL) AS SIGNED)), `c1`="u'-ⷻ] 1()h#" WHERE (+ (BIT_COUNT(concat(t1.c0,''))));
+DROP INDEX i69 ON `t1`;
+CREATE INDEX i1 ON `t1`(`c2` DESC);
+DROP INDEX i1 ON `t1`;
+CHECKSUM TABLE `t1` QUICK;
+CHECKSUM TABLE `t1` EXTENDED;
+OPTIMIZE TABLE `t1`;
+CREATE INDEX i1 ON `t1`(`c2` ASC);
+UPDATE `t1` SET `c0`=( EXISTS (SELECT 1)) XOR (t1.c1), `c3`=(+ ((("") XOR (t1.c3)) >= ((t1.c1) <= (t1.c3)))), `c2`=-1436820583;
+CREATE INDEX i2 ON `t1`(`c0`, `c2` ASC);
+OPTIMIZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+REPLACE INTO `t1`(`c1`) VALUES ("");
+CHECKSUM TABLE `t1`;
+REPLACE INTO `t1`(`c3`) VALUES ('hQ>zS-}');
+REPAIR TABLE `t1` QUICK EXTENDED USE_FRM;
+ANALYZE TABLE `t1`;
+DROP INDEX i1 ON `t1`;
+CREATE INDEX i5 ON `t1`(`c2`);
+ANALYZE TABLE `t1`;
+CREATE INDEX i1 ON `t1`(`c2` DESC, `c0`);
+ANALYZE TABLE `t1`;
+CREATE INDEX i67 USING HASH ON t1(c1, c0, c2) PARTITION BY KEY (c1) partitions 11;
+CREATE INDEX i3 ON t1(c0, c3, c1, c2) PARTITION BY KEY (c3) partitions 17;
+CREATE TABLE IF NOT EXISTS t2(c0 VARCHAR(500)  COMMENT 'asdf'  , c1 INT  UNIQUE, c2 BIGINT ZEROFILL    UNIQUE COMMENT 'asdf' , c3 FLOAT UNSIGNED ZEROFILL   UNIQUE KEY  COMMENT 'asdf' , c4 TINYINT(236)  UNIQUE COMMENT 'asdf'  PRIMARY KEY, c5 FLOAT(8, 8) ZEROFILL )  PARTITION BY KEY (c2, c0, c4, c1);
+CREATE TABLE t2(c0 DECIMAL UNSIGNED  COMMENT 'asdf'  )  PARTITION BY HASH(c0) partitions 3;
+CREATE TABLE IF NOT EXISTS t2(c0 DOUBLE UNSIGNED   UNIQUE KEY)  PARTITION BY KEY (c0);
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c0`=CAST(((0.12905435329625015) IS UNKNOWN) IS NOT TRUE AS SIGNED) WHERE IFNULL((t2.c0) > (t2.c0), (t2.c0) OR (-1756035176));
+CHECKSUM TABLE `t2`;
+UPDATE `t2` SET `c0`=t2.c0;
+INSERT INTO `t2`(`c0`) VALUES (0.8114352176746223);
+ANALYZE TABLE `t2`;
+CREATE INDEX i4 ON `t2`(`c0` ASC);
+DROP INDEX i4 ON `t2`;
+CREATE INDEX i4 ON `t2`(`c0` ASC);
+REPAIR TABLE `t2` QUICK EXTENDED;
+OPTIMIZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c0`=CAST("" AS SIGNED);
+CREATE INDEX i46 ON `t2`(`c0` ASC);
+ANALYZE TABLE `t2`;
+CREATE INDEX i6 ON `t2`(`c0`);
+OPTIMIZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+CHECKSUM TABLE `t2`;
+UPDATE `t2` SET `c0`=0.3014586210971024;
+OPTIMIZE TABLE `t2`;
+DROP INDEX c0 ON `t2`;
+REPAIR TABLE `t2` QUICK;
+ANALYZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+UPDATE `t2` SET `c0`=LEAST(t2.c0, "-922390323");
+OPTIMIZE TABLE `t2`;
+REPAIR TABLE `t2` USE_FRM;
+INSERT INTO `t2`(`c0`) VALUES (-1.416407641E9);
+CHECKSUM TABLE `t2` QUICK;
+ANALYZE TABLE `t2`;
+REPLACE INTO `t2`(`c0`) VALUES (0.7668318636312822);
+DROP INDEX i46 ON `t2`;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE t0(c0 DECIMAL(29, 3) UNSIGNED  COMMENT 'asdf' )  PARTITION BY HASH(c0) partitions 3;
+CREATE TABLE IF NOT EXISTS t0(c0 FLOAT(4, 4) ZEROFILL  NULL COMMENT 'asdf' )  PARTITION BY HASH(c0) partitions 3;
+CREATE TABLE t0(c0 FLOAT(49, 17) ZEROFILL  UNIQUE, c1 FLOAT  UNIQUE KEY COMMENT 'asdf'  )  PARTITION BY KEY (c1);
+CREATE TABLE t0(c0 VARCHAR(500)  NULL, c1 TINYINT  COMMENT 'asdf'  UNIQUE NULL)  PARTITION BY HASH(c1) partitions 3;
+CHECKSUM TABLE `t0`;
+DROP INDEX c1 ON `t0`;
+REPAIR TABLE `t0` QUICK EXTENDED;
+ANALYZE TABLE `t0`;
+CREATE INDEX i0 ON `t0`(`c1` DESC);
+UPDATE `t0` SET `c0`= EXISTS (SELECT 1) WHERE ((CAST(t0.c1 AS SIGNED)) > (281806500)) NOT IN (((t0.c0) < (0.9511232407612389)) IS FALSE);
+OPTIMIZE TABLE `t0`;
+INSERT INTO `t0`(`c1`, `c0`) VALUES (-775129534, '');
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+REPLACE INTO `t0`(`c1`, `c0`) VALUES (-30800189, '|9n|F');
+REPAIR TABLE `t0` USE_FRM;
+REPAIR TABLE `t0` QUICK EXTENDED USE_FRM;
+ANALYZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+REPAIR TABLE `t0` QUICK USE_FRM;
+CHECKSUM TABLE `t0` QUICK;
+UPDATE `t0` SET `c1`=CAST(NULL AS SIGNED), `c0`='0.1130281782992586';
+UPDATE `t0` SET `c1`=1791355534;
+OPTIMIZE TABLE `t0`;
+CREATE INDEX i7 ON `t0`(`c1`);
+CREATE INDEX i84 ON `t0`(`c1` DESC);
+ANALYZE TABLE `t0`;
+CREATE INDEX i8 ON `t0`(`c1`);
+UPDATE `t0` SET `c1`=t0.c1, `c0`='!J';
+OPTIMIZE TABLE `t0`;
+UPDATE `t0` SET `c1`=t0.c1, `c0`="鑷CHo" WHERE ( EXISTS (SELECT 1 from dual wHERE FALSE)) NOT IN ((GREATEST(0.05936618537464167, 0.5506479081242485, t0.c1, t0.c0)) XOR ((- (t0.c0))),  EXISTS (SELECT 1 from dual wHERE FALSE), IFNULL(t0.c1, t0.c1));
+INSERT INTO `t0`(`c1`, `c0`) VALUES (-1278584991, 'Nu䔿)pSV');
+UPDATE `t0` SET `c0`='' WHERE LEAST((t0.c0) <= (t0.c1), CAST(1160370701 AS SIGNED));
+CHECKSUM TABLE `t0`;
+DROP TABLE IF EXISTS `t2`;
+CREATE TABLE t2(c0 DECIMAL UNSIGNED ZEROFILL   COMMENT 'asdf' , c1 DECIMAL(34, 2) ZEROFILL  UNIQUE KEY COMMENT 'asdf'   , c2 VARCHAR(500)  COMMENT 'asdf'  , c3 DECIMAL(36, 3) UNSIGNED ZEROFILL  NULL UNIQUE )  PARTITION BY KEY (c2, c0, c3, c1);
+CREATE TABLE t2(c0 DOUBLE UNSIGNED ZEROFILL  UNIQUE KEY)  PARTITION BY KEY (c0);
+OPTIMIZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+REPAIR TABLE `t2` QUICK USE_FRM;
+REPAIR TABLE `t2`;
+CREATE INDEX i4 ON `t2`(`c0`);
+CHECKSUM TABLE `t2`;
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+CREATE INDEX i6 ON `t2`(`c0` ASC);
+CREATE INDEX i9 ON `t2`(`c0` DESC);
+DROP INDEX i4 ON `t2`;
+CHECKSUM TABLE `t2` EXTENDED;
+UPDATE `t2` SET `c0`=CAST(((concat(t2.c0,'')) && (221429447)) IN ((- (concat(t2.c0,''))), (NULL) = (concat(t2.c0,''))) AS SIGNED);
+DROP INDEX i6 ON `t2`;
+REPAIR TABLE `t2` QUICK;
+OPTIMIZE TABLE `t2`;
+REPAIR TABLE `t2` EXTENDED;
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c0`=((("1773756616") IS NOT TRUE) IS NOT FALSE) != ( EXISTS (SELECT 1 from dual wHERE FALSE)) WHERE (GREATEST(concat(t2.c0,''), concat(t2.c0,''))) < (NULL);
+REPAIR TABLE `t2` EXTENDED USE_FRM;
+OPTIMIZE TABLE `t2`;
+DROP INDEX i9 ON `t2`;
+REPAIR TABLE `t2` USE_FRM;
+OPTIMIZE TABLE `t2`;
+CHECKSUM TABLE `t2` QUICK;
+OPTIMIZE TABLE `t2`;
+CREATE INDEX i4 ON `t2`(`c0` ASC);
+DROP INDEX c0 ON `t2`;
+UPDATE `t2` SET `c0`=(- (LEAST(concat(t2.c0,''), concat(t2.c0,''), concat(t2.c0,''), concat(t2.c0,''), -7.26911741E8, concat(t2.c0,'')))) WHERE CAST(0.8452127160835906 AS SIGNED);
+CREATE INDEX i6 ON `t2`(`c0` ASC);
+REPAIR TABLE `t2` QUICK EXTENDED USE_FRM;
+CREATE INDEX i9 ON `t2`(`c0` DESC);
+CREATE INDEX i10 ON `t2`(`c0`);
+OPTIMIZE TABLE `t2`;
+CREATE INDEX i11 ON `t2`(`c0`);
+REPAIR TABLE `t2` QUICK USE_FRM;
+UPDATE `t2` SET `c0`= EXISTS (SELECT 1) WHERE ((+ (IF(concat(t2.c0,''), NULL, 1252073592)))) XOR (((concat(t2.c0,'')) < (NULL)) != (CAST(1578619189 AS SIGNED)));
+DROP INDEX i9 ON `t2`;
+DROP TABLE IF EXISTS `t1`;
+CREATE TABLE t1(c0 MEDIUMINT   COMMENT 'asdf'  UNIQUE )  PARTITION BY KEY (c0);
+UPDATE `t1` SET `c0`=465109743 WHERE 1463071967;
+CREATE INDEX i1 ON `t1`(`c0` DESC);
+DROP INDEX c0 ON `t1`;
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+CHECKSUM TABLE `t1`;
+ANALYZE TABLE `t1`;
+CHECKSUM TABLE `t1` EXTENDED;
+ANALYZE TABLE `t1`;
+REPAIR TABLE `t1` USE_FRM;
+OPTIMIZE TABLE `t1`;
+INSERT INTO `t1`(`c0`) VALUES (-354556829);
+DROP INDEX i1 ON `t1`;
+OPTIMIZE TABLE `t1`;
+CREATE INDEX i1 ON `t1`(`c0` DESC);
+UPDATE `t1` SET `c0`=CAST(((t1.c0) NOT IN ("Nrn/*9,w")) && ((- (''))) AS SIGNED);
+ANALYZE TABLE `t1`;
+OPTIMIZE TABLE `t1`;
+DROP INDEX i1 ON `t1`;
+REPLACE INTO `t1`(`c0`) VALUES (1605236670);
+CREATE INDEX i1 ON `t1`(`c0`);
+CREATE INDEX i2 ON `t1`(`c0`);
+CHECKSUM TABLE `t1`;
+CHECKSUM TABLE `t1` QUICK;
+UPDATE `t1` SET `c0`="],";
+REPAIR TABLE `t1` QUICK EXTENDED USE_FRM;
+CHECKSUM TABLE `t1` EXTENDED;
+UPDATE `t1` SET `c0`=(LEAST(t1.c0, t1.c0, "I鉴sTd H", t1.c0, t1.c0, 0.15661138471391722)) >= ((LEAST(0.39730594156446164, 0.7722150869996952, t1.c0, t1.c0)) >= ((0.058654231226025866) IN (-1278584991, t1.c0))) WHERE LEAST(('paWXn㿤') IS FALSE, "s￫5yh");
+UPDATE `t1` SET `c0`=-1489392214;
+CHECKSUM TABLE `t1` EXTENDED;
+REPLACE INTO `t1`(`c0`) VALUES (-392982589);
+REPLACE INTO `t1`(`c0`) VALUES (2076355359);
+DROP TABLE IF EXISTS `t2`;
+CREATE TABLE t2(c0 BIGINT   NULL COMMENT 'asdf' , c1 FLOAT  COMMENT 'asdf' )  PARTITION BY HASH(c1) partitions 12;
+CREATE TABLE t2(c0 MEDIUMINT(141)  UNIQUE)  PARTITION BY KEY (c0);
+REPAIR TABLE `t2` QUICK;
+REPAIR TABLE `t2` EXTENDED USE_FRM;
+INSERT INTO `t2`(`c0`) VALUES (-184750080);
+CREATE INDEX i3 ON `t2`(`c0`);
+DROP INDEX i3 ON `t2`;
+OPTIMIZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+UPDATE `t2` SET `c0`=1214946051 WHERE t2.c0;
+REPAIR TABLE `t2` EXTENDED USE_FRM;
+REPAIR TABLE `t2` USE_FRM;
+OPTIMIZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+UPDATE `t2` SET `c0`=1849680630;
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c0`=-582024974;
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+INSERT INTO `t2`(`c0`) VALUES (1628882516);
+DROP INDEX c0 ON `t2`;
+REPAIR TABLE `t2` EXTENDED USE_FRM;
+CREATE INDEX i3 ON `t2`(`c0` ASC);
+UPDATE `t2` SET `c0`=0.09144529795221223 WHERE NULL;
+CREATE INDEX i4 ON `t2`(`c0` DESC);
+CREATE INDEX i97 ON `t2`(`c0` DESC);
+UPDATE `t2` SET `c0`=133864715;
+ANALYZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+CREATE INDEX i5 ON `t2`(`c0`);
+DROP INDEX i4 ON `t2`;
+CHECKSUM TABLE `t2`;
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+CREATE INDEX i4 ON `t2`(`c0`);
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE t0(c0 VARCHAR(500)  NULL COMMENT 'asdf' , c1 FLOAT(9, 9)  UNIQUE)  PARTITION BY HASH(c0) partitions 3;
+CREATE TABLE IF NOT EXISTS t0(c0 DOUBLE(2, 2) UNSIGNED  UNIQUE KEY COMMENT 'asdf'  )  PARTITION BY HASH(c0) partitions 9;
+CREATE TABLE IF NOT EXISTS t0(c0 INT ZEROFILL )  PARTITION BY HASH(c0) partitions 16;
+CREATE INDEX i0 ON `t0`(`c0` DESC);
+OPTIMIZE TABLE `t0`;
+INSERT INTO `t0`(`c0`) VALUES (-1744182155);
+REPAIR TABLE `t0` QUICK EXTENDED USE_FRM;
+CREATE INDEX i6 ON `t0`(`c0` DESC);
+OPTIMIZE TABLE `t0`;
+REPLACE INTO `t0`(`c0`) VALUES (1399217350);
+CHECKSUM TABLE `t0` EXTENDED;
+REPAIR TABLE `t0` EXTENDED;
+CREATE INDEX i7 ON `t0`(`c0` DESC);
+INSERT INTO `t0`(`c0`) VALUES (216676740);
+CHECKSUM TABLE `t0` QUICK;
+OPTIMIZE TABLE `t0`;
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+OPTIMIZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+CREATE INDEX i8 ON `t0`(`c0`);
+CREATE INDEX i9 ON `t0`(`c0` ASC);
+REPAIR TABLE `t0` QUICK EXTENDED;
+REPAIR TABLE `t0`;
+DROP INDEX i6 ON `t0`;
+REPAIR TABLE `t0` QUICK EXTENDED;
+CHECKSUM TABLE `t0` EXTENDED;
+OPTIMIZE TABLE `t0`;
+UPDATE `t0` SET `c0`=((328555817) > ( EXISTS (SELECT 1 from dual wHERE FALSE))) IS UNKNOWN WHERE (concat(t0.c0,'')) OR ( EXISTS (SELECT 1 from dual wHERE FALSE));
+CREATE INDEX i6 ON `t0`(`c0`);
+DROP INDEX i7 ON `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+OPTIMIZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+REPLACE INTO `t0`(`c0`) VALUES (937623791);
+REPAIR TABLE `t0` EXTENDED;
+DROP TABLE IF EXISTS `t2`;
+CREATE TABLE IF NOT EXISTS t2(c0 FLOAT  , c1 DECIMAL(43, 15) UNSIGNED  COMMENT 'asdf' )  PARTITION BY KEY (c1);
+REPAIR TABLE `t2` QUICK USE_FRM;
+CREATE INDEX i3 ON `t2`(`c1`, `c0`);
+REPLACE INTO `t2`(`c1`, `c0`) VALUES (0.9819815231489593, 0.5732630090852004);
+REPAIR TABLE `t2` QUICK EXTENDED;
+CHECKSUM TABLE `t2` QUICK;
+ANALYZE TABLE `t2`;
+REPAIR TABLE `t2` USE_FRM;
+INSERT INTO `t2`(`c0`) VALUES (0.10302369022121727);
+INSERT INTO `t2`(`c1`) VALUES (0.38706453827891474);
+CREATE INDEX i16 ON `t2`(`c1`);
+CREATE INDEX i4 ON `t2`(`c1` DESC, `c0`);
+REPAIR TABLE `t2` EXTENDED;
+INSERT INTO `t2`(`c0`) VALUES (0.3341354614863308);
+UPDATE `t2` SET `c0`=CAST(((NULL) OR (t2.c1)) XOR ((! (concat(t2.c0,'')))) AS SIGNED), `c1`=0.37289642195887995 WHERE (0.7787587614410431) = ((("") XOR (concat(t2.c0,''))) IN (NULL));
+ANALYZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+CREATE INDEX i5 ON `t2`(`c1`);
+REPAIR TABLE `t2` EXTENDED USE_FRM;
+REPAIR TABLE `t2` EXTENDED;
+CREATE INDEX i7 ON `t2`(`c1` DESC, `c0`);
+REPAIR TABLE `t2` EXTENDED USE_FRM;
+UPDATE `t2` SET `c1`=0.7787587614410431 WHERE (IFNULL(NULL, t2.c1)) IS NOT UNKNOWN;
+INSERT INTO `t2`(`c0`) VALUES (0.9650169709632461);
+CREATE INDEX i70 ON `t2`(`c1` ASC, `c0`);
+UPDATE `t2` SET `c0`=0.9900943268766254;
+DROP INDEX i4 ON `t2`;
+OPTIMIZE TABLE `t2`;
+REPAIR TABLE `t2`;
+INSERT INTO `t2`(`c0`, `c1`) VALUES (0.811858424153589, 0.3376044755758709);
+ANALYZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+REPAIR TABLE `t2` EXTENDED;
+REPLACE INTO `t2`(`c1`) VALUES (0.008010632798482242);
+INSERT INTO `t2`(`c1`, `c0`) VALUES (0.6079625772833573, 0.6338211754969806);
+CHECKSUM TABLE `t2` QUICK;
+DROP TABLE IF EXISTS `t1`;
+CREATE TABLE t1(c0 DECIMAL(17, 8) UNSIGNED ZEROFILL   COMMENT 'asdf' , c1 BIGINT(99)  UNIQUE)  PARTITION BY HASH(c1) partitions 10;
+CREATE INDEX i1 ON `t1`(`c0` ASC, `c1`);
+OPTIMIZE TABLE `t1`;
+REPLACE INTO `t1`(`c1`) VALUES (-368848726);
+OPTIMIZE TABLE `t1`;
+CHECKSUM TABLE `t1`;
+INSERT INTO `t1`(`c1`, `c0`) VALUES (901096655, 0.22760320193298567);
+REPAIR TABLE `t1`;
+ANALYZE TABLE `t1`;
+DROP INDEX i1 ON `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED;
+CREATE INDEX i1 ON `t1`(`c0`, `c1` ASC);
+CREATE INDEX i2 ON `t1`(`c0` DESC, `c1`);
+REPLACE INTO `t1`(`c0`, `c1`) VALUES (9.52387026E8, -2096393612);
+CREATE INDEX i71 ON `t1`(`c1`, `c0`);
+ANALYZE TABLE `t1`;
+CREATE INDEX i4 ON `t1`(`c0`);
+CHECKSUM TABLE `t1` EXTENDED;
+DROP INDEX i71 ON `t1`;
+DROP INDEX c1 ON `t1`;
+DROP INDEX i1 ON `t1`;
+REPLACE INTO `t1`(`c0`) VALUES (0.37826722755247033);
+REPAIR TABLE `t1` QUICK;
+REPLACE INTO `t1`(`c1`) VALUES (1748112482);
+UPDATE `t1` SET `c1`=(NOT ((t1.c1) <= (concat(t1.c0,'')))), `c0`=0.19089785827849448;
+OPTIMIZE TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED USE_FRM;
+UPDATE `t1` SET `c1`=(+ (CAST(-339636418 AS SIGNED)));
+DROP INDEX i2 ON `t1`;
+REPLACE INTO `t1`(`c0`, `c1`) VALUES (-7.88914696E8, 952387026);
+REPAIR TABLE `t1` QUICK EXTENDED;
+OPTIMIZE TABLE `t1`;
+REPAIR TABLE `t1` USE_FRM;
+CHECKSUM TABLE `t1` EXTENDED;
+ANALYZE TABLE `t1`;
+REPLACE INTO `t1`(`c0`) VALUES (0.7389568351892335);
+DROP INDEX i4 ON `t1`;
+DROP TABLE IF EXISTS `t2`;
+CREATE TABLE IF NOT EXISTS t2(c0 FLOAT(33, 16) UNSIGNED , c1 VARCHAR(500)  COMMENT 'asdf' )  PARTITION BY KEY (c1);
+CREATE INDEX i1 ON `t2`(`c0`);
+INSERT INTO `t2`(`c1`, `c0`) VALUES ("9Ugu", 2.99823993E8);
+CREATE INDEX i2 ON `t2`(`c0` ASC);
+DROP INDEX i1 ON `t2`;
+UPDATE `t2` SET `c0`=0.5453573014179178, `c1`= EXISTS (SELECT 1 from dual wHERE FALSE) WHERE (IFNULL(NULL, concat(t2.c0,''))) >= (CAST((NULL) OR (-1.388921171E9) AS SIGNED));
+UPDATE `t2` SET `c1`='Erbﰛ6}㍻6', `c0`=0.6203302507469891 WHERE (NOT (CAST( EXISTS (SELECT 1) AS SIGNED)));
+OPTIMIZE TABLE `t2`;
+CREATE INDEX i1 ON `t2`(`c0`);
+CHECKSUM TABLE `t2` QUICK;
+UPDATE `t2` SET `c0`=0.8986424240460218, `c1`="" WHERE (t2.c1) XOR (((t2.c1) IS NOT FALSE) XOR (concat(t2.c0,'')));
+INSERT INTO `t2`(`c0`, `c1`) VALUES (-7.85424953E8, "왈5");
+CREATE INDEX i3 ON `t2`(`c0` ASC);
+INSERT INTO `t2`(`c1`) VALUES ('');
+REPLACE INTO `t2`(`c1`, `c0`) VALUES ("4蔬", 0.9530585369638298);
+OPTIMIZE TABLE `t2`;
+UPDATE `t2` SET `c0`=(NOT ( EXISTS (SELECT 1 from dual wHERE FALSE)));
+REPLACE INTO `t2`(`c1`) VALUES ('');
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c0`=0.305300332994913, `c1`="";
+DROP INDEX i2 ON `t2`;
+CREATE INDEX i2 ON `t2`(`c0`);
+REPAIR TABLE `t2` EXTENDED USE_FRM;
+REPAIR TABLE `t2` EXTENDED USE_FRM;
+INSERT INTO `t2`(`c0`) VALUES (0.6646940364746605);
+CHECKSUM TABLE `t2` EXTENDED;
+DROP INDEX i3 ON `t2`;
+ANALYZE TABLE `t2`;
+REPAIR TABLE `t2` QUICK EXTENDED;
+DROP INDEX i1 ON `t2`;
+CREATE INDEX i1 ON `t2`(`c0` ASC);
+DROP INDEX i1 ON `t2`;
+CREATE INDEX i1 ON `t2`(`c0`);
+CHECKSUM TABLE `t2` EXTENDED;
+OPTIMIZE TABLE `t2`;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE IF NOT EXISTS t0(c0 FLOAT(13, 13) ZEROFILL  PRIMARY KEY NOT NULL UNIQUE KEY COMMENT 'asdf' )  PARTITION BY KEY (c0);
+ANALYZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+REPAIR TABLE `t0` EXTENDED;
+CHECKSUM TABLE `t0` EXTENDED;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0` QUICK;
+OPTIMIZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+DROP INDEX c0 ON `t0`;
+REPLACE INTO `t0`(`c0`) VALUES (0.9387977818015522);
+ANALYZE TABLE `t0`;
+CREATE INDEX i97 ON `t0`(`c0` DESC);
+ANALYZE TABLE `t0`;
+INSERT INTO `t0`(`c0`) VALUES (0.9752658527109069);
+OPTIMIZE TABLE `t0`;
+INSERT INTO `t0`(`c0`) VALUES (0.4863691816027761);
+OPTIMIZE TABLE `t0`;
+DROP INDEX i97 ON `t0`;
+REPAIR TABLE `t0` QUICK;
+REPLACE INTO `t0`(`c0`) VALUES (0.40095212283410486);
+ANALYZE TABLE `t0`;
+UPDATE `t0` SET `c0`=(((concat(t0.c0,'')) IS NOT NULL) < (IFNULL(concat(t0.c0,''), 0.7758044806117731))) NOT IN (((concat(t0.c0,'')) IN (concat(t0.c0,''))) OR (CAST(0.4980758508769203 AS SIGNED)));
+REPAIR TABLE `t0` QUICK EXTENDED USE_FRM;
+INSERT INTO `t0`(`c0`) VALUES (-7.43400002E8);
+ANALYZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+REPAIR TABLE `t0` QUICK USE_FRM;
+CHECKSUM TABLE `t0` QUICK;
+CREATE INDEX i0 ON `t0`(`c0` ASC);
+UPDATE `t0` SET `c0`=0.6518515763228148 WHERE -141570999;
+CHECKSUM TABLE `t0` EXTENDED;
+OPTIMIZE TABLE `t0`;
+DROP INDEX i0 ON `t0`;
+REPLACE INTO `t0`(`c0`) VALUES (0.11856436223984868);
+CHECKSUM TABLE `t0`;
+CHECKSUM TABLE `t0`;
+CHECKSUM TABLE `t0` QUICK;
+UPDATE `t0` SET `c0`=( EXISTS (SELECT 1 from dual wHERE FALSE)) <= (( EXISTS (SELECT 1 from dual wHERE FALSE)) NOT IN (concat(t0.c0,'')));
+DROP TABLE IF EXISTS `t2`;
+CREATE TABLE IF NOT EXISTS t2(c0 FLOAT UNSIGNED , c1 MEDIUMINT(164) ZEROFILL  UNIQUE  COMMENT 'asdf'  )  PARTITION BY HASH(c1) partitions 12;
+REPAIR TABLE `t2` EXTENDED;
+REPAIR TABLE `t2` QUICK EXTENDED USE_FRM;
+ANALYZE TABLE `t2`;
+DROP INDEX c1 ON `t2`;
+CREATE INDEX i0 ON `t2`(`c0` DESC);
+INSERT INTO `t2`(`c1`, `c0`) VALUES (-2027205920, 0.3027831877331806);
+ANALYZE TABLE `t2`;
+REPAIR TABLE `t2` EXTENDED USE_FRM;
+INSERT INTO `t2`(`c1`, `c0`) VALUES (-1346005471, 1.951834107E9);
+DROP INDEX i0 ON `t2`;
+CREATE INDEX i0 ON `t2`(`c0`, `c1` DESC);
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+ANALYZE TABLE `t2`;
+CHECKSUM TABLE `t2`;
+ANALYZE TABLE `t2`;
+UPDATE `t2` SET `c1`=-465743043 WHERE ((- (CAST(1189651445 AS SIGNED)))) IS TRUE;
+ANALYZE TABLE `t2`;
+CREATE INDEX i1 ON `t2`(`c0` DESC);
+CHECKSUM TABLE `t2`;
+INSERT INTO `t2`(`c0`, `c1`) VALUES (0.1130281782992586, 493346986);
+REPLACE INTO `t2`(`c0`) VALUES (0.07707274363901484);
+CREATE INDEX i2 ON `t2`(`c0`);
+UPDATE `t2` SET `c0`=CAST((NOT ((! (NULL)))) AS SIGNED), `c1`=221429447;
+CHECKSUM TABLE `t2`;
+CREATE INDEX i3 ON `t2`(`c1`, `c0` ASC);
+ANALYZE TABLE `t2`;
+CHECKSUM TABLE `t2` EXTENDED;
+INSERT INTO `t2`(`c0`) VALUES (1.345439304E9);
+CREATE INDEX i4 ON `t2`(`c1` DESC);
+CHECKSUM TABLE `t2`;
+DROP INDEX i1 ON `t2`;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE t0(c0 DECIMAL UNSIGNED  COMMENT 'asdf' )  PARTITION BY HASH(c0) partitions 3;
+CREATE TABLE t0(c0 VARCHAR(500)  )  PARTITION BY HASH(c0) partitions 18;
+CREATE TABLE t0(c0 DECIMAL UNSIGNED  UNIQUE COMMENT 'asdf' , c1 BIGINT  PRIMARY KEY UNIQUE KEY NOT NULL)  PARTITION BY KEY (c1);
+CREATE TABLE IF NOT EXISTS t0(c0 FLOAT UNSIGNED , c1 FLOAT  NULL  COMMENT 'asdf'  UNIQUE KEY)  PARTITION BY HASH(c1) partitions 19;
+CREATE TABLE t0(c0 DECIMAL(31, 13) UNSIGNED ZEROFILL , c1 DECIMAL UNSIGNED ZEROFILL  NULL UNIQUE KEY COMMENT 'asdf' )  PARTITION BY KEY (c1);
+REPLACE INTO `t0`(`c1`) VALUES (1.92456908E9);
+OPTIMIZE TABLE `t0`;
+REPAIR TABLE `t0` QUICK EXTENDED USE_FRM;
+REPAIR TABLE `t0` EXTENDED USE_FRM;
+UPDATE `t0` SET `c1`=(CAST((0.9901195802476079) > (concat(t0.c0,'')) AS SIGNED)) > (CAST(('1e500') IS NULL AS SIGNED)) WHERE CAST((COALESCE(concat(t0.c0,''), -452948727, 1760055977, "0.29250278739375857")) != (('0.9533215185691325') IS FALSE) AS SIGNED);
+OPTIMIZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+INSERT INTO `t0`(`c0`, `c1`) VALUES (0.7108584509362743, 0.9861100438197434);
+UPDATE `t0` SET `c0`=CAST( EXISTS (SELECT 1) AS SIGNED) WHERE ((CAST(-9.61850071E8 AS SIGNED)) XOR ( EXISTS (SELECT 1 from dual wHERE FALSE))) NOT IN (((concat(t0.c0,'')) XOR (NULL)) XOR ( EXISTS (SELECT 1 from dual wHERE FALSE)));
+CHECKSUM TABLE `t0`;
+CHECKSUM TABLE `t0` QUICK;
+DROP INDEX c1 ON `t0`;
+OPTIMIZE TABLE `t0`;
+CHECKSUM TABLE `t0`;
+UPDATE `t0` SET `c1`=LEAST(COALESCE(NULL, concat(t0.c0,'')), "m|'"), `c0`=0.36766205080598324 WHERE (((concat(t0.c1,'')) IS TRUE) > (IF(concat(t0.c0,''), -1846378329, concat(t0.c0,'')))) || (CAST("(pnt21s<" AS SIGNED));
+REPAIR TABLE `t0`;
+INSERT INTO `t0`(`c1`, `c0`) VALUES (0.47168584288470716, 0.2226402813893803);
+OPTIMIZE TABLE `t0`;
+OPTIMIZE TABLE `t0`;
+CREATE INDEX i1 ON `t0`(`c0`, `c1` ASC);
+CHECKSUM TABLE `t0` EXTENDED;
+ANALYZE TABLE `t0`;
+CHECKSUM TABLE `t0`;
+CREATE INDEX i5 ON `t0`(`c0`);
+CHECKSUM TABLE `t0`;
+CREATE INDEX i6 ON `t0`(`c1` DESC, `c0` ASC);
+DROP INDEX i1 ON `t0`;
+CREATE INDEX i1 ON `t0`(`c1`);
+ANALYZE TABLE `t0`;
+REPLACE INTO `t0`(`c0`) VALUES (0.7469617135567692);
+REPAIR TABLE `t0` USE_FRM;
+INSERT INTO `t0`(`c1`, `c0`) VALUES (0.17901432044582422, 0.623458086836176);
+DROP INDEX i5 ON `t0`;
+OPTIMIZE TABLE `t0`;
+REPAIR TABLE `t0` EXTENDED;
+CREATE INDEX i5 ON `t0`(`c1` ASC);
+DROP TABLE IF EXISTS `t1`;
+CREATE TABLE IF NOT EXISTS t1(c0 FLOAT(30, 22) UNSIGNED ZEROFILL  , c1 FLOAT   NULL UNIQUE COMMENT 'asdf' , c2 FLOAT(28, 11) UNSIGNED ZEROFILL  COMMENT 'asdf'  NULL UNIQUE, c3 DECIMAL UNSIGNED ZEROFILL  COMMENT 'asdf'  UNIQUE )  PARTITION BY HASH(c3) partitions 15;
+CREATE TABLE IF NOT EXISTS t1(c0 FLOAT(38, 5) ZEROFILL  )  PARTITION BY HASH(c0) partitions 18;
+CREATE TABLE IF NOT EXISTS t1(c0 VARCHAR(500)  COMMENT 'asdf'  , c1 DOUBLE(28, 6) UNSIGNED   COMMENT 'asdf'  NULL UNIQUE)  PARTITION BY KEY (c1, c0);
+CREATE TABLE t1(c0 INT(122) ZEROFILL  UNIQUE, c1 BIGINT(4) ZEROFILL )  PARTITION BY KEY (c1);
+CREATE TABLE IF NOT EXISTS t1(c0 SMALLINT(170) ZEROFILL  COMMENT 'asdf' , c1 VARCHAR(500) )  PARTITION BY KEY (c1);
+CHECKSUM TABLE `t1`;
+REPLACE INTO `t1`(`c1`, `c0`) VALUES ('Sv', -788914696);
+REPLACE INTO `t1`(`c0`, `c1`) VALUES (1614257276, "FA+NDZJ㨗");
+CREATE INDEX i7 ON `t1`(`c0`);
+OPTIMIZE TABLE `t1`;
+REPLACE INTO `t1`(`c1`) VALUES ('');
+DROP INDEX i7 ON `t1`;
+ANALYZE TABLE `t1`;
+OPTIMIZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+CREATE INDEX i7 ON `t1`(`c0`);
+DROP INDEX i7 ON `t1`;
+UPDATE `t1` SET `c1`='*Ta-J#s', `c0`=(t1.c1) AND (((t1.c1) IN (t1.c1)) = (CAST(t1.c1 AS SIGNED))) WHERE t1.c1;
+INSERT INTO `t1`(`c1`, `c0`) VALUES ("", 700861890);
+REPAIR TABLE `t1` USE_FRM;
+CREATE INDEX i7 ON `t1`(`c0`);
+UPDATE `t1` SET `c1`=concat(t1.c0,'') WHERE ("-922390323") IS NOT FALSE;
+CREATE INDEX i19 ON `t1`(`c0` ASC);
+CHECKSUM TABLE `t1` EXTENDED;
+ANALYZE TABLE `t1`;
+CREATE INDEX i8 ON `t1`(`c0` ASC);
+CHECKSUM TABLE `t1` EXTENDED;
+CHECKSUM TABLE `t1`;
+UPDATE `t1` SET `c1`=((0.513818120136101) IN (IF(NULL, t1.c1, ''),  EXISTS (SELECT 1 from dual wHERE FALSE))) NOT IN ((BIT_COUNT(t1.c1)) NOT IN (CAST(concat(t1.c0,'') AS SIGNED)), (1214670112) IS NOT TRUE);
+CREATE INDEX i76 ON `t1`(`c0` ASC);
+ANALYZE TABLE `t1`;
+CHECKSUM TABLE `t1`;
+CREATE INDEX i9 ON `t1`(`c0` DESC);
+REPAIR TABLE `t1` QUICK USE_FRM;
+UPDATE `t1` SET `c0`=(NOT ((- ((concat(t1.c0,'')) IS NOT FALSE)))), `c1`="0.9814142629410493";
+OPTIMIZE TABLE `t1`;
+CREATE INDEX i10 ON `t1`(`c0` ASC);
+OPTIMIZE TABLE `t1`;
+DROP TABLE IF EXISTS `t2`;

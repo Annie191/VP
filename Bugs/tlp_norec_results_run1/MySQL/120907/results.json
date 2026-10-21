@@ -1,0 +1,17 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120907.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 单表：实际返回空\nSELECT c0\nFROM src\nWHERE +(IF('', NULL, '0.22857643383585602')) IN (c0)\nORDER BY CAST((CASE c0 WHEN vp_rowid THEN vp_rowid ELSE NULL END) IS NOT NULL AS SIGNED) DESC",
+      "ok": true,
+      "rows": [],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "-- 单表：实际返回空\nSELECT c0\nFROM src\nWHERE +(IF('', NULL, '0.22857643383585602')) IN (c0)\nORDER BY CAST((CASE c0 WHEN vp_rowid THEN vp_rowid ELSE NULL END) IS NOT NULL AS SIGNED) DESC;",
+  "skip_reason": "ORDER BY is not handled by this batch rewriter"
+}

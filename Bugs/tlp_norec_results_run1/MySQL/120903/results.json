@@ -1,0 +1,22 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120903.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT 'single' AS qt,\n       src.vp_rowid,\n       -((src.vp_rowid) = ((src.c0) NOT IN (src.c1))) AS ref2,\n       CAST(IFNULL(src.c1, src.vp_rowid) AS SIGNED) AS ref3,\n       BIT_AND(CAST(vp_rowid AS SIGNED)) AS ref4\nFROM src\nGROUP BY\n       -((src.vp_rowid) = ((src.c0) NOT IN (src.c1))),\n       src.vp_rowid,\n       CAST(IFNULL(src.c1, src.vp_rowid) AS SIGNED)\nWITH ROLLUP\nORDER BY src.vp_rowid\nLIMIT 4",
+      "ok": true,
+      "rows": [
+        "single\tNULL\t0\tNULL\t0",
+        "single\tNULL\tNULL\tNULL\t0",
+        "single\tNULL\tNULL\tNULL\t0",
+        "single\t1\tNULL\tNULL\t1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "SELECT 'single' AS qt,\n       src.vp_rowid,\n       -((src.vp_rowid) = ((src.c0) NOT IN (src.c1))) AS ref2,\n       CAST(IFNULL(src.c1, src.vp_rowid) AS SIGNED) AS ref3,\n       BIT_AND(CAST(vp_rowid AS SIGNED)) AS ref4\nFROM src\nGROUP BY\n       -((src.vp_rowid) = ((src.c0) NOT IN (src.c1))),\n       src.vp_rowid,\n       CAST(IFNULL(src.c1, src.vp_rowid) AS SIGNED)\nWITH ROLLUP\nORDER BY src.vp_rowid\nLIMIT 4;",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

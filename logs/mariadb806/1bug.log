@@ -1,0 +1,107 @@
+https://jira.mariadb.org/browse/MDEV-40943 ok
+
+DROP DATABASE IF EXISTS repro_mariadb806_db1_min6;
+CREATE DATABASE repro_mariadb806_db1_min6
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;
+USE repro_mariadb806_db1_min6;
+
+CREATE TABLE t4 (
+  c0 VARCHAR(100) NOT NULL,
+  PRIMARY KEY (c0)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+
+INSERT INTO t4 VALUES ('⳾v*');
+
+CREATE TABLE vp_mariadb_database1_937_source LIKE t4;
+ALTER TABLE vp_mariadb_database1_937_source
+  ADD COLUMN vp_rowid BIGINT NOT NULL FIRST;
+ALTER TABLE vp_mariadb_database1_937_source ENGINE=InnoDB;
+
+INSERT INTO vp_mariadb_database1_937_source (vp_rowid, c0)
+SELECT ROW_NUMBER() OVER (ORDER BY c0), c0
+FROM t4;
+
+CREATE TABLE vp_mariadb_database1_937_left (
+  vp_rowid BIGINT NOT NULL,
+  c0 VARCHAR(100)
+    CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci
+) ENGINE=InnoDB;
+
+CREATE TABLE vp_mariadb_database1_937_right (
+  vp_rowid BIGINT NOT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO vp_mariadb_database1_937_left
+SELECT vp_rowid, c0 FROM vp_mariadb_database1_937_source;
+
+INSERT INTO vp_mariadb_database1_937_right
+SELECT vp_rowid FROM vp_mariadb_database1_937_source;
+
+SET NAMES utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;
+
+-- 单表查询
+SELECT *
+FROM (
+  SELECT TRIM(ORD(c0)) AS vp_ast_col_0,
+         -1914373596 AS vp_ast_col_1,
+         c0 AS vp_ast_col_2,
+         c0 AS vp_ast_col_3,
+         '' AS vp_ast_col_4
+  FROM vp_mariadb_database1_937_source
+) q
+WHERE q.vp_ast_col_2 = '⳾v*'
+ORDER BY 1, 2, 3, 4, 5;
+
+-- 多表重写查询
+SELECT *
+FROM (
+  SELECT TRIM(ORD(c0)) AS vp_ast_col_0,
+         -1914373596 AS vp_ast_col_1,
+         c0 AS vp_ast_col_2,
+         c0 AS vp_ast_col_3,
+         '' AS vp_ast_col_4
+  FROM (
+    SELECT l.vp_rowid, l.c0
+    FROM vp_mariadb_database1_937_left l
+    JOIN (
+      SELECT vp_rowid, CONCAT('vp:', vp_rowid) AS payload
+      FROM vp_mariadb_database1_937_right
+    ) p ON p.payload = CONCAT('vp:', l.vp_rowid)
+    JOIN vp_mariadb_database1_937_right r
+      ON r.vp_rowid = p.vp_rowid
+  ) vp_rel
+) q
+WHERE q.vp_ast_col_2 = '⳾v*'
+ORDER BY 1, 2, 3, 4, 5;
+
+
+单表查询: 14857150  -1914373596  ⳾v*  ⳾v*
+多表查询:  1485715  -1914373596  ⳾v*  ⳾v*
+
+执行计划：
+单表:
+1 | SIMPLE | vp_mariadb_database1_937_source
+  | const | PRIMARY | PRIMARY | 402 | const | 1 |
+
+因为 c0 是主键，WHERE c0 = '⳾v*' 直接命中主键，优化器将整行当成常量，外层 TRIM(ORD(c0)) 被 常量折叠求值，得到正确结果 14857150。
+
+多表:
+1 | SIMPLE | l
+  | ALL | NULL | NULL | NULL | NULL | 1
+  | Using where; Using temporary; Using filesort
+
+1 | SIMPLE | vp_mariadb_database1_937_right
+  | ALL | NULL | NULL | NULL | NULL | 1
+  | Using where; Using join buffer (flat, BNL join)
+
+1 | SIMPLE | r
+  | hash_ALL | NULL | #hash#$hj | 8
+  | ...vp_mariadb_database1_937_right.vp_rowid | 1
+  | Using where; Using join buffer (flat, BNLH join)
+
+这里无法走主键常量路径，vp_rel 作为派生表/连接结果被物化或合并，TRIM(ORD(c0)) 进入运行时计算，并经过 temporary/filesort。
+最终输出从 14857150 变成 1485715，少了一位 0。
+
+在多表查询中，TRIM(ORD(c0)) 的结果在临时表/排序/物化阶段被按照错误的最大长度截断。
+也就是说，优化器对 TRIM(ORD(c0)) 的返回类型长度推导为 VARCHAR(7) 或类似，实际运行时生成的字符串长度为 8，导致末尾字符被截断。

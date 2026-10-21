@@ -1,0 +1,125 @@
+https://github.com/databendlabs/databend/issues/20631 20612同族
+
+DROP DATABASE IF EXISTS repro_databend917_db10_min;
+CREATE DATABASE repro_databend917_db10_min;
+USE repro_databend917_db10_min;
+
+SET enable_query_result_cache = 0;
+
+CREATE TABLE source (
+    vp_rowid BIGINT NOT NULL,
+    c4array ARRAY(BIGINT NULL) NULL,
+    c5varchar VARCHAR NULL
+) ENGINE = MEMORY;
+
+CREATE TABLE l (
+    vp_rowid BIGINT NOT NULL,
+    c5varchar VARCHAR NULL
+) ENGINE = FUSE;
+
+CREATE TABLE r (
+    vp_rowid BIGINT NOT NULL,
+    c4array ARRAY(BIGINT NULL) NULL
+) ENGINE = FUSE;
+
+INSERT INTO source VALUES
+    (1, [1, 2, 3], '');
+
+INSERT INTO l
+SELECT vp_rowid, c5varchar FROM source;
+
+INSERT INTO r
+SELECT vp_rowid, c4array FROM source;
+
+SELECT c4array
+FROM source
+WHERE NOT ('-192530152' LIKE c5varchar)
+ORDER BY c5varchar;
+
+SELECT x.c4array
+FROM (
+    SELECT
+        l.vp_rowid,
+        r.c4array,
+        l.c5varchar
+    FROM l
+    JOIN (
+        SELECT
+            vp_rowid,
+            CONCAT('vp:', vp_rowid) AS payload
+        FROM r
+    ) sp
+        ON CONCAT('vp:', l.vp_rowid) = sp.payload
+    JOIN r
+        ON r.vp_rowid = sp.vp_rowid
+) x
+WHERE NOT ('-192530152' LIKE x.c5varchar)
+ORDER BY x.c5varchar;
+
+单表查询：
+[1,2,3]
+
+STRING_PACK 多表重构查询：
+Empty set
+
+单表执行计划
+Sort(Single)
+├── output columns: [source.c4array, source.c5varchar]
+├── sort keys: [c5varchar ASC NULLS LAST]
+└── Filter
+    ├── filters:
+    │   [is_true(NOT like('-192530152', source.c5varchar))]
+    └── TableScan
+        ├── table: repro_databend917_db10_min.source
+        ├── output columns: [c4array, c5varchar]
+        ├── read rows: 1
+        ├── partitions total: 0
+        ├── partitions scanned: 0
+        └── push downs:
+            [is_true(NOT like('-192530152', source.c5varchar))]
+MEMORY 表虽然显示零物理分区，但成功读取该行并返回 [1,2,3]。
+多表执行计划
+Sort(Single)
+├── output columns: [r.c4array, l.c5varchar]
+├── sort keys: [c5varchar ASC NULLS LAST]
+└── HashJoin
+    ├── join type: INNER
+    ├── build keys: [sp.vp_rowid]
+    ├── probe keys: [r.vp_rowid]
+    ├── HashJoin(Build)
+    │   ├── join type: INNER
+    │   ├── build keys:
+    │   │   [concat('vp:', CAST(l.vp_rowid AS String))]
+    │   ├── probe keys: [sp.payload]
+    │   ├── TableScan(Build)
+    │   │   ├── table: repro_databend917_db10_min.l
+    │   │   ├── output columns: [vp_rowid, c5varchar]
+    │   │   ├── read rows: 0
+    │   │   ├── partitions total: 1
+    │   │   ├── partitions scanned: 0
+    │   │   ├── pruning stats:
+    │   │   │   [segments: range pruning: 1 to 0]
+    │   │   └── push downs:
+    │   │       [is_true(NOT like('-192530152', l.c5varchar))]
+    │   └── EvalScalar(Probe)
+    │       ├── expressions:
+    │       │   [concat('vp:', CAST(r.vp_rowid AS String))]
+    │       └── TableScan
+    │           ├── table: repro_databend917_db10_min.r
+    │           ├── read rows: 1
+    │           ├── partitions total: 1
+    │           └── partitions scanned: 1
+    └── TableScan(Probe)
+        ├── table: repro_databend917_db10_min.r
+        ├── output columns: [vp_rowid, c4array]
+        ├── read rows: 1
+        ├── partitions total: 1
+        └── partitions scanned: 1
+关键证据是左表 l 的扫描：
+partitions total: 1
+partitions scanned: 0
+read rows: 0
+range pruning: 1 to 0
+
+NOT (常量 LIKE 列) 这种“反向 LIKE”条件下推到 FUSE 表后，在分区裁剪/range pruning 中被错误处理，导致本应满足条件的空字符串分区被裁掉，l 表扫描 0 行，最终多表 JOIN 返回空集。
+单表查询用的是 MEMORY 表，不触发 FUSE 分区裁剪

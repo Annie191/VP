@@ -1,0 +1,130 @@
+https://bugs.mysql.com/bug.php?id=120834&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro628_5;
+CREATE DATABASE repro628_5;
+USE repro628_5;
+
+SET SESSION sql_mode =
+  'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+
+SET SESSION optimizer_switch =
+  'index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,engine_condition_pushdown=on,index_condition_pushdown=on,mrr=on,mrr_cost_based=on,block_nested_loop=on,batched_key_access=off,materialization=on,semijoin=on,loosescan=on,firstmatch=on,duplicateweedout=on,subquery_materialization_cost_based=on,use_index_extensions=on,condition_fanout_filter=on,derived_merge=on,use_invisible_indexes=off,skip_scan=on,hash_join=on,subquery_to_derived=off,prefer_ordering_index=on,hypergraph_optimizer=off,derived_condition_pushdown=on,hash_set_operations=on';
+
+CREATE TABLE s (
+  id BIGINT NOT NULL PRIMARY KEY,
+  x DOUBLE NULL
+) ENGINE=InnoDB;
+
+INSERT INTO s VALUES
+  (1, NULL),
+  (2, 1.0E308),
+  (3, 1.0E308);
+
+CREATE INDEX sx ON s(x, id);
+
+CREATE TABLE l (
+  id BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY,
+  x DOUBLE NULL
+) ENGINE=InnoDB;
+
+INSERT INTO l SELECT id FROM s;
+INSERT INTO r SELECT id, x FROM s;
+
+CREATE VIEW v AS
+SELECT l.id, r.x
+FROM l JOIN r ON l.id = r.id;
+
+SELECT DISTINCT
+  SUM(DISTINCT 0.829074650150795) AS a,
+  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))
+    || ((+ ((s.x) >= (s.id)))) AS b,
+  EXISTS (SELECT 1 WHERE FALSE) AS c,
+  AVG(x) AS d
+FROM s
+GROUP BY
+  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))
+    || ((+ ((s.x) >= (s.id))));
+
+SELECT DISTINCT
+  SUM(DISTINCT 0.829074650150795) AS a,
+  ((COALESCE(v.x, v.id)) NOT IN (CAST(v.id AS SIGNED)))
+    || ((+ ((v.x) >= (v.id)))) AS b,
+  EXISTS (SELECT 1 WHERE FALSE) AS c,
+  AVG(x) AS d
+FROM v
+GROUP BY
+  ((COALESCE(v.x, v.id)) NOT IN (CAST(v.id AS SIGNED)))
+    || ((+ ((v.x) >= (v.id))));
+
+    
+我这边实际结果：
+mysql> SELECT DISTINCT ... FROM s GROUP BY ...;
++-------------------+------+---+------+
+| a                 | b    | c | d    |
++-------------------+------+---+------+
+| 0.829074650150795 | NULL | 0 | NULL |
+| 0.829074650150795 | 1    | 0 | 0    |
++-------------------+------+---+------+
+
+mysql> SELECT DISTINCT ... FROM v GROUP BY ...;
++-------------------+------+---+------------------------+
+| a                 | b    | c | d                      |
++-------------------+------+---+------------------------+
+| 0.829074650150795 | NULL | 0 | NULL                   |
+| 0.829074650150795 | 1    | 0 | 1.7976931348623157e308 |
++-------------------+------+---+------------------------+
+所以结论是：database5.log 这个 bug 在 13309 上可以复现。
+执行计划也贴给你：
+EXPLAIN FORMAT=TREE
+SELECT DISTINCT
+  SUM(DISTINCT 0.829074650150795) AS a,
+  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))
+    || ((+ ((s.x) >= (s.id)))) AS b,
+  EXISTS (SELECT 1 WHERE FALSE) AS c,
+  AVG(x) AS d
+FROM s
+GROUP BY
+  ((COALESCE(s.x, s.id)) NOT IN (CAST(s.id AS SIGNED)))
+    || ((+ ((s.x) >= (s.id))));
+-> Group aggregate: sum(distinct 0.829074650150795), avg(s.x)
+    -> Sort: b
+        -> Covering index scan on s using sx
+-> Select #2 (subquery in projection; run only once)
+    -> Zero rows (Impossible WHERE)
+EXPLAIN FORMAT=TREE
+SELECT DISTINCT
+  SUM(DISTINCT 0.829074650150795) AS a,
+  ((COALESCE(v.x, v.id)) NOT IN (CAST(v.id AS SIGNED)))
+    || ((+ ((v.x) >= (v.id)))) AS b,
+  EXISTS (SELECT 1 WHERE FALSE) AS c,
+  AVG(x) AS d
+FROM v
+GROUP BY
+  ((COALESCE(v.x, v.id)) NOT IN (CAST(v.id AS SIGNED)))
+    || ((+ ((v.x) >= (v.id))));
+-> Sort with duplicate removal: a, b, d
+    -> Stream results
+        -> Group aggregate: sum(distinct 0.829074650150795), avg(r.x)
+            -> Sort: ((coalesce(r.x,l.id) <> cast(l.id as signed)) or (r.x >= l.id))
+                -> Stream results
+                    -> Nested loop inner join
+                        -> Covering index scan on l using PRIMARY
+                        -> Single-row index lookup on r using PRIMARY (id = l.id)
+-> Select #2 (subquery in projection; run only once)
+    -> Zero rows (Impossible WHERE)
+我的判断是：这是个真实的 MySQL wrong-result，核心落在 AVG(1e308, 1e308) 这组上，不同执行路径给了两个不同错误值：
+单表路径给 0
+视图重建路径给 1.7976931348623157e308
+而正确语义本应一致。再往下看，触发它需要的关键条件大概是：
+两行超大 DOUBLE 值 1e308
+GROUP BY 把这两行归到同一组
+单表走 Covering index scan + Group aggregate
+重建侧走 VIEW + JOIN + duplicate removal
+
+直接索引计算 (单表)：优化器选择了最高效的覆盖索引扫描方式，直接在索引层面进行聚合。这种“快速路径”可能跳过了某些类型检查或精度处理的环节，直接对原始 DOUBLE 值进行求和，从而触发了溢出，得到了错误的 0。
+
+临时表计算 (视图)：优化器因 JOIN 和 DISTINCT 的需要，选择了“慢速路径”，即使用临时表。在这个路径中，数据在进入临时表时经历了序列化/反序列化或类型转换。这个额外的步骤“意外地”修正了溢出问题，使得聚合计算能够正确进行。

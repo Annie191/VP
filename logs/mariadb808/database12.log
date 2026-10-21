@@ -1,0 +1,178 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--MariaDB version: 12.3.2-MariaDB-ubu2404
+--Database: database12
+--Strategy summary: split=TYPE_DIRECTED_SPLIT, reconstruction=LEFT_RIGHT_JOIN, shape=NON_EMPTY_MULTI_COLUMN, prefix=vp_mariadb_database12_13_
+--Base table: t1
+--Base table DDL: CREATE TABLE t1 (
+--  c0 tinyint(1) DEFAULT NULL,
+--  c1 char(100) NOT NULL
+--) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+--Base engine: INNO_DB
+--VP engines: source=INNO_DB, left=INNO_DB, right=INNO_DB
+--Base row count: 26
+--Left columns: c0
+--Right columns: c1
+--Overlap columns: 
+--Description: AST outer query, reconstruction=LEFT_RIGHT_JOIN
+--Setup statements:
+--CREATE TABLE `vp_mariadb_database12_13_source` LIKE `t1`;
+--ALTER TABLE `vp_mariadb_database12_13_source` ADD COLUMN `vp_rowid` BIGINT NOT NULL FIRST;
+--ALTER TABLE `vp_mariadb_database12_13_source` ENGINE=InnoDB;
+--CREATE UNIQUE INDEX `vp_mariadb_database12_13_source_rowid_uq` ON `vp_mariadb_database12_13_source` (`vp_rowid`);
+--INSERT INTO `vp_mariadb_database12_13_source` (`vp_rowid`, `c0`, `c1`) SELECT ROW_NUMBER() OVER (ORDER BY `c0`, `c1`), `c0`, `c1` FROM (SELECT * FROM `t1` ORDER BY `c0`, `c1` LIMIT 256) AS `vp_mariadb_database12_13_base_snapshot`;
+--CREATE TABLE `vp_mariadb_database12_13_left` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` tinyint(1)) ENGINE=InnoDB;
+--CREATE TABLE `vp_mariadb_database12_13_right` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci NOT NULL) ENGINE=InnoDB;
+--CREATE INDEX `vp_mariadb_database12_13_idx_src_1695447147` ON `vp_mariadb_database12_13_source`(`vp_rowid`, `c0`);
+--CREATE INDEX `vp_mariadb_database12_13_idx_l_582951172` ON `vp_mariadb_database12_13_left`(`c0`, `vp_rowid`);
+--Direct query: SELECT '2011-03-27 21:52:16' FROM `vp_mariadb_database12_13_source` WHERE ('0.45' IN (c0))
+--Rewritten query: SELECT '2011-03-27 21:52:16' FROM (SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_left` l LEFT JOIN `vp_mariadb_database12_13_right` r ON l.`vp_rowid` = r.`vp_rowid`) AS `vp_mariadb_database12_13_source` WHERE ('0.45' IN (c0))
+--Direct plan:
+--1 | SIMPLE | vp_mariadb_database12_13_source | index | null | vp_mariadb_database12_13_idx_src_1695447147 | 10 | null | 26 | Using where; Using index
+--Rewritten plan:
+--1 | SIMPLE | l | ref | vp_mariadb_database12_13_idx_l_582951172 | vp_mariadb_database12_13_idx_l_582951172 | 2 | const | 11 | Using index
+--Direct sample: 
+--Rewritten sample: S:19:2011-03-27 21:52:16; x11
+--Only in direct: 
+--Only in rewritten: S:19:2011-03-27 21:52:16; x11
+--
+--	at sqlancer.mariadb.oracle.MariaDBVerticalPartitioningOracle.compare(MariaDBVerticalPartitioningOracle.java:1183)
+--	at sqlancer.mariadb.oracle.MariaDBVerticalPartitioningOracle.check(MariaDBVerticalPartitioningOracle.java:238)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:487)
+--	at sqlancer.Main$2.run(Main.java:704)
+--	at sqlancer.Main$2.runThread(Main.java:686)
+--	at sqlancer.Main$2.run(Main.java:677)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/09/11 03:18:59
+-- Database: database12
+-- Database version: 12.3.2-MariaDB-ubu2404
+-- seed value: 1789096716513
+DROP DATABASE IF EXISTS database12;
+CREATE DATABASE database12;
+USE database12;
+CREATE TABLE IF NOT EXISTS `vp_system_versioned` (`id` INT NOT NULL, `val` INT, PRIMARY KEY (`id`)) WITH SYSTEM VERSIONING;
+CREATE TABLE IF NOT EXISTS `vp_application_period` (`id` INT NOT NULL, `s` DATE NOT NULL, `e` DATE NOT NULL, PERIOD FOR `app_time` (`s`, `e`), PRIMARY KEY (`id`));
+CREATE TABLE IF NOT EXISTS `vp_invisible` (`id` INT NOT NULL, `visible_val` INT, `hidden_val` INT INVISIBLE, PRIMARY KEY (`id`));
+CREATE SEQUENCE IF NOT EXISTS `vp_sequence` START WITH 1 INCREMENT BY 1;
+INSERT IGNORE INTO `vp_system_versioned` (`id`, `val`) VALUES (1, 10);
+INSERT IGNORE INTO `vp_application_period` (`id`, `s`, `e`) VALUES (1, '2020-01-01', '2030-01-01');
+INSERT IGNORE INTO `vp_invisible` (`id`, `visible_val`, `hidden_val`) VALUES (1, 10, 20);
+CREATE OR REPLACE TABLE t0(c0 SMALLINT SIGNED  UNIQUE, c1 MEDIUMINT  UNIQUE NOT NULL, PRIMARY KEY(c1)) engine=InnoDB;
+CREATE TABLE t1(c0 BOOLEAN , c1 CHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci  NOT NULL) engine=InnoDB;
+INSERT INTO `t1` (`c0`, `c1`) VALUES (1, '"vp_seed_1"');
+INSERT INTO `t1` (`c0`, `c1`) VALUES (2, '"vp_seed_2"');
+INSERT INTO `t1` (`c0`, `c1`) VALUES (3, '"vp_seed_3"');
+INSERT INTO `t1` (`c0`, `c1`) VALUES (4, '"vp_seed_4"');
+INSERT INTO `t1` (`c0`, `c1`) VALUES (5, '"vp_seed_5"');
+INSERT INTO `t1` (`c0`, `c1`) VALUES (6, '"vp_seed_6"');
+INSERT INTO `t1` (`c0`, `c1`) VALUES (7, '"vp_seed_7"');
+INSERT INTO `t1` (`c0`, `c1`) VALUES (8, '"vp_seed_8"');
+SET SESSION max_seeks_for_key = 7732426766563578057;
+INSERT INTO t1 (`c0`, `c1`) VALUES (false, '');
+SET SESSION autocommit = 1;
+INSERT INTO t1 (`c0`, `c1`) VALUES (false, '떌떌tEL');
+INSERT INTO t1 (`c0`, `c1`) VALUES (true, '-833243764');
+INSERT INTO t1 (`c0`, `c1`) VALUES (false, '-833243764');
+SET SESSION join_cache_level = 2;
+INSERT INTO t1 (`c0`, `c1`) VALUES (true, 'a~)m#R');
+INSERT INTO t1 (`c0`, `c1`) VALUES (false, 'W/');
+SET SESSION optimizer_search_depth = 10;
+INSERT INTO t1 (`c0`, `c1`) VALUES (false, '{,!떌9bf9');
+INSERT INTO t1 (`c0`, `c1`) VALUES (false, 'Ip~neW>');
+INSERT INTO t1 (`c0`, `c1`) VALUES (true, 'Ip~neW>');
+OPTIMIZE TABLE t1;
+SET SESSION sql_log_off = ON;
+SET SESSION max_length_for_sort_data = 5173965;
+SET SESSION optimizer_prune_level = 1;
+SET SESSION unique_checks = ON;
+INSERT INTO t1 (`c0`, `c1`) VALUES (false, 'Ip~neW>');
+SET SESSION max_sp_recursion_depth = 5;
+SET SESSION unique_checks = ON;
+SET SESSION max_length_for_sort_data = 6522509;
+INSERT INTO t1 (`c0`, `c1`) VALUES (false, '-833243764');
+SET SESSION sql_buffer_result = OFF;
+SET SESSION optimizer_prune_level = 1;
+INSERT INTO t1 (`c0`, `c1`) VALUES (true, 'ip~new>');
+INSERT INTO t1 (`c0`, `c1`) VALUES (true, '떌떌tel');
+SET SESSION join_cache_level = 2;
+SET SESSION max_length_for_sort_data = 4803926;
+ANALYZE TABLE t1, t0;
+SET SESSION join_cache_level = 7;
+REPAIR TABLE t0;
+INSERT INTO t1 (`c0`, `c1`) VALUES (false, '떌떌tEL');
+CHECKSUM TABLE t0, t1;
+INSERT INTO t1 (`c0`, `c1`) VALUES (false, '''	Ry');
+SET SESSION foreign_key_checks = 0;
+INSERT INTO t1 (`c0`, `c1`) VALUES (true, '-833243764');
+INSERT INTO t1 (`c0`, `c1`) VALUES (true, '');
+SET SESSION optimizer_prune_level = 1;
+CHECK TABLE t1, t0 CHANGED QUICK MEDIUM EXTENDED FAST;
+SET SESSION max_sort_length = 3938754;
+SET SESSION optimizer_search_depth = 12;
+INSERT INTO t1 (`c0`, `c1`) VALUES (false, '-833243764');
+CREATE TABLE IF NOT EXISTS `vp_system_versioned` (`id` INT NOT NULL, `val` INT, PRIMARY KEY (`id`)) WITH SYSTEM VERSIONING;
+CREATE TABLE IF NOT EXISTS `vp_application_period` (`id` INT NOT NULL, `s` DATE NOT NULL, `e` DATE NOT NULL, PERIOD FOR `app_time` (`s`, `e`), PRIMARY KEY (`id`));
+CREATE TABLE IF NOT EXISTS `vp_invisible` (`id` INT NOT NULL, `visible_val` INT, `hidden_val` INT INVISIBLE, PRIMARY KEY (`id`));
+CREATE SEQUENCE IF NOT EXISTS `vp_sequence` START WITH 1 INCREMENT BY 1;
+INSERT IGNORE INTO `vp_system_versioned` (`id`, `val`) VALUES (1, 10);
+INSERT IGNORE INTO `vp_application_period` (`id`, `s`, `e`) VALUES (1, '2020-01-01', '2030-01-01');
+INSERT IGNORE INTO `vp_invisible` (`id`, `visible_val`, `hidden_val`) VALUES (1, 10, 20);
+SET SESSION optimizer_switch = 'rowid_filter=off';
+SET SESSION optimizer_switch = 'condition_pushdown_for_derived=on';
+SET SESSION optimizer_switch = 'hash_join_cardinality=on';
+SET SESSION optimizer_switch = 'outer_join_with_cache=on';
+SET SESSION optimizer_switch = 'split_materialized=on';
+SET SESSION optimizer_switch = 'mrr=off';
+SET SESSION optimizer_switch = 'mrr_cost_based=off';
+CREATE TABLE IF NOT EXISTS `vp_system_versioned` (`id` INT NOT NULL, `val` INT, PRIMARY KEY (`id`)) WITH SYSTEM VERSIONING;
+CREATE TABLE IF NOT EXISTS `vp_application_period` (`id` INT NOT NULL, `s` DATE NOT NULL, `e` DATE NOT NULL, PERIOD FOR `app_time` (`s`, `e`), PRIMARY KEY (`id`));
+CREATE TABLE IF NOT EXISTS `vp_invisible` (`id` INT NOT NULL, `visible_val` INT, `hidden_val` INT INVISIBLE, PRIMARY KEY (`id`));
+CREATE SEQUENCE IF NOT EXISTS `vp_sequence` START WITH 1 INCREMENT BY 1;
+INSERT IGNORE INTO `vp_system_versioned` (`id`, `val`) VALUES (1, 10);
+INSERT IGNORE INTO `vp_application_period` (`id`, `s`, `e`) VALUES (1, '2020-01-01', '2030-01-01');
+INSERT IGNORE INTO `vp_invisible` (`id`, `visible_val`, `hidden_val`) VALUES (1, 10, 20);
+UPDATE `vp_system_versioned` SET `val` = `val` + 1 WHERE `id` = 1;
+CREATE TABLE `vp_mariadb_database12_13_source` LIKE `t1`;
+ALTER TABLE `vp_mariadb_database12_13_source` ADD COLUMN `vp_rowid` BIGINT NOT NULL FIRST;
+ALTER TABLE `vp_mariadb_database12_13_source` ENGINE=InnoDB;
+CREATE UNIQUE INDEX `vp_mariadb_database12_13_source_rowid_uq` ON `vp_mariadb_database12_13_source` (`vp_rowid`);
+INSERT INTO `vp_mariadb_database12_13_source` (`vp_rowid`, `c0`, `c1`) SELECT ROW_NUMBER() OVER (ORDER BY `c0`, `c1`), `c0`, `c1` FROM (SELECT * FROM `t1` ORDER BY `c0`, `c1` LIMIT 256) AS `vp_mariadb_database12_13_base_snapshot`;
+CREATE TABLE `vp_mariadb_database12_13_left` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` tinyint(1)) ENGINE=InnoDB;
+CREATE TABLE `vp_mariadb_database12_13_right` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci NOT NULL) ENGINE=InnoDB;
+INSERT INTO `vp_mariadb_database12_13_left` (`vp_rowid`, `c0`) SELECT `vp_rowid`, s.`c0` FROM `vp_mariadb_database12_13_source` s;
+INSERT INTO `vp_mariadb_database12_13_right` (`vp_rowid`, `c1`) SELECT `vp_rowid`, s.`c1` FROM `vp_mariadb_database12_13_source` s;
+CREATE INDEX `vp_mariadb_database12_13_idx_src_1695447147` ON `vp_mariadb_database12_13_source`(`vp_rowid`, `c0`);
+CREATE INDEX `vp_mariadb_database12_13_idx_l_582951172` ON `vp_mariadb_database12_13_left`(`c0`, `vp_rowid`);
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database12_13_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database12_13_temp` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` tinyint(1), `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci NOT NULL);
+INSERT INTO `vp_mariadb_database12_13_temp` SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_left` l JOIN `vp_mariadb_database12_13_right` r ON l.`vp_rowid` = r.`vp_rowid` UNION ALL SELECT r.`vp_rowid` AS `vp_rowid`, NULL AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_right` r WHERE NOT EXISTS (SELECT 1 FROM `vp_mariadb_database12_13_left` l WHERE l.`vp_rowid` = r.`vp_rowid`);
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database12_13_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database12_13_temp` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` tinyint(1), `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci NOT NULL);
+INSERT INTO `vp_mariadb_database12_13_temp` SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_left` l JOIN `vp_mariadb_database12_13_right` r ON l.`vp_rowid` = r.`vp_rowid` UNION ALL SELECT r.`vp_rowid` AS `vp_rowid`, NULL AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_right` r WHERE NOT EXISTS (SELECT 1 FROM `vp_mariadb_database12_13_left` l WHERE l.`vp_rowid` = r.`vp_rowid`);
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database12_13_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database12_13_temp` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` tinyint(1), `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci NOT NULL);
+INSERT INTO `vp_mariadb_database12_13_temp` SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_left` l JOIN `vp_mariadb_database12_13_right` r ON l.`vp_rowid` = r.`vp_rowid` UNION ALL SELECT r.`vp_rowid` AS `vp_rowid`, NULL AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_right` r WHERE NOT EXISTS (SELECT 1 FROM `vp_mariadb_database12_13_left` l WHERE l.`vp_rowid` = r.`vp_rowid`);
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database12_13_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database12_13_temp` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` tinyint(1), `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci NOT NULL);
+INSERT INTO `vp_mariadb_database12_13_temp` SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_left` l JOIN `vp_mariadb_database12_13_right` r ON l.`vp_rowid` = r.`vp_rowid` UNION ALL SELECT r.`vp_rowid` AS `vp_rowid`, NULL AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_right` r WHERE NOT EXISTS (SELECT 1 FROM `vp_mariadb_database12_13_left` l WHERE l.`vp_rowid` = r.`vp_rowid`);
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database12_13_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database12_13_temp` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` tinyint(1), `c1` char(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci NOT NULL);
+INSERT INTO `vp_mariadb_database12_13_temp` SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_left` l JOIN `vp_mariadb_database12_13_right` r ON l.`vp_rowid` = r.`vp_rowid` UNION ALL SELECT r.`vp_rowid` AS `vp_rowid`, NULL AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_right` r WHERE NOT EXISTS (SELECT 1 FROM `vp_mariadb_database12_13_left` l WHERE l.`vp_rowid` = r.`vp_rowid`);
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database12_13_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database12_13_temp` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_left` l JOIN `vp_mariadb_database12_13_right` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database12_13_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database12_13_temp` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_left` l JOIN `vp_mariadb_database12_13_right` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database12_13_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database12_13_temp` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_left` l JOIN `vp_mariadb_database12_13_right` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database12_13_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database12_13_temp` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_left` l JOIN `vp_mariadb_database12_13_right` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database12_13_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database12_13_temp` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database12_13_left` l JOIN `vp_mariadb_database12_13_right` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_mariadb_database12_13_view`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database12_13_temp`;
+DROP TABLE IF EXISTS `vp_mariadb_database12_13_source`;
+DROP TABLE IF EXISTS `vp_mariadb_database12_13_left`;
+DROP TABLE IF EXISTS `vp_mariadb_database12_13_right`;

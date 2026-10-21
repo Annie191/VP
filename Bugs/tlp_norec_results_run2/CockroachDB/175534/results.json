@@ -1,0 +1,21 @@
+{
+  "database": "CockroachDB",
+  "source": "/home/lwm/sqlancer/Bugs/CockroachDB/175534.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 单表查询：应返回 7 行 NULL\nSELECT c0\nFROM vp_source\nORDER BY c0, vp_rowid\nLIMIT 3 OFFSET 4",
+      "ok": true,
+      "rows": [
+        "",
+        "",
+        ""
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 10,
+  "target_query": "-- 单表查询：应返回 7 行 NULL\nSELECT c0\nFROM vp_source\nORDER BY c0, vp_rowid\nLIMIT 3 OFFSET 4;",
+  "skip_reason": "ORDER BY is not handled by this batch rewriter"
+}

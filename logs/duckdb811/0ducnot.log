@@ -1,0 +1,219 @@
+https://github.com/duckdb/duckdb/issues/25601
+
+repro/DuckDBVpCrash3281876.java
+
+~~~java
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
+
+/**
+ * Standalone reproducer extracted from logs/duckdb/database0-cur.log for
+ * hs_err_pid3281876.log. Run with DuckDB JDBC 1.5.5.x on the class path.
+ */
+public final class DuckDBVpCrash3281876 {
+
+    private static final String SOURCE_QUERY = """
+            SELECT vp_database0_16_source.c7
+            FROM "vp_database0_16_source" "vp_database0_16_source"
+            WHERE "c7" IS NOT NULL
+            ORDER BY vp_database0_16_source.vp_rowid
+            LIMIT 0
+            """;
+
+    private static final String SPLIT_QUERY = """
+            SELECT vp_database0_16_source.c7
+            FROM (
+                SELECT l."vp_rowid" AS "vp_rowid",
+                       (SELECT r."c0" FROM "vp_database0_16_r" r
+                        WHERE r."vp_rowid" = l."vp_rowid") AS "c0",
+                       (SELECT r."c1" FROM "vp_database0_16_r" r
+                        WHERE r."vp_rowid" = l."vp_rowid") AS "c1",
+                       (SELECT r."c2" FROM "vp_database0_16_r" r
+                        WHERE r."vp_rowid" = l."vp_rowid") AS "c2",
+                       (SELECT r."c3" FROM "vp_database0_16_r" r
+                        WHERE r."vp_rowid" = l."vp_rowid") AS "c3",
+                       (SELECT r."c4" FROM "vp_database0_16_r" r
+                        WHERE r."vp_rowid" = l."vp_rowid") AS "c4",
+                       (SELECT r."c5" FROM "vp_database0_16_r" r
+                        WHERE r."vp_rowid" = l."vp_rowid") AS "c5",
+                       l."c6" AS "c6",
+                       (SELECT r."c7" FROM "vp_database0_16_r" r
+                        WHERE r."vp_rowid" = l."vp_rowid") AS "c7",
+                       (SELECT r."c8" FROM "vp_database0_16_r" r
+                        WHERE r."vp_rowid" = l."vp_rowid") AS "c8",
+                       (SELECT r."c9" FROM "vp_database0_16_r" r
+                        WHERE r."vp_rowid" = l."vp_rowid") AS "c9",
+                       (SELECT r."c10" FROM "vp_database0_16_r" r
+                        WHERE r."vp_rowid" = l."vp_rowid") AS "c10",
+                       (SELECT r."c11" FROM "vp_database0_16_r" r
+                        WHERE r."vp_rowid" = l."vp_rowid") AS "c11"
+                FROM "vp_database0_16_l" l
+                WHERE l."vp_rowid" IN (
+                    SELECT r."vp_rowid" FROM "vp_database0_16_r" r
+                )
+            ) "vp_database0_16_source"
+            WHERE "c7" IS NOT NULL
+            ORDER BY vp_database0_16_source.vp_rowid
+            LIMIT 0
+            """;
+
+    private DuckDBVpCrash3281876() {
+    }
+
+    public static void main(String[] args) throws Exception {
+        int repetitions = args.length == 0 ? 1000 : Integer.parseInt(args[0]);
+        Path tempDirectory = Files.createTempDirectory("duckdb-vp-repro-3281876-");
+        String url = "jdbc:duckdb:";
+        try (Connection connection = DriverManager.getConnection(url);
+            Statement statement = connection.createStatement()) {
+            statement.execute("SET threads=1");
+            statement.execute("SET temp_directory='"
+                    + tempDirectory.toAbsolutePath().toString().replace("'", "''") + "'");
+            setup(statement);
+
+            assertZeroRows(statement, SOURCE_QUERY, "source");
+            statement.execute("SET disabled_optimizers='filter_pushdown,join_order'");
+            System.out.println("setup complete; threads=1; repetitions=" + repetitions);
+            for (int i = 1; i <= repetitions; i++) {
+                assertZeroRows(statement, SPLIT_QUERY, "split");
+                if (i == 1 || i % 100 == 0) {
+                    System.out.println("split repetitions=" + i);
+                }
+            }
+            System.out.println("completed without native crash");
+        }
+    }
+
+    private static void setup(Statement statement) throws Exception {
+        statement.execute("""
+                CREATE TABLE "t0" (
+                    c0 BIGINT, c1 INTEGER, c2 DOUBLE, c3 VARCHAR,
+                    c4 VARCHAR COLLATE NOCASE, c5 BOOLEAN,
+                    c6 DECIMAL(18,3), c7 TIMESTAMP, c8 INTERVAL,
+                    c9 INTEGER[], c10 STRUCT(f0 INTEGER, f1 VARCHAR),
+                    c11 MAP(VARCHAR, INTEGER)
+                )
+                """);
+        statement.execute("""
+                INSERT INTO "t0"
+                SELECT CASE WHEN i % 17 = 0 THEN NULL
+                       ELSE CASE WHEN i % 29 = 0 THEN 9223372036854775807
+                                 ELSE CAST(random() * 2000000000 - 1000000000 AS BIGINT) END END,
+                       CASE WHEN i % 11 = 0 THEN NULL ELSE CAST(random() * 97 AS INTEGER) END,
+                       CASE WHEN i % 13 = 0 THEN NULL ELSE (random() * 2e9 - 1e9) END,
+                       CASE WHEN i % 19 = 0 THEN NULL
+                            ELSE concat('v-', CAST(random() * 31 AS INTEGER), '-',
+                                        repeat('x', CAST(random() * 97 AS INTEGER))) END,
+                       CASE WHEN i % 7 = 0 THEN 'A' WHEN i % 7 = 1 THEN 'a'
+                            ELSE concat('k', CAST(random() * 23 AS INTEGER)) END,
+                       random() < 0.5,
+                       CAST(random() * 100000 AS DECIMAL(18,3)),
+                       TIMESTAMP '2000-01-01' + CAST(random() * 100000 AS INTEGER) * INTERVAL '1 second',
+                       CAST(random() * 1000 AS INTEGER) * INTERVAL '1 millisecond',
+                       [CAST(random() * 5 AS INTEGER), NULL,
+                        CASE WHEN random() < 0.33 THEN CAST(random() * 10000 AS INTEGER) ELSE NULL END],
+                       struct_pack(f0 := CAST(random() * 37 AS INTEGER),
+                                   f1 := CASE WHEN i % 5 = 0 THEN NULL
+                                              ELSE concat('u', CAST(random() * 17 AS INTEGER)) END),
+                       map([concat('m', CAST(random() * 9 AS INTEGER))],
+                           [CAST(random() * 101 AS INTEGER)])
+                FROM range(4096) t(i)
+                """);
+        statement.execute("""
+                CREATE TABLE "vp_database0_16_source" AS
+                SELECT rowid AS vp_rowid, c0, c1, c2, c3 COLLATE C AS c3,
+                       c4 COLLATE C AS c4, c5, c6, c7, c8, c9, c10, c11
+                FROM "t0"
+                ORDER BY c0, c1, c3, c4, c5, c6, c7
+                LIMIT 2047
+                """);
+        statement.execute("""
+                CREATE TABLE "vp_database0_16_l" AS
+                SELECT vp_rowid, c6 FROM "vp_database0_16_source"
+                """);
+        statement.execute("""
+                CREATE TABLE "vp_database0_16_r" AS
+                SELECT vp_rowid, c4, c5, c11, c10, c3, c7, c2, c9, c1, c0, c8
+                FROM "vp_database0_16_source"
+                """);
+        statement.execute("""
+                CREATE INDEX "vp_database0_16_r_asym" ON "vp_database0_16_r"(c1, vp_rowid)
+                """);
+        statement.execute("""
+                CREATE INDEX "vp_database0_16_idx_r" ON "vp_database0_16_r"(c3, c4)
+                """);
+    }
+
+    private static void assertZeroRows(Statement statement, String query, String label) throws Exception {
+        try (ResultSet resultSet = statement.executeQuery(query)) {
+            if (resultSet.next()) {
+                throw new AssertionError(label + " unexpectedly returned a row");
+            }
+        }
+    }
+}
+
+~~~
+
+
+
+驱动文件：target/lib/duckdb_jdbc-1.5.5.1.jar
+
+DuckDB 官方 JDBC 驱动：
+groupId:    org.duckdb
+artifactId: duckdb_jdbc
+version:    1.5.5.1
+开发人员可以通过 Maven Central 或项目构建系统自行获得。例如 Maven：
+<dependency>
+    <groupId>org.duckdb</groupId>
+    <artifactId>duckdb_jdbc</artifactId>
+    <version>1.5.5.1</version>
+</dependency>
+或直接下载：
+mvn dependency:get \
+  -Dartifact=org.duckdb:duckdb_jdbc:1.5.5.1
+
+驱动 SHA-256：22343dd258db1b0b51d37afc776c8dff5b19282829fa5b47f7d5d6fe02b3377a
+
+准备编译目录：
+mkdir -p /tmp/duckdb-vp-repro-classes
+编译：
+javac \
+  -cp target/lib/duckdb_jdbc-1.5.5.1.jar \
+  -d /tmp/duckdb-vp-repro-classes \
+  repro/DuckDBVpCrash3281876.java
+运行 1000 次：
+timeout 30s java \
+  -cp "/tmp/duckdb-vp-repro-classes:target/lib/duckdb_jdbc-1.5.5.1.jar" \
+  DuckDBVpCrash3281876 1000
+
+
+
+
+实际结果：
+Source:
+查询成功，返回空结果集（0 rows）。
+VP:
+执行查询时触发 native SIGSEGV，JVM 被中止，未返回查询结果。
+进程退出码为 134。
+崩溃位于 org.duckdb.DuckDBNative.duckdb_jdbc_execute_pending。
+典型输出为：
+setup complete; threads=1; repetitions=1000
+split repetitions=1
+SIGSEGV
+
+预期结果：
+Source:
+空结果集（0 rows）。
+VP:
+空结果集（0 rows）。
+
+
+两条查询最外层均包含 LIMIT 0，并且 VP 查询是对 source 表的等价拆分与重建，因此二者都应正常执行并返回空结果集，而不应导致 DuckDB/JVM native 崩溃。
+
+
+测试数据生成使用了 DuckDB random()，因此不同机器上的触发次数可能不同。建议保留 1000 次循环；如果一次运行未触发，可以重复运行几次。为保证一致性，应优先使用 DuckDB JDBC 1.5.5.1，不要直接替换为其他版本。

@@ -1,0 +1,115 @@
+https://bugs.mysql.com/bug.php?id=120969&thanks=4
+This is fixed in the upcoming MySQL-9.7 LTS release. Marking this as duplicate of Bug#120429.
+
+DROP DATABASE IF EXISTS repro_mysql714_db23;
+CREATE DATABASE repro_mysql714_db23;
+USE repro_mysql714_db23;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+SET SESSION big_tables = 0;
+
+-- 含 BIGINT 列的表（有 BIGINT 列时大 DECIMAL 值 IFNULL 正常，小值异常）
+CREATE TABLE vp_s (
+    vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    c0       BIGINT NULL,
+    c1       DECIMAL(65, 30) NULL
+) ENGINE = InnoDB;
+
+INSERT INTO vp_s (c0, c1) VALUES
+    (-8388608, 333757159), (0, NULL), (0, NULL), (0, 0), (0, 1), (8388607, NULL);
+
+ALTER TABLE vp_s ADD UNIQUE KEY src_idx (c1);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 BIGINT NULL) ENGINE = InnoDB;
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c1 DECIMAL(65,30) NULL, c0 BIGINT NULL) ENGINE = InnoDB;
+
+INSERT INTO vp_l SELECT vp_rowid, c0 FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c1, c0 FROM vp_s;
+
+-- 单表查询（covering index → IFNULL 异常）
+SELECT ALL AVG(vp_rowid) AS ref0 FROM vp_s
+WHERE IFNULL((NULL) XOR (0.5454191638138058),
+      (CASE vp_s.c1 WHEN vp_s.vp_rowid THEN 2055221018 WHEN NULL THEN NULL
+             WHEN 0.6615707880681362 THEN 0.13839908025384118 ELSE vp_s.c1 END))
+ORDER BY vp_s.vp_rowid LIMIT 2;
+
+-- AGGREGATE_THEN_MERGE（JOIN 重构）
+SELECT ALL AVG(vp_rowid) AS ref0 FROM (
+    SELECT l.vp_rowid AS vp_rowid, l.c0 AS c0, r.c1 AS c1
+    FROM vp_l l
+    JOIN (SELECT vp_rowid, COUNT(*) AS vp_count FROM vp_r GROUP BY vp_rowid) rg
+      ON l.vp_rowid = rg.vp_rowid
+    JOIN vp_r r ON r.vp_rowid = rg.vp_rowid
+) vp_source
+WHERE IFNULL((NULL) XOR (0.5454191638138058),
+      (CASE vp_source.c1 WHEN vp_source.vp_rowid THEN 2055221018 WHEN NULL THEN NULL
+             WHEN 0.6615707880681362 THEN 0.13839908025384118 ELSE vp_source.c1 END))
+ORDER BY vp_source.vp_rowid LIMIT 2;
+
+=== 单表(有索引) ===
+| NULL |           ← AVG=NULL：0 行通过过滤
+
+=== AGGREGATE_THEN_MERGE ===
+| 1.0000 |         ← AVG=1：仅 vp_rowid=1 通过
+
+=== IFNULL 核心bug ===
+| vp_rowid | c1          | display_val | plus0      | eq0  | is_null |
+| 1        | 333757159   | 333757159   | 333757159  | 0    | 0       |  ← 大值正常
+| 4        | 0.000...    | 0.000...    | NULL       | NULL | 1       |  ← BUG!
+| 5        | 1.000...    | 1.000...    | NULL       | NULL | 1  
+
+执行计划
+单表（covering index）：
+
+-> Limit: 2 row(s)
+    -> Aggregate: avg(vp_s.vp_rowid)
+        -> Filter: (0 <> ifnull(<cache>(((0 <> NULL) xor (0 <> 0.5454...))),
+                    (case vp_s.c1 when vp_s.vp_rowid then ... end)))
+            -> Covering index scan on vp_s using src_idx
+
+AGGREGATE_THEN_MERGE（原始日志 plan）：
+
+-> Limit: 2 row(s)
+    -> Aggregate: avg(l.vp_rowid)
+        -> Nested loop inner join
+            -> Nested loop inner join
+                -> Covering index scan on l using PRIMARY
+                -> Filter: (0 <> ifnull(<cache>(...), (case r.c1 ...)))
+                    -> Single-row index lookup on r using PRIMARY
+            -> Index lookup on rg using <auto_key0>
+                -> Materialize
+                    -> Group aggregate: count(0)
+                        -> Covering index scan on r using PRIMARY
+
+1. 小数值 DECIMAL（0 和 1）被错误地当成 NULL
+从你给出的诊断查询可以看出，对于 c1 = 0 和 c1 = 1 的行：
+
+display_val 显示为 0.000... 和 1.000...（似乎有值）
+
+但 c1+0 结果为 NULL，且 c1 IS NULL 返回 1
+
+这说明 这些 DECIMAL 值的内部表示已经损坏（或被错误地解释为 NULL）。在 CASE 表达式中，当 c1 被判定为 NULL 时：
+
+WHEN vp_s.vp_rowid → 比较 NULL = vp_rowid 得到 NULL（不匹配）
+
+WHEN NULL → 比较 NULL = NULL 得到 NULL（不匹配）
+
+ELSE vp_s.c1 → 返回 NULL
+
+因此 IFNULL(…, CASE …) 返回 NULL，条件为假，该行被过滤掉。
+这就解释了为什么 c1 = 1 的行本应通过过滤却被错误丢弃（c1 = 0 本就不通过，影响不明显）。
+
+2. 覆盖索引扫描放大了 Bug —— 所有 DECIMAL 值都被当成 NULL
+单表查询使用了 Covering index scan on vp_s using src_idx，即 只从二级索引 src_idx(c1) 读取数据，不回表。
+在 InnoDB 的二级索引中，DECIMAL(65,30) 的存储格式与聚簇索引中的行数据可能不完全一致，尤其当优化器通过索引读取并重构 DECIMAL 值时，存在缺陷。
+
+从结果看：
+
+单表查询（覆盖索引）：连 c1 = 333757159 的大值也被过滤了，导致 AVG 为 NULL（0 行通过）
+
+AGGREGATE_THEN_MERGE 查询（通过主键回表读取 vp_r）：大值正常，仅有小值被误判，所以 AVG = 1（只有 vp_rowid = 1 通过）
+
+这证明：覆盖索引扫描路径中，从索引读取 DECIMAL 值的过程存在 Bug，它会将所有 DECIMAL(65,30) 值（不管大小）都错误地解释为 NULL。
+而基表（聚簇索引）读取路径相对正确，只是仍残存小数值的 NULL 误判问题。

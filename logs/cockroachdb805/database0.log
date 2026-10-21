@@ -1,0 +1,88 @@
+--org.postgresql.util.PSQLException: ERROR: internal error: inverted column should have type encodedkey
+--  Detail: stack trace:
+--pkg/sql/rowexec/inverted_filterer.go:237: readInput()
+--pkg/sql/rowexec/inverted_filterer.go:173: Next()
+--pkg/sql/colexec/columnarizer.go:244: Next()
+--pkg/sql/colfetcher/index_join.go:388: next()
+--pkg/sql/colfetcher/index_join.go:178: Next()
+--pkg/sql/colexec/colexecutils/cancel_checker.go:62: Next()
+--pkg/sql/colexec/colexecutils/operator.go:223: Next()
+--pkg/sql/colexec/buffer.go:45: advance()
+--pkg/sql/colexec/case.go:193: Next()
+--pkg/sql/colexec/colexecutils/bool_vec_to_sel.go:141: Next()
+--pkg/sql/colexec/colexecutils/bool_vec_to_sel.go:58: Next()
+--pkg/sql/colexec/colexecbase/simple_project.go:114: Next()
+--pkg/sql/colexec/colexecutils/operator.go:153: Next()
+--bazel-out/k8-opt/bin/pkg/sql/colexec/colexecbase/const.eg.go:640: Next()
+--pkg/sql/colexec/colexecutils/operator.go:153: Next()
+--bazel-out/k8-opt/bin/pkg/sql/colexec/colexecbase/cast.eg.go:1211: Next()
+--pkg/sql/colexec/colexecbase/simple_project.go:114: Next()
+--pkg/sql/colexec/colexecbase/fn_op.go:28: Next()
+--pkg/sql/colexec/ordered_aggregator.go:205: Next()
+--bazel-out/k8-opt/bin/pkg/sql/colexec/colexecsel/selection_ops.eg.go:44646: Next()
+--pkg/sql/colexec/colexecbase/simple_project.go:114: Next()
+--pkg/sql/colexec/colexecutils/deselector.go:49: Next()
+--pkg/sql/colflow/colrpc/outbox.go:320: func1()
+--pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+--pkg/sql/colflow/colrpc/outbox.go:311: sendBatches()
+--pkg/sql/colflow/colrpc/outbox.go:490: runWithStream()
+--pkg/sql/colflow/colrpc/outbox.go:272: Run()
+--pkg/sql/colflow/vectorized_flow.go:766: func1()
+--pkg/sql/colflow/vectorized_flow.go:728: 1()
+--src/runtime/asm_amd64.s:1693: goexit()
+--
+--  Hint: You have encountered an unexpected error.
+--
+--Please check the public issue tracker to check whether this problem is
+--already tracked. If you cannot find it there, please report the error
+--with details by creating a new issue.
+--
+--If you would rather not post publicly, please contact us directly
+--using the support form.
+--
+--We appreciate your feedback.
+--
+--	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2676)
+--	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2366)
+--	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:356)
+--	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:496)
+--	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:413)
+--	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:333)
+--	at org.postgresql.jdbc.PgStatement.executeCachedSql(PgStatement.java:319)
+--	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:295)
+--	at org.postgresql.jdbc.PgStatement.executeQuery(PgStatement.java:244)
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.getResultMultiset(CockroachDBVerticalPartitioningOracle.java:5346)
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.getResultMultiset(CockroachDBVerticalPartitioningOracle.java:5332)
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.comparePair(CockroachDBVerticalPartitioningOracle.java:4401)
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.checkWithOracleRunPermit(CockroachDBVerticalPartitioningOracle.java:510)
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.check(CockroachDBVerticalPartitioningOracle.java:458)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:487)
+--	at sqlancer.Main$2.run(Main.java:708)
+--	at sqlancer.Main$2.runThread(Main.java:690)
+--	at sqlancer.Main$2.run(Main.java:681)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/10/18 08:58:25
+-- Database: database0
+-- Database version: 13.0.0
+-- seed value: 1792307210905
+USE test;
+DROP DATABASE IF EXISTS database0 CASCADE;
+CREATE DATABASE database0;
+USE database0;
+ALTER DATABASE "database0" CONFIGURE ZONE USING gc.ttlseconds = 600;
+--Don't send automatic bug reports;
+SET CLUSTER SETTING debug.panic_on_failed_assertions = true;
+SET CLUSTER SETTING diagnostics.reporting.enabled = false;
+SET CLUSTER SETTING diagnostics.reporting.send_crash_reports.enabled = false;
+-- Disable the collection of metrics and hope that it helps performance;
+SET CLUSTER SETTING sql.metrics.statement_details.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.dump_to_logs.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.gateway_node.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.index_recommendation_collection.enabled = false;
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+SET CLUSTER SETTING timeseries.storage.enabled = false;
+SET experimental_enable_hash_sharded_indexes = 'on';
+SET experimental_enable_temp_tables = 'on';

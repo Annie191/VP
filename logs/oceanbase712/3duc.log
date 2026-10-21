@@ -1,0 +1,93 @@
+https://github.com/oceanbase/oceanbase/issues/2429 duc2411
+
+able to reproduce this issue on OceanBase 4.4.2.1. 
+
+After disabling storage pushdown using the following command, the query returned the correct result:
+
+ALTER SYSTEM SET _pushdown_storage_level = 0;
+We have also confirmed that this issue has already been fixed in OceanBase 4.4.2.3. Thank you again for reporting this issue.
+
+#### COUNT_NULL_GREATEST_LEAST_PUSHDOWN
+
+DROP DATABASE IF EXISTS repro_db3;
+CREATE DATABASE repro_db3;
+USE repro_db3;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+CREATE TABLE vp_s (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY);
+INSERT INTO vp_s VALUES (), (), (), ();
+
+CREATE TABLE vp_l (id BIGINT NOT NULL PRIMARY KEY);
+INSERT INTO vp_l SELECT id FROM vp_s;
+
+CREATE TABLE vp_r (id BIGINT NOT NULL PRIMARY KEY);
+INSERT INTO vp_r SELECT id FROM vp_s;
+
+-- Single: pushdown → 返回 4（错误）
+SELECT COUNT(LEAST((id) IN (''), (+ (NULL)))) FROM vp_s;
+
+-- Split: EXISTS_FILTER → MERGE JOIN → 返回 0（正确）
+SELECT COUNT(LEAST((id) IN (''), (+ (NULL)))) FROM (
+  SELECT l.id FROM vp_l l WHERE EXISTS (SELECT 1 FROM vp_r r WHERE r.id = l.id)
+) vp_s;
+
+表达式分解：(id) IN ('') → id = 0 = FALSE(0)，+(NULL) = NULL，LEAST(0, NULL) = NULL，COUNT(NULL) 应为 0。
+
+查询	结果	正确?
+Single	4	❌
+Split	0	✅
+
+执行计划
+Single（pushdown_aggregation → 错误 = 4）
+
+|ID|OPERATOR         |NAME|EST.ROWS|
+|0 |SCALAR GROUP BY  |    |1       |
+|1 |└─TABLE FULL SCAN|vp_s|4       |
+
+  1 - pushdown_aggregation([T_FUN_COUNT(LEAST(vp_s.id = demote_cast('', BIGINT), NULL))])
+
+Split（EXISTS_FILTER → MERGE JOIN → 正确 = 0）
+
+|ID|OPERATOR           |NAME|EST.ROWS|
+|0 |SCALAR GROUP BY    |    |1       |
+|1 |└─MERGE JOIN       |    |4       |
+|2 |  ├─TABLE FULL SCAN|r   |4       |
+|3 |  └─TABLE FULL SCAN|l   |4       |
+
+  0 - agg_func([T_FUN_COUNT(LEAST(l.id = demote_cast('', BIGINT), NULL))])   ← 无 pushdown
+
+存储层 LEAST 的 NULL 语义不一致
+1. 正确语义推导
+表格
+子表达式	求值结果	说明
+(id) IN ('')	id = '' → id = 0 → 0	空字符串转 BIGINT 为 0，id∈{1,2,3,4} 时恒为 FALSE(0)
++(NULL)	NULL	一元正号对 NULL 仍为 NULL
+LEAST(0, NULL)	NULL	SQL 标准：只要参数含 NULL，LEAST 返回 NULL
+COUNT(NULL)	0	COUNT(expr) 忽略 NULL 行
+正确结果必须是 0。
+
+核心问题：pushdown_aggregation 将 COUNT(LEAST(..., NULL)) 下推到存储层（Table Full Scan 层）执行时，存储层的 LEAST 表达式实现未遵循 SQL NULL 语义。
+具体表现为：
+SQL 层：LEAST(0, NULL) → NULL（符合标准）
+存储层（Coprocessor/OBServer）：LEAST(0, NULL) 被错误求值为 0（忽略了 NULL 参数，或将其视为"不存在"而返回另一参数的最小值）
+由于 COUNT(0) = 1（0 不是 NULL），4 行数据全部计入，最终返回 4。
+
+2. 直接原因
+执行计划中的下推信息：
+
+text
+pushdown_aggregation([T_FUN_SUM(...)], [T_FUN_COUNT(...)])
+                        SUM=2 ✓          COUNT=3 ✗
+说明下推的 T_FUN_COUNT 没有按 expr IS NOT NULL 过滤，而是直接统计了所有行（等同于 COUNT(*)），导致分母错误。
+
+3. 根因分析
+聚合下推代码在将 AVG(expr) 拆分为 SUM(expr) 和 COUNT(expr) 并下推到存储层时，丢失了 COUNT(expr) 的“排除 NULL”语义。 具体表现：
+
+COUNT(expr) 被错误地映射为存储层通用的行计数函数
+存储层可能只提供简单的行计数接口（如 COUNT(*)），优化器在下推时没有生成带 NULL 过滤条件的计数表达式，而是直接使用了无条件行计数。
+
+表达式可空性未传递
+expr 的计算结果包含 NULL（由 LEAST(id,id,NULL) 引入），这一可空属性在构造下推聚合请求时被忽略。下推逻辑仅提取了聚合函数类型（SUM / COUNT），而没有将 expr 本身（或它的 IS NOT NULL 条件）一并发送到存储层，导致存储层无法判断哪些行应被计数。
+
+单表全扫路径触发错误下推
+在单表 TABLE FULL SCAN 路径上，优化器认为可以安全下推聚合；而 JOIN 路径（MERGE JOIN）未能下推，因此走上层 agg_func 计算，得到了正确结果。这说明缺陷存在于 下推条件判断或下推计划生成 阶段：它本应识别出 expr 可能为 NULL 而拒绝下推 COUNT(expr)，或者下推一个带过滤的正确 COUNT

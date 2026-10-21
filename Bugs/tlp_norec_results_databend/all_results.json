@@ -1,0 +1,490 @@
+[
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20477.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT\n    s.vp_rowid,\n    (\n        SELECT MIN(s2.vp_rowid)\n        FROM vp_repro_databend925_1274_source AS s2\n        WHERE s2.vp_rowid <= s.vp_rowid\n    )\nFROM vp_repro_databend925_1274_source AS s",
+        "ok": true,
+        "rows": [
+          "31\t1",
+          "61\t1",
+          "19\t1",
+          "28\t1",
+          "63\t1",
+          "93\t1",
+          "10\t1",
+          "47\t1",
+          "29\t1",
+          "50\t1",
+          "75\t1",
+          "65\t1",
+          "30\t1",
+          "14\t1",
+          "21\t1",
+          "95\t1",
+          "100\t1",
+          "37\t1",
+          "53\t1",
+          "78\t1",
+          "8\t1",
+          "59\t1",
+          "13\t1",
+          "34\t1",
+          "49\t1",
+          "18\t1",
+          "17\t1",
+          "79\t1",
+          "9\t1",
+          "5\t1",
+          "84\t1",
+          "86\t1",
+          "80\t1",
+          "7\t1",
+          "44\t1",
+          "74\t1",
+          "22\t1",
+          "81\t1",
+          "52\t1",
+          "62\t1",
+          "64\t1",
+          "4\t1",
+          "99\t1",
+          "87\t1",
+          "83\t1",
+          "26\t1",
+          "11\t1",
+          "97\t1",
+          "32\t1",
+          "48\t1",
+          "16\t1",
+          "71\t1",
+          "46\t1",
+          "102\t1",
+          "66\t1",
+          "103\t1",
+          "39\t1",
+          "60\t1",
+          "2\t1",
+          "73\t1",
+          "94\t1",
+          "58\t1",
+          "6\t1",
+          "70\t1",
+          "54\t1",
+          "85\t1",
+          "35\t1",
+          "92\t1",
+          "15\t1",
+          "55\t1",
+          "68\t1",
+          "90\t1",
+          "27\t1",
+          "51\t1",
+          "33\t1",
+          "23\t1",
+          "77\t1",
+          "57\t1",
+          "101\t1",
+          "88\t1",
+          "1\t1",
+          "25\t1",
+          "24\t1",
+          "43\t1",
+          "72\t1",
+          "40\t1",
+          "42\t1",
+          "56\t1",
+          "45\t1",
+          "20\t1",
+          "69\t1",
+          "96\t1",
+          "98\t1",
+          "12\t1",
+          "36\t1",
+          "76\t1",
+          "41\t1",
+          "38\t1",
+          "89\t1",
+          "3\t1",
+          "82\t1",
+          "67\t1",
+          "91\t1"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "SELECT\n    s.vp_rowid,\n    (\n        SELECT MIN(s2.vp_rowid)\n        FROM vp_repro_databend925_1274_source AS s2\n        WHERE s2.vp_rowid <= s.vp_rowid\n    )\nFROM vp_repro_databend925_1274_source AS s;",
+    "skip_reason": "nested query/window/union is not handled by this batch rewriter"
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20484.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT c2int % 1.0 AS e1, -c2int AS e2\nFROM source\nORDER BY c2int % 1.0, -c2int",
+        "ok": false,
+        "rows": [],
+        "stderr": "ERROR 1105 (HY000) at line 3: UnwindError. Code: 1104, Text = assertion failed: partition.total > 0.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "SELECT c2int % 1.0 AS e1, -c2int AS e2\nFROM source\nORDER BY c2int % 1.0, -c2int;",
+    "skip_reason": "ORDER BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20568.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 单表查询\nSELECT\n  (- source.vp_rowid),\n  ROW_NUMBER() OVER (ORDER BY `vp_rowid`, `vp_rowid`),\n  (((((source.vp_rowid) * (source.vp_rowid)) - ((+ source.vp_rowid)))\n    * (((source.vp_rowid) / (-1401453600)) % (source.vp_rowid))))\nFROM source\nWHERE (((+ source.vp_rowid)) - ((source.vp_rowid) % (((1208992282) / (41992119)))))\nORDER BY source.c0varchar, source.vp_rowid",
+        "ok": true,
+        "rows": [],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 10,
+    "target_query": "-- 单表查询\nSELECT\n  (- source.vp_rowid),\n  ROW_NUMBER() OVER (ORDER BY `vp_rowid`, `vp_rowid`),\n  (((((source.vp_rowid) * (source.vp_rowid)) - ((+ source.vp_rowid)))\n    * (((source.vp_rowid) / (-1401453600)) % (source.vp_rowid))))\nFROM source\nWHERE (((+ source.vp_rowid)) - ((source.vp_rowid) % (((1208992282) / (41992119)))))\nORDER BY source.c0varchar, source.vp_rowid;",
+    "skip_reason": "ORDER BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20591.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT\n    SUM(c1int),\n    vp_rowid,\n    c1int\nFROM source\nWHERE c0boolean\nGROUP BY vp_rowid, c1int\nORDER BY vp_rowid, c1int\nLIMIT 3",
+        "ok": true,
+        "rows": [
+          "-4\t4\t-4",
+          "-5\t5\t-5",
+          "-6\t6\t-6"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "SELECT\n    SUM(c1int),\n    vp_rowid,\n    c1int\nFROM source\nWHERE c0boolean\nGROUP BY vp_rowid, c1int\nORDER BY vp_rowid, c1int\nLIMIT 3;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20601.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT COUNT((-(vp_rowid * vp_rowid))), vp_rowid, vp_rowid\nFROM source\nWHERE c0boolean\nGROUP BY vp_rowid, vp_rowid\nORDER BY vp_rowid, vp_rowid\nLIMIT 21",
+        "ok": true,
+        "rows": [
+          "1\t10\t10",
+          "1\t11\t11",
+          "1\t12\t12",
+          "1\t13\t13",
+          "1\t14\t14",
+          "1\t15\t15",
+          "1\t16\t16",
+          "1\t17\t17",
+          "1\t18\t18",
+          "1\t19\t19",
+          "1\t20\t20",
+          "1\t21\t21",
+          "1\t22\t22",
+          "1\t23\t23",
+          "1\t24\t24"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "SELECT COUNT((-(vp_rowid * vp_rowid))), vp_rowid, vp_rowid\nFROM source\nWHERE c0boolean\nGROUP BY vp_rowid, vp_rowid\nORDER BY vp_rowid, vp_rowid\nLIMIT 21;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20603.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT ARRAY_AGG(a)\nFROM source",
+        "ok": true,
+        "rows": [
+          "[]"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "SELECT ARRAY_AGG(a)\nFROM source;",
+    "skip_reason": "aggregate ARRAYAGG is not supported by this TLP rewrite"
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20612.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 单表基准查询。\nSELECT vp_rowid\nFROM vp_source\nORDER BY vp_rowid\nLIMIT 3",
+        "ok": true,
+        "rows": [
+          "1",
+          "2",
+          "3"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 14,
+    "target_query": "-- 单表基准查询。\nSELECT vp_rowid\nFROM vp_source\nORDER BY vp_rowid\nLIMIT 3;",
+    "skip_reason": "ORDER BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20615.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT\n    NULL AS k,\n    CAST(7 AS INT) AS tag\nFROM src\nGROUP BY\n    NULL,\n    CAST(7 AS INT)",
+        "ok": true,
+        "rows": [
+          "NULL\t7",
+          "NULL\t7"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 13,
+    "target_query": "SELECT\n    NULL AS k,\n    CAST(7 AS INT) AS tag\nFROM src\nGROUP BY\n    NULL,\n    CAST(7 AS INT);",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20625.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT MIN(s.c1date), s.vp_rowid, s.vp_rowid\nFROM source s\nWHERE ((s.c2map IS NULL) <> (s.c4array IS NULL))\nGROUP BY s.vp_rowid, s.vp_rowid\nORDER BY s.vp_rowid, s.vp_rowid",
+        "ok": false,
+        "rows": [],
+        "stderr": "ERROR 1105 (HY000) at line 3: UnwindError. Code: 1104, Text = called `Result::unwrap()` on an `Err` value: Null.\n"
+      }
+    },
+    "errors": [],
+    "target_statement_index": 10,
+    "target_query": "SELECT MIN(s.c1date), s.vp_rowid, s.vp_rowid\nFROM source s\nWHERE ((s.c2map IS NULL) <> (s.c4array IS NULL))\nGROUP BY s.vp_rowid, s.vp_rowid\nORDER BY s.vp_rowid, s.vp_rowid;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20626.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT COUNT(source.c0map)\nFROM source\nLIMIT 2",
+        "ok": true,
+        "rows": [
+          "2"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "SELECT COUNT(source.c0map)\nFROM source\nLIMIT 2;",
+    "skip_reason": "LIMIT is not handled by this batch rewriter"
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20628.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 单表查询\nSELECT d FROM source ORDER BY id LIMIT 8",
+        "ok": true,
+        "rows": [
+          "1969-12-15",
+          "1970-01-10",
+          "1970-01-10",
+          "1970-01-11",
+          "1970-01-13",
+          "1970-01-13",
+          "1970-01-17",
+          "2000-01-01"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 53,
+    "target_query": "-- 单表查询\nSELECT d FROM source ORDER BY id LIMIT 8;",
+    "skip_reason": "ORDER BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20632.sql",
+    "status": "done",
+    "queries": {
+      "original": {
+        "sql": "SELECT a, s, a\nFROM src\nWHERE ((s IS NULL) <> (a IS NULL))\n  AND ('' LIKE s)\n  AND ('' LIKE s)",
+        "ok": true,
+        "rows": [],
+        "stderr": "",
+        "stdout": ""
+      },
+      "tlp_base": {
+        "sql": "SELECT a, s, a FROM src",
+        "ok": true,
+        "rows": [
+          "[1,2]\tNULL\t[1,2]",
+          "NULL\tabc\tNULL",
+          "[]\t\t[]"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      "tlp_union": {
+        "sql": "SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) UNION ALL SELECT a, s, a FROM src WHERE NOT ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) UNION ALL SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) IS NULL",
+        "ok": true,
+        "rows": [
+          "[]\t\t[]"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      "norec_optimized": {
+        "sql": "SELECT COUNT(*) FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s)",
+        "ok": true,
+        "rows": [
+          "0"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      "norec_unoptimized": {
+        "sql": "SELECT SUM(CASE WHEN ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) THEN 1 ELSE NULL END) FROM src",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "",
+        "stdout": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "SELECT a, s, a\nFROM src\nWHERE ((s IS NULL) <> (a IS NULL))\n  AND ('' LIKE s)\n  AND ('' LIKE s);",
+    "variants": {
+      "tlp_base": "SELECT a, s, a FROM src",
+      "tlp_part_true": "SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s)",
+      "tlp_part_false": "SELECT a, s, a FROM src WHERE NOT ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s)",
+      "tlp_part_unknown": "SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) IS NULL",
+      "tlp_union": "SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) UNION ALL SELECT a, s, a FROM src WHERE NOT ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) UNION ALL SELECT a, s, a FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) IS NULL",
+      "norec_optimized": "SELECT COUNT(*) FROM src WHERE ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s)",
+      "norec_unoptimized": "SELECT SUM(CASE WHEN ((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s) THEN 1 ELSE NULL END) FROM src",
+      "predicate": "((s IS NULL) <> (a IS NULL)) AND ('' LIKE s) AND ('' LIKE s)"
+    },
+    "tlp_checked": true,
+    "tlp_inconsistent": true,
+    "norec_checked": true,
+    "norec_inconsistent": true
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20645.sql",
+    "status": "done",
+    "queries": {
+      "original": {
+        "sql": "-- 单表：成功，返回 NULL\nSELECT AVG(id)\nFROM s\nWHERE -2 * id NOT IN (id, -id)\n  AND -id = id",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      "tlp_base": {
+        "sql": "/* 单表：成功，返回 NULL */ SELECT AVG(id) FROM s",
+        "ok": true,
+        "rows": [
+          "1.0"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      "tlp_union": {
+        "sql": "SELECT SUM(agg_sum) / NULLIF(SUM(agg_count), 0) FROM (/* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id UNION ALL /* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT NOT -2 * id IN (id, -id) AND -id = id UNION ALL /* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id IS NULL) AS tlp_parts",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      "norec_optimized": {
+        "sql": "/* 单表：成功，返回 NULL */ SELECT COUNT(*) FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id",
+        "ok": true,
+        "rows": [
+          "0"
+        ],
+        "stderr": "",
+        "stdout": ""
+      },
+      "norec_unoptimized": {
+        "sql": "/* 单表：成功，返回 NULL */ SELECT SUM(CASE WHEN NOT -2 * id IN (id, -id) AND -id = id THEN 1 ELSE NULL END) FROM s",
+        "ok": true,
+        "rows": [
+          "NULL"
+        ],
+        "stderr": "",
+        "stdout": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 9,
+    "target_query": "-- 单表：成功，返回 NULL\nSELECT AVG(id)\nFROM s\nWHERE -2 * id NOT IN (id, -id)\n  AND -id = id;",
+    "variants": {
+      "tlp_base": "/* 单表：成功，返回 NULL */ SELECT AVG(id) FROM s",
+      "tlp_part_true": "/* 单表：成功，返回 NULL */ SELECT AVG(id) FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id",
+      "tlp_part_false": "/* 单表：成功，返回 NULL */ SELECT AVG(id) FROM s WHERE NOT NOT -2 * id IN (id, -id) AND -id = id",
+      "tlp_part_unknown": "/* 单表：成功，返回 NULL */ SELECT AVG(id) FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id IS NULL",
+      "tlp_union": "SELECT SUM(agg_sum) / NULLIF(SUM(agg_count), 0) FROM (/* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id UNION ALL /* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT NOT -2 * id IN (id, -id) AND -id = id UNION ALL /* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id IS NULL) AS tlp_parts",
+      "norec_optimized": "/* 单表：成功，返回 NULL */ SELECT COUNT(*) FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id",
+      "norec_unoptimized": "/* 单表：成功，返回 NULL */ SELECT SUM(CASE WHEN NOT -2 * id IN (id, -id) AND -id = id THEN 1 ELSE NULL END) FROM s",
+      "predicate": "NOT -2 * id IN (id, -id) AND -id = id"
+    },
+    "tlp_checked": true,
+    "tlp_inconsistent": true,
+    "norec_checked": true,
+    "norec_inconsistent": true
+  },
+  {
+    "database": "Databend",
+    "source": "/home/lwm/sqlancer/Bugs/Databend/20679.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT id, HEX(ST_ASWKB(g))\nFROM s\nWHERE b = a\nORDER BY id",
+        "ok": true,
+        "rows": [
+          "1\t0101000000000000000000f03f0000000000000040"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 10,
+    "target_query": "SELECT id, HEX(ST_ASWKB(g))\nFROM s\nWHERE b = a\nORDER BY id;",
+    "skip_reason": "ORDER BY is not handled by this batch rewriter"
+  }
+]

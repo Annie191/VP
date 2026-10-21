@@ -1,0 +1,101 @@
+#2418：https://github.com/oceanbase/oceanbase/issues/2418 duc2411
+
+has been reproduced. \
+
+As a temporary workaround, you can bypass it by setting alter system set _pushdown_storage_level=0; in the corresponding user tenant.
+
+#### AVG_NULL_IN_NOT_IN_COUNT_DENOMINATOR_PUSHDOWN
+
+DROP DATABASE IF EXISTS repro_db23_intpart;
+CREATE DATABASE repro_db23_intpart;
+USE repro_db23_intpart;
+
+SET SESSION sql_mode='STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER';
+SET SESSION time_zone='+00:00';
+SET SESSION group_concat_max_len=1048576;
+
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT,
+  c0 DECIMAL(65,30) NULL,
+  c1 BIGINT NOT NULL,
+  PRIMARY KEY (c1, vp_rowid),
+  KEY i1 (c1),
+  KEY i2 (c1, c0)
+) PARTITION BY HASH(c1) PARTITIONS 6;
+
+INSERT INTO src (c0, c1) VALUES
+  (0.2226402813894, 0),
+  (0.6234580868362, 0),
+  (0.7108584509363, 1);
+
+CREATE TABLE l (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c1 BIGINT NOT NULL
+);
+
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL
+);
+
+INSERT INTO l
+SELECT vp_rowid, c1 FROM src ORDER BY vp_rowid;
+
+INSERT INTO r
+SELECT vp_rowid, c0 FROM src ORDER BY vp_rowid;
+
+SELECT DISTINCT AVG(
+  ((('-726911741') NOT IN ((363140572) IS NOT FALSE)) IN
+   (((- (src.c1))) IN
+      ((src.c1) > (NULL),
+       EXISTS (SELECT 1 FROM dual WHERE FALSE),
+       0.30629758711845567)))
+) AS single_ret
+FROM src;
+
+SELECT DISTINCT AVG(
+  ((('-726911741') NOT IN ((363140572) IS NOT FALSE)) IN
+   (((- (q.c1))) IN
+      ((q.c1) > (NULL),
+       EXISTS (SELECT 1 FROM dual WHERE FALSE),
+       0.30629758711845567)))
+) AS split_ret
+FROM (
+  SELECT l.vp_rowid, r.c0, l.c1
+  FROM l
+  JOIN r ON l.vp_rowid = r.vp_rowid
+) q;
+
+single_ret = 0.6667
+split_ret  = 1.0000
+
+单表 EXPLAIN 关键形态：
+SCALAR GROUP BY
+└─ PX COORDINATOR
+   └─ EXCHANGE OUT DISTR
+      └─ MERGE GROUP BY
+         └─ PX PARTITION ITERATOR
+            └─ TABLE FULL SCAN src(i1)
+关键点：
+有 PX PARTITION ITERATOR
+有 pushdown_aggregation
+下推的是这组 SUM/COUNT 聚合
+多表 EXPLAIN 关键形态：
+SCALAR GROUP BY
+└─ MERGE JOIN
+   ├─ TABLE FULL SCAN r
+   └─ TABLE FULL SCAN l
+关键点：
+多表侧没有分区表聚合下推
+只是普通 MERGE JOIN + GROUP BY
+返回 1.0000
+
+AVG(expr) 下推时会拆成 SUM(expr) / COUNT(expr)，其中 COUNT(expr) 应严格忽略 NULL。但在这个版本的分区聚合下推实现中，优化器错误地将局部 COUNT(expr) 替换成了 COUNT(*)（或者合并阶段未能正确还原忽略 NULL 的语义），导致：
+
+SUM = 1 + 1 + 0 = 2
+
+COUNT = 3（错误地包含了 NULL 行）
+
+最终 2/3 ≈ 0.6667
+
+多表查询没有触发下推，直接计算 AVG，正确忽略 NULL，因此得到正确的 1.0000。

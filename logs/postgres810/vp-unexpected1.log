@@ -1,0 +1,162 @@
+[VERTICAL PARTITIONING UNEXPECTED QUERY ERROR]
+Mode: RANDOM_TABLE_REWRITE
+Stage: split-query
+Error text:
+ERROR: variable not found in subplan target list
+Strategy summary: split=EVEN_SPLIT, reconstruction=DERIVED_TABLE, shape=MULTI_COLUMN, prefix=vp_database7_82_
+Strategy counts: split={EMPTY_SPLIT=3, SINGLE_REPLICATED=1, SINGLE_RIGHT_ROW_ID_ONLY=1, SINGLE_LEFT_ROW_ID_ONLY=1, EVEN_SPLIT=19, OVERLAPPED_SPLIT=20, SKEWED_SPLIT=18, TYPE_DIRECTED_SPLIT=18}, reconstruction={JOIN=395, LEFT_RIGHT_JOIN=400, FULL_OUTER_SIMULATION=401, SCALAR_SUBQUERY=393, EXISTS_FILTER=395, IN_FILTER=398, NOT_EXISTS_ANTI=397, DERIVED_TABLE=398, CTE=396, VIEW=400, TEMP_TABLE=278, AGGREGATE_THEN_MERGE=398, ROW_NUMBER_ALIGNMENT=401, JSON_PACK=397, STRING_PACK=398, NATURAL_OR_USING=398, STRAIGHT_JOIN=402, LATERAL_DERIVED=397, DIRECTED_MATERIALIZED_JOIN=405, DIRECTED_PARTITION_JOIN=390}
+Database: database7
+Postgres version: PostgreSQL 18.4 (Debian 18.4-1.pgdg12+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit
+Base table: partition_candidate_0
+Base table DDL: CREATE TABLE "partition_candidate_0" ("vp_key" bigint NOT NULL, "vp_payload" text); indexes=[CREATE INDEX vp_idx_777184457 ON ONLY public.partition_candidate_0 USING btree (vp_key, vp_payload); CREATE INDEX vp_idx_1028914825 ON ONLY public.partition_candidate_0 USING btree (vp_key); CREATE INDEX vp_idx_330786513 ON ONLY public.partition_candidate_0 USING btree (vp_key)]
+Base table engine: N/A
+VP source engine: N/A
+VP left engine: N/A
+VP right engine: N/A
+Base row count: 2
+Base shape: MULTI_COLUMN
+Stable row order: "vp_key", "vp_payload"
+Prefix: vp_database7_82_
+Split strategy: EVEN_SPLIT
+Left columns: {vp_key}
+Right columns: {vp_payload}
+Overlap columns: {}
+Physical foreign key: true
+Reconstruction strategy: DERIVED_TABLE
+Description: shape=MULTI_COLUMN, split=EVEN_SPLIT, reconstruction=DERIVED_TABLE
+Session vars: TimeZone=UTC, statement_timeout=5s, extra_float_digits=0, enable_hashjoin=on, enable_mergejoin=on, enable_nestloop=on, enable_partitionwise_join=on, enable_partition_pruning=on, enable_partitionwise_aggregate=on, enable_parallel_append=on, enable_parallel_hash=on, max_parallel_workers_per_gather=2, min_parallel_table_scan_size=8MB, parallel_setup_cost=1000, parallel_tuple_cost=0.1, work_mem=4MB, jit=on
+Session SET statements:
+SET TimeZone = 'UTC';
+SET statement_timeout = '5s';
+SET extra_float_digits = 0;
+SET enable_hashjoin = 'on';
+SET enable_mergejoin = 'on';
+SET enable_nestloop = 'on';
+SET enable_partitionwise_join = 'on';
+SET enable_partition_pruning = 'on';
+SET enable_partitionwise_aggregate = 'on';
+SET enable_parallel_append = 'on';
+SET enable_parallel_hash = 'on';
+SET max_parallel_workers_per_gather = 2;
+SET min_parallel_table_scan_size = '8MB';
+SET parallel_setup_cost = 1000;
+SET parallel_tuple_cost = 0.1;
+SET work_mem = '4MB';
+SET jit = 'on';
+Setup statements:
+CREATE TABLE "vp_database7_82_source" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "vp_key" bigint NOT NULL, "vp_payload" text COLLATE pg_catalog."default");
+INSERT INTO "vp_database7_82_source" ("vp_rowid", "vp_key", "vp_payload") SELECT ROW_NUMBER() OVER ( ORDER BY "vp_key", "vp_payload") AS "vp_rowid", "vp_key", "vp_payload" FROM "partition_candidate_0" LIMIT 10000;
+CREATE INDEX "vp_database7_82_src_idx_0" ON "vp_database7_82_source" USING btree (vp_key, vp_payload);
+CREATE INDEX "vp_database7_82_src_idx_1" ON "vp_database7_82_source" USING btree (vp_key);
+CREATE INDEX "vp_database7_82_src_idx_2" ON "vp_database7_82_source" USING btree (vp_key);
+CREATE STATISTICS "vp_database7_82_src_stat_0" (ndistinct, dependencies, mcv) ON vp_key, vp_payload FROM "vp_database7_82_source";
+CREATE STATISTICS "vp_database7_82_src_stat_1" (ndistinct, dependencies, mcv) ON vp_key, vp_payload FROM "vp_database7_82_source";
+CREATE STATISTICS "vp_database7_82_src_stat_2" (ndistinct, dependencies, mcv) ON vp_key, vp_payload FROM "vp_database7_82_source";
+CREATE STATISTICS "vp_database7_82_src_stat_3" (ndistinct, dependencies, mcv) ON vp_key, vp_payload FROM "vp_database7_82_source";
+CREATE STATISTICS "vp_database7_82_src_stat_4" (ndistinct, dependencies, mcv) ON vp_key, vp_payload FROM "vp_database7_82_source";
+ANALYZE "vp_database7_82_source";
+CREATE TABLE "vp_database7_82_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "vp_key" bigint NULL) PARTITION BY RANGE ("vp_rowid");
+CREATE TABLE "vp_database7_82_l_p1" PARTITION OF "vp_database7_82_l" FOR VALUES FROM (1) TO (2);
+CREATE TABLE "vp_database7_82_l_p2" PARTITION OF "vp_database7_82_l" FOR VALUES FROM (2) TO (3);
+CREATE TABLE "vp_database7_82_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "vp_payload" text COLLATE pg_catalog."default" NULL) PARTITION BY RANGE ("vp_rowid");
+CREATE TABLE "vp_database7_82_r_p1" PARTITION OF "vp_database7_82_r" FOR VALUES FROM (1) TO (2);
+CREATE TABLE "vp_database7_82_r_p2" PARTITION OF "vp_database7_82_r" FOR VALUES FROM (2) TO (3);
+INSERT INTO "vp_database7_82_l" ("vp_rowid", "vp_key") SELECT "vp_rowid", "vp_key" FROM "vp_database7_82_source";
+INSERT INTO "vp_database7_82_r" ("vp_rowid", "vp_payload") SELECT "vp_rowid", "vp_payload" FROM "vp_database7_82_source";
+ALTER TABLE "vp_database7_82_l" ALTER COLUMN "vp_key" SET NOT NULL;
+CREATE INDEX "vp_database7_82_vp_database7_82_l_idx_0" ON "vp_database7_82_l" USING btree (vp_key);
+CREATE INDEX "vp_database7_82_vp_database7_82_l_idx_1" ON "vp_database7_82_l" USING btree (vp_key);
+CREATE INDEX "vp_database7_82_src_asym_944343817" ON "vp_database7_82_source"("vp_payload", "vp_rowid");
+CREATE INDEX "vp_database7_82_idx_l_926674297" ON "vp_database7_82_l"("vp_key");
+DROP VIEW IF EXISTS "vp_database7_82_v";
+CREATE VIEW "vp_database7_82_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload" FROM "vp_database7_82_l" l JOIN "vp_database7_82_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database7_82_v";
+CREATE VIEW "vp_database7_82_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload" FROM "vp_database7_82_l" l JOIN "vp_database7_82_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database7_82_v";
+CREATE VIEW "vp_database7_82_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload" FROM "vp_database7_82_l" l JOIN "vp_database7_82_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database7_82_v";
+CREATE VIEW "vp_database7_82_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload" FROM "vp_database7_82_l" l JOIN "vp_database7_82_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP VIEW IF EXISTS "vp_database7_82_v";
+CREATE VIEW "vp_database7_82_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload" FROM "vp_database7_82_l" l JOIN "vp_database7_82_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database7_82_joined";
+CREATE TEMP TABLE "vp_database7_82_joined" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "vp_key" bigint NULL, "vp_payload" text COLLATE pg_catalog."default" NULL);
+INSERT INTO "vp_database7_82_joined" ("vp_rowid", "vp_key", "vp_payload") SELECT l."vp_rowid" AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload" FROM "vp_database7_82_l" l JOIN "vp_database7_82_r" r ON l."vp_rowid" = r."vp_rowid";
+ALTER TABLE "vp_database7_82_joined" ALTER COLUMN "vp_key" SET NOT NULL;
+CREATE INDEX "vp_database7_82_vp_database7_82_joined_idx_0" ON "vp_database7_82_joined" USING btree (vp_key, vp_payload);
+CREATE INDEX "vp_database7_82_vp_database7_82_joined_idx_1" ON "vp_database7_82_joined" USING btree (vp_key);
+CREATE INDEX "vp_database7_82_vp_database7_82_joined_idx_2" ON "vp_database7_82_joined" USING btree (vp_key);
+CREATE STATISTICS "vp_database7_82_temp_stat_0" (ndistinct, dependencies, mcv) ON vp_key, vp_payload FROM "vp_database7_82_joined";
+ANALYZE "vp_database7_82_joined";
+CREATE STATISTICS "vp_database7_82_temp_stat_1" (ndistinct, dependencies, mcv) ON vp_key, vp_payload FROM "vp_database7_82_joined";
+ANALYZE "vp_database7_82_joined";
+CREATE STATISTICS "vp_database7_82_temp_stat_2" (ndistinct, dependencies, mcv) ON vp_key, vp_payload FROM "vp_database7_82_joined";
+ANALYZE "vp_database7_82_joined";
+CREATE STATISTICS "vp_database7_82_temp_stat_3" (ndistinct, dependencies, mcv) ON vp_key, vp_payload FROM "vp_database7_82_joined";
+ANALYZE "vp_database7_82_joined";
+CREATE STATISTICS "vp_database7_82_temp_stat_4" (ndistinct, dependencies, mcv) ON vp_key, vp_payload FROM "vp_database7_82_joined";
+ANALYZE "vp_database7_82_joined";
+SET enable_partitionwise_join = on;
+SET enable_partitionwise_join = on;
+SET enable_partitionwise_join = on;
+SET enable_partitionwise_join = on;
+SET enable_partitionwise_join = on;
+VP table DDLs:
+vp_database7_82_source: CREATE TABLE "vp_database7_82_source" ("vp_rowid" bigint NOT NULL, "vp_key" bigint NOT NULL, "vp_payload" text); indexes=[CREATE UNIQUE INDEX vp_database7_82_source_pkey ON public.vp_database7_82_source USING btree (vp_rowid); CREATE INDEX vp_database7_82_src_idx_0 ON public.vp_database7_82_source USING btree (vp_key, vp_payload); CREATE INDEX vp_database7_82_src_idx_1 ON public.vp_database7_82_source USING btree (vp_key); CREATE INDEX vp_database7_82_src_idx_2 ON public.vp_database7_82_source USING btree (vp_key); CREATE INDEX vp_database7_82_src_asym_944343817 ON public.vp_database7_82_source USING btree (vp_payload, vp_rowid)]
+vp_database7_82_l: CREATE TABLE "vp_database7_82_l" ("vp_rowid" bigint NOT NULL, "vp_key" bigint NOT NULL); indexes=[CREATE UNIQUE INDEX vp_database7_82_l_pkey ON ONLY public.vp_database7_82_l USING btree (vp_rowid); CREATE INDEX vp_database7_82_vp_database7_82_l_idx_0 ON ONLY public.vp_database7_82_l USING btree (vp_key); CREATE INDEX vp_database7_82_vp_database7_82_l_idx_1 ON ONLY public.vp_database7_82_l USING btree (vp_key); CREATE INDEX vp_database7_82_idx_l_926674297 ON ONLY public.vp_database7_82_l USING btree (vp_key)]
+vp_database7_82_r: CREATE TABLE "vp_database7_82_r" ("vp_rowid" bigint NOT NULL, "vp_payload" text); indexes=[CREATE UNIQUE INDEX vp_database7_82_r_pkey ON ONLY public.vp_database7_82_r USING btree (vp_rowid)]
+vp_database7_82_v: CREATE TABLE "vp_database7_82_v" ("vp_rowid" bigint, "vp_key" bigint, "vp_payload" text)
+vp_database7_82_joined: CREATE TABLE "vp_database7_82_joined" ()
+VP source snapshot:
+SELECT "vp_rowid", "vp_key", "vp_payload" FROM "vp_database7_82_source" ORDER BY "vp_rowid";
+1 | -9223372036854775808 | NULL
+2 | -9223372036854775808 | NULL
+VP left snapshot:
+SELECT "vp_rowid", "vp_key" FROM "vp_database7_82_l" ORDER BY "vp_rowid";
+1 | -9223372036854775808
+2 | -9223372036854775808
+VP right snapshot:
+SELECT "vp_rowid", "vp_payload" FROM "vp_database7_82_r" ORDER BY "vp_rowid";
+1 | NULL
+2 | NULL
+Failing SQL: SELECT DISTINCT (((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))) FROM (SELECT l."vp_rowid" AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload" FROM (SELECT * FROM "vp_database7_82_l") l JOIN (SELECT * FROM "vp_database7_82_r") r ON l."vp_rowid" = r."vp_rowid") "vp_database7_82_source" WHERE (NOT ((((vp_database7_82_source.vp_rowid) BETWEEN SYMMETRIC (vp_database7_82_source.vp_rowid) AND (vp_database7_82_source.vp_key))AND((((vp_database7_82_source.vp_payload COLLATE "en_US.utf8"))LIKE(('%0' COLLATE "en_US.utf8"))))))) IS FALSE GROUP BY ROLLUP ((((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range))))))))) HAVING MIN("vp_key") IS NOT DISTINCT FROM MAX("vp_key")
+Single query: SELECT DISTINCT (((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))) FROM "vp_database7_82_source" "vp_database7_82_source" WHERE (NOT ((((vp_database7_82_source.vp_rowid) BETWEEN SYMMETRIC (vp_database7_82_source.vp_rowid) AND (vp_database7_82_source.vp_key))AND((((vp_database7_82_source.vp_payload COLLATE "en_US.utf8"))LIKE(('%0' COLLATE "en_US.utf8"))))))) IS FALSE GROUP BY ROLLUP ((((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range))))))))) HAVING MIN("vp_key") IS NOT DISTINCT FROM MAX("vp_key")
+Split query: SELECT DISTINCT (((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))) FROM (SELECT l."vp_rowid" AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload" FROM (SELECT * FROM "vp_database7_82_l") l JOIN (SELECT * FROM "vp_database7_82_r") r ON l."vp_rowid" = r."vp_rowid") "vp_database7_82_source" WHERE (NOT ((((vp_database7_82_source.vp_rowid) BETWEEN SYMMETRIC (vp_database7_82_source.vp_rowid) AND (vp_database7_82_source.vp_key))AND((((vp_database7_82_source.vp_payload COLLATE "en_US.utf8"))LIKE(('%0' COLLATE "en_US.utf8"))))))) IS FALSE GROUP BY ROLLUP ((((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range))))))))) HAVING MIN("vp_key") IS NOT DISTINCT FROM MAX("vp_key")
+Failing query plan:
+EXPLAIN (FORMAT TEXT) SELECT DISTINCT (((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))) FROM (SELECT l."vp_rowid" AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload" FROM (SELECT * FROM "vp_database7_82_l") l JOIN (SELECT * FROM "vp_database7_82_r") r ON l."vp_rowid" = r."vp_rowid") "vp_database7_82_source" WHERE (NOT ((((vp_database7_82_source.vp_rowid) BETWEEN SYMMETRIC (vp_database7_82_source.vp_rowid) AND (vp_database7_82_source.vp_key))AND((((vp_database7_82_source.vp_payload COLLATE "en_US.utf8"))LIKE(('%0' COLLATE "en_US.utf8"))))))) IS FALSE GROUP BY ROLLUP ((((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range))))))))) HAVING MIN("vp_key") IS NOT DISTINCT FROM MAX("vp_key");
+<unavailable: ERROR: variable not found in subplan target list>
+Single query plan:
+EXPLAIN (FORMAT TEXT) SELECT DISTINCT (((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))) FROM "vp_database7_82_source" "vp_database7_82_source" WHERE (NOT ((((vp_database7_82_source.vp_rowid) BETWEEN SYMMETRIC (vp_database7_82_source.vp_rowid) AND (vp_database7_82_source.vp_key))AND((((vp_database7_82_source.vp_payload COLLATE "en_US.utf8"))LIKE(('%0' COLLATE "en_US.utf8"))))))) IS FALSE GROUP BY ROLLUP ((((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range))))))))) HAVING MIN("vp_key") IS NOT DISTINCT FROM MAX("vp_key");
+Unique  (cost=1.09..1.10 rows=2 width=32)
+  ->  Sort  (cost=1.09..1.10 rows=2 width=32)
+        Sort Key: ('empty'::int4range)
+        ->  MixedAggregate  (cost=0.00..1.08 rows=2 width=32)
+              Hash Key: 'empty'::int4range
+              Group Key: ()
+              Filter: (NOT (min(vp_key) IS DISTINCT FROM max(vp_key)))
+              ->  Seq Scan on vp_database7_82_source  (cost=0.00..1.04 rows=1 width=40)
+                    Filter: (((((vp_rowid < vp_rowid) OR (vp_rowid > vp_key)) AND ((vp_rowid < vp_key) OR (vp_rowid > vp_rowid))) OR ((vp_payload)::text !~~ '%0'::text COLLATE "en_US.utf8")) IS FALSE)
+Split query plan:
+EXPLAIN (FORMAT TEXT) SELECT DISTINCT (((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))) FROM (SELECT l."vp_rowid" AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload" FROM (SELECT * FROM "vp_database7_82_l") l JOIN (SELECT * FROM "vp_database7_82_r") r ON l."vp_rowid" = r."vp_rowid") "vp_database7_82_source" WHERE (NOT ((((vp_database7_82_source.vp_rowid) BETWEEN SYMMETRIC (vp_database7_82_source.vp_rowid) AND (vp_database7_82_source.vp_key))AND((((vp_database7_82_source.vp_payload COLLATE "en_US.utf8"))LIKE(('%0' COLLATE "en_US.utf8"))))))) IS FALSE GROUP BY ROLLUP ((((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))))-((((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))))+((((('(294781,700672)'::int4range)+('(294781,700672)'::int4range)))+((('(294781,700672)'::int4range)+('(294781,700672)'::int4range))))))))) HAVING MIN("vp_key") IS NOT DISTINCT FROM MAX("vp_key");
+<unavailable: ERROR: variable not found in subplan target list>
+Java stack trace:
+org.postgresql.util.PSQLException: ERROR: variable not found in subplan target list
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2676)
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2366)
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:356)
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:496)
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:413)
+	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:333)
+	at org.postgresql.jdbc.PgStatement.executeCachedSql(PgStatement.java:319)
+	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:295)
+	at org.postgresql.jdbc.PgStatement.executeQuery(PgStatement.java:244)
+	at sqlancer.postgres.oracle.PostgresVerticalPartitioningOracle.getResultMultiset(PostgresVerticalPartitioningOracle.java:4295)
+	at sqlancer.postgres.oracle.PostgresVerticalPartitioningOracle.comparePair(PostgresVerticalPartitioningOracle.java:3625)
+	at sqlancer.postgres.oracle.PostgresVerticalPartitioningOracle.check(PostgresVerticalPartitioningOracle.java:458)
+	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+	at sqlancer.Main$DBMSExecutor.run(Main.java:486)
+	at sqlancer.Main$2.run(Main.java:703)
+	at sqlancer.Main$2.runThread(Main.java:685)
+	at sqlancer.Main$2.run(Main.java:676)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)

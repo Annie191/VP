@@ -1,0 +1,88 @@
+https://bugs.mysql.com/bug.php?id=120801&thankws=4   not a bug.
+
+DROP DATABASE IF EXISTS codex_db10;
+CREATE DATABASE codex_db10;
+USE codex_db10;
+
+SET SESSION sql_mode =
+'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+
+SET SESSION optimizer_switch =
+'index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,engine_condition_pushdown=on,index_condition_pushdown=on,mrr=on,mrr_cost_based=on,block_nested_loop=on,batched_key_access=off,materialization=on,semijoin=on,loosescan=on,firstmatch=on,duplicateweedout=on,subquery_materialization_cost_based=on,use_index_extensions=on,condition_fanout_filter=on,derived_merge=on,use_invisible_indexes=off,skip_scan=on,hash_join=on,subquery_to_derived=off,prefer_ordering_index=on,hypergraph_optimizer=off,derived_condition_pushdown=on,hash_set_operations=on';
+
+SET SESSION big_tables = 0;
+SET SESSION internal_tmp_mem_storage_engine = 'TempTable';
+
+CREATE TABLE s(
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL,
+  c1 BIGINT NULL,
+  c2 FLOAT NULL,
+  c3 BIGINT NULL,
+  UNIQUE KEY u0(c1, c2)
+) ENGINE=InnoDB;
+
+INSERT INTO s(c0, c1, c2, c3) VALUES
+  (NULL, NULL, NULL, NULL),
+  (0E-30, 1, 0.0, 0),
+  (1528489958.000000000000000000000000000000, 0, NULL, NULL);
+
+CREATE TABLE l(
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c2 FLOAT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE r(
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c1 BIGINT NULL,
+  c3 BIGINT NULL,
+  c0 DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+
+INSERT INTO l(vp_rowid, c2)
+SELECT vp_rowid, c2 FROM s;
+
+INSERT INTO r(vp_rowid, c1, c3, c0)
+SELECT vp_rowid, c1, c3, c0 FROM s;
+
+SELECT SUM(c1) AS ref0
+FROM s
+WHERE LEAST(0.6155687134269684, 0.6080817381701805) = c1;
+
+SELECT SUM(d.c1) AS ref0
+FROM (
+  WITH lq AS (
+    SELECT ROW_NUMBER() OVER (ORDER BY vp_rowid) AS rn, vp_rowid, c2
+    FROM l
+  ),
+  rq AS (
+    SELECT ROW_NUMBER() OVER (ORDER BY vp_rowid) AS rn, vp_rowid, c1, c3, c0
+    FROM r
+  )
+  SELECT
+    lq.vp_rowid AS vp_rowid,
+    rq.c0 AS c0,
+    rq.c1 AS c1,
+    lq.c2 AS c2,
+    rq.c3 AS c3
+  FROM lq
+  JOIN rq ON lq.rn = rq.rn
+) d
+WHERE LEAST(0.6155687134269684, 0.6080817381701805) = d.c1;
+
+原查询结果：
+1
+
+重构查询结果：
+NULL
+
+关键计划片段是：
+Aggregate: sum(rq.c1)
+  -> Nested loop inner join
+    -> Filter: (<cache>(least(0.6155687134269684,0.6080817381701805)) = rq.c1)
+    -> Index lookup on lq using <auto_key0> (rn = rq.rn)
+本质是 ROW_NUMBER_ALIGNMENT 重构后的谓词比较不一致。同一个 LEAST(double, double) = BIGINT 条件，在原表上能命中 c1=1 那行，在 row-number 对齐后的结果上却不命中。
+
+比较方向的选择性差异：
+原查询：DOUBLE 常量 = BIGINT 列 → 优化器选择"将常量转为列的类型"来利用索引 → 0.608... → BIGINT → 1 → 匹配成功
+重构查询：DOUBLE 常量 = BIGINT 列(派生表) → 优化器可能选择"将列转为常量类型"（或无法下推索引）→ 1 → DOUBLE → 1.0 → 0.608... ≠ 1.0 → 匹配失败

@@ -1,0 +1,75 @@
+https://github.com/databendlabs/databend/issues/20679  confirming
+
+DROP DATABASE IF EXISTS repro_databend920_db3_min;
+CREATE DATABASE repro_databend920_db3_min;
+USE repro_databend920_db3_min;
+
+SET enable_query_result_cache = 0;
+
+CREATE TABLE s (
+    id BIGINT NOT NULL,
+    a DOUBLE NULL,
+    b DOUBLE NOT NULL,
+    g GEOMETRY NULL
+) ENGINE = FUSE CLUSTER BY (id);
+
+CREATE TABLE l (
+    id BIGINT NOT NULL,
+    a DOUBLE NULL
+) ENGINE = FUSE CLUSTER BY (id);
+
+CREATE TABLE r (
+    id BIGINT NOT NULL,
+    b DOUBLE NULL,
+    g GEOMETRY NULL
+) ENGINE = FUSE CLUSTER BY (id);
+
+INSERT INTO s VALUES
+    (1, 1.0,  1.0, ST_GEOMETRYFROMWKT('POINT(1 2)')),
+    (2, NULL, 0.0, ST_GEOMETRYFROMWKT('POINT(0 0)'));
+
+INSERT INTO l
+SELECT id, a FROM s;
+
+INSERT INTO r
+SELECT id, b, g FROM s;
+
+SELECT id, HEX(ST_ASWKB(g))
+FROM s
+WHERE b = a
+ORDER BY id;
+
+SELECT id, HEX(ST_ASWKB(g))
+FROM (
+    SELECT
+        l.id,
+        l.a,
+        (SELECT r.b FROM r WHERE r.id = l.id) AS b,
+        (SELECT r.g FROM r WHERE r.id = l.id) AS g
+    FROM l
+    WHERE l.id IN (
+        SELECT id FROM r
+    )
+) x
+WHERE b = a
+ORDER BY id;
+
+单表
+1 | 0101000000000000000000f03f0000000000000040
+多表
+1 | 0101000000000000000000f03f0000000000000040
+2 | 010100000000000000000000000000000000000000
+
+单表把等值条件下推到 FUSE 扫描；多表把它并入标量子查询改写产生的 HashJoin 键。多表计划没有独立的 Filter，但不能说条件完全消失了。
+单表：
+TableScan(s)
+  push downs: is_true(CAST(s.b AS Float64 NULL) = s.a)
+→ EvalScalar → Sort
+多表：
+TableScan(l) + TableScan(r)
+→ LEFT SEMI HashJoin          -- l.id IN (SELECT id FROM r)
+→ INNER HashJoin              -- 键包含 l.a 与标量子查询得到的 r.b
+→ RIGHT SINGLE HashJoin       -- 取相关标量子查询的 g
+→ EvalScalar → Sort
+
+a=NULL 的行仅在相关子查询返回 b=0.0 时被错误保留；改成 1.0 或 2.0 就不再出现。Databend 优化器在解关联相关标量子查询时，将 b = a 这个等值条件转换为 HashJoin 的键（key），但在这个过程中，它可能错误地处理了 a 列的 NULL 值。

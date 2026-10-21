@@ -1,0 +1,144 @@
+https://github.com/duckdb/duckdb/issues/24795 ok
+
+# GROUP BY ALL 在 NOCASE collation 下语义丢失，与显式 GROUP BY 结果不一致
+
+## 问题描述
+
+对于类型为 `VARCHAR COLLATE NOCASE` 的列，以下两个查询在语义上应当等价：
+
+```sql
+SELECT c0, COUNT(*) FROM t GROUP BY ALL;
+SELECT c0, COUNT(*) FROM t GROUP BY c0;
+```
+
+但在 DuckDB v1.5.4 中，二者结果不同：
+
+- `GROUP BY ALL` 将 `'A'` 和 `'a'` 视为不同值；
+- `GROUP BY c0` 将 `'A'` 和 `'a'` 合并为一组。
+
+这表明 `GROUP BY ALL` 在展开分组表达式时没有正确继承列的 collation 元数据。该问题在单表到多表重构后依然可复现，其根因是 NOCASE collation 下的分组语义发散。
+
+## 复现步骤
+
+以下 SQL 可在 DuckDB v1.5.4 上复现此问题。由于 DuckDB 不支持 `CREATE DATABASE`/`USE`，表名使用 `database8` 前缀以反映原始日志编号。
+
+```sql
+DROP TABLE IF EXISTS repro_duckdb_database8_min_source;
+DROP TABLE IF EXISTS repro_duckdb_database8_min_l;
+DROP TABLE IF EXISTS repro_duckdb_database8_min_r;
+
+CREATE TABLE repro_duckdb_database8_min_source (
+    vp_rowid BIGINT,
+    c0 VARCHAR COLLATE NOCASE
+);
+
+INSERT INTO repro_duckdb_database8_min_source
+VALUES
+    (0, 'A'),
+    (1, 'a'),
+    (2, 'b');
+
+-- VP 重构后的多表结构
+CREATE TABLE repro_duckdb_database8_min_l AS
+SELECT vp_rowid, c0
+FROM repro_duckdb_database8_min_source;
+
+CREATE TABLE repro_duckdb_database8_min_r AS
+SELECT vp_rowid
+FROM repro_duckdb_database8_min_source;
+
+-- 查询 1：单表，使用 GROUP BY ALL
+SELECT c0, COUNT(*) AS vp_count
+FROM repro_duckdb_database8_min_source
+GROUP BY ALL;
+
+-- 查询 2：多表，显式 GROUP BY c0
+SELECT c0, COUNT(*) AS vp_count
+FROM (
+    SELECT l.vp_rowid, l.c0
+    FROM repro_duckdb_database8_min_l l
+    JOIN repro_duckdb_database8_min_r r
+      ON l.vp_rowid = r.vp_rowid
+) repro_duckdb_database8_min_source
+GROUP BY c0;
+```
+
+实际结果：
+
+```text
+-- 单表 GROUP BY ALL：
+A | 1
+a | 1
+b | 1
+
+-- 多表显式 GROUP BY c0：
+A | 2
+b | 1
+```
+
+预期结果（两个查询在 NOCASE collation 下应表现一致，即合并 `'A'` 和 `'a'`）：
+
+```text
+A | 2
+b | 1
+```
+
+## 执行计划差异
+
+单表 `GROUP BY ALL` 的执行计划使用了 perfect hash group by，且没有 collation 感知的分组键：
+
+```text
+PROJECTION
+  PERFECT_HASH_GROUP_BY
+    Groups: #0
+    count_star()
+      PROJECTION
+        SEQ_SCAN repro_duckdb_database8_min_source
+```
+
+关键点：计划中没有 collation 专用分组键。
+
+多表显式 `GROUP BY c0` 的计划引入了 collation 感知的分组步骤：
+
+```text
+PROJECTION
+  HASH_GROUP_BY
+    Groups: #0
+    __collated_group
+    count_star()
+      PROJECTION
+        lower(c0)
+        c0
+          PROJECTION
+            HASH_JOIN
+              l.vp_rowid = r.vp_rowid
+                SEQ_SCAN repro_duckdb_database8_min_l
+                SEQ_SCAN repro_duckdb_database8_min_r
+```
+
+关键点：重构侧出现了 `lower(c0)` 和 `__collated_group`，导致 `'A'` 和 `'a'` 被合并。
+
+## 根因分析
+
+DuckDB 在将 `GROUP BY ALL` 展开为具体分组表达式时，丢失了原始列的 collation 元数据。优化器因此无法识别该分组键是 collation 感知的，可能选择 `PERFECT_HASH_GROUP_BY`，按原始字节分组，从而破坏了 NOCASE 语义。相比之下，显式 `GROUP BY c0` 保留了 collation，并正确使用了 collation 感知的 hash group by。
+
+该行为不是假阳性，而是一个真实的语义缺陷，影响了从单表到多表形式重写的查询（如日志 `database1.log` 和 `database8.log` 所示）。
+
+## 环境信息
+
+- OS: Ubuntu 20.04.6 LTS, x86_64
+- DuckDB Version: v1.5.4
+- DuckDB Client: Java JDBC（同时可通过 DuckDB CLI 复现）
+- Hardware: Intel Xeon Gold 5218R, 80 cores, 1486G RAM
+- JVM: OpenJDK 17.0.15（与此语义问题无关）
+
+## 提交前确认
+
+- 是，我已包含相关配置（操作系统、架构、DuckDB 版本）。
+- 是，我已包含复现问题所需的全部代码。
+- 是，我已包含相关数据集（上方已提供 SQL DDL/DML）。
+
+## 身份信息
+
+Full Name: [Your Name]  
+Affiliation: [Your Affiliation]

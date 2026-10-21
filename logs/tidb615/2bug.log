@@ -1,0 +1,108 @@
+#69293 https://github.com/pingcap/tidb/issues/69293 confirmed as a bug.
+
+DROP DATABASE IF EXISTS repro_tidb615_db2_min;
+CREATE DATABASE repro_tidb615_db2_min;
+USE repro_tidb615_db2_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+
+CREATE TABLE src(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 BIGINT
+);
+
+INSERT INTO src(c0) VALUES (10);
+
+CREATE TABLE l(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 BIGINT
+);
+
+CREATE TABLE r(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 BIGINT
+);
+
+INSERT INTO l SELECT id, c0 FROM src;
+INSERT INTO r SELECT id, c0 FROM src;
+
+-- 单表：返回 1 行
+SELECT BIT_AND(id) AS a, id
+FROM src
+WHERE '^' >= BINARY(id | '2020-01-18')
+GROUP BY id;
+
+-- split/join：错误地返回空集
+SELECT BIT_AND(v.id) AS a, v.id
+FROM (
+  SELECT l.id, l.c0
+  FROM l JOIN r ON l.id = r.id
+) v
+WHERE '^' >= BINARY(v.id | '2020-01-18')
+GROUP BY v.id;
+
+实测结果：
+-- single
++---+----+
+| a | id |
++---+----+
+| 1 |  1 |
++---+----+
+
+-- split/join
+Empty set
+
+关键执行计划：
+-- 单表
+Projection_6              root      ifnull(cast(src.id, bigint UNSIGNED BINARY), 18446744073709551615), src.id
+└─TableReader_9           root      data:Selection_8
+  └─Selection_8           cop[tikv] ge("^", cast(bitor(src.id, 2020), binary(1)))
+    └─TableFullScan_7     cop[tikv] table:src
+
+-- split/join
+Projection_12             root      ifnull(cast(l.id, bigint UNSIGNED BINARY), 18446744073709551615), l.id
+└─MergeJoin_13            root      inner join, left key:l.id, right key:r.id
+  ├─TableReader_33        root      data:Selection_32
+  │ └─Selection_32        cop[tikv] ge("^", from_binary(cast(bitor(r.id, 2020), binary(1))))
+  │   └─TableFullScan_31  cop[tikv] table:r
+  └─TableReader_30        root      data:Selection_29
+    └─Selection_29        cop[tikv] ge("^", cast(bitor(l.id, 2020), binary(1)))
+      └─TableFullScan_28  cop[tikv] table:l
+这里最可疑的差异是 split/join 计划中 Build 侧谓词变成了：
+ge("^", from_binary(cast(bitor(r.id, 2020), binary(1))))
+而单表/Probe 侧是：
+ge("^", cast(bitor(id, 2020), binary(1)))
+from_binary(...) 这一层导致 join 侧把同一谓词判断成 false，最终 join 结果为空。这个 bug 更像是 join 谓词下推/复制到两侧后，BINARY 表达式被改写不一致。
+
+JOIN 的 WHERE 谓词被下推/复制到 Build/Probe 两侧时，BINARY(...) 表达式被不一致地改写：一侧加了 from_binary(...)，另一侧没有，导致谓词判定结果不同，最终 JOIN 返回空集。
+
+单表查询
+WHERE 条件拆解
+| 步骤 | 表达式                  | 求值                                                                          |
+| -- | -------------------- | --------------------------------------------------------------------------- |
+| 1  | `id \| '2020-01-18'` | `1 \| '2020-01-18'` → 字符串 `'2020-01-18'` 转整数 `2020`，然后 `1 \| 2020` = `2021` |
+| 2  | `BINARY(2021)`       | 将 `2021` 转为二进制字符串，即 `'2021'` 的二进制表示                   
+                      |
+| 3  | `'^' >= BINARY(...)` | `'^'` 是字符串，`BINARY(...)` 也是二进制字符串，按字节比较                                     |
+
+
+关键点：BINARY 是类型转换运算符，将后续表达式结果转为 BINARY（二进制字符串）类型。
+
+
+ Split/Join 查询
+
+逻辑等价：子查询 v 就是 l JOIN r ON l.id = r.id，结果只有 1 行 (id=1, c0=10)。加上同样的 WHERE 条件，应该也返回 1 行。
+实测：Empty set（空集）—— Bug！
+
+为什么优化器会加 from_binary()？
+猜测是 TiDB 表达式改写/下推过程中的类型推导 Bug：
+JOIN 条件下推时，需要将谓词复制到两侧
+在处理 BINARY(...) 表达式时，优化器可能试图"规范化"类型
+对 Build 侧（r 表），错误地应用了 from_binary() 来"抵消"之前的 cast(..., binary)
+但 BINARY 是类型转换运算符，不是普通函数，不能简单用 from_binary 还原
+或者：
+BINARY expr 在 AST 中被表示为 Cast(expr, BinaryCharset)
+下推时，Build 侧的表达式经过某种"反序列化/重新构造"
+重新构造时错误地包装了 from_binary
+

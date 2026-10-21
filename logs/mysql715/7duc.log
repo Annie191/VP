@@ -1,0 +1,93 @@
+https://bugs.mysql.com/bug.php?id=120967&thanks=4    
+This is fixed in the upcoming MySQL-9.7 LTS release. Marking this as duplicate of Bug#120429.
+
+DROP DATABASE IF EXISTS vp714_d7_repro;
+CREATE DATABASE vp714_d7_repro;
+USE vp714_d7_repro;
+
+CREATE TABLE s (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DECIMAL NULL,
+  UNIQUE KEY s_idx(c0 DESC)
+) ENGINE=InnoDB;
+
+INSERT INTO s(c0) VALUES (NULL), (1), (735016270);
+
+CREATE TABLE l (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE r LIKE l;
+
+INSERT INTO l SELECT * FROM s;
+INSERT INTO r SELECT * FROM s;
+
+SELECT
+  'single' AS q,
+  818895259 AS ref0,
+  VAR_SAMP(vp_rowid) AS ref1,
+  STD(vp_rowid) AS ref2
+FROM s
+WHERE CASE IFNULL(NULL, c0)
+  WHEN 1 THEN FALSE
+  ELSE -c0
+END
+ORDER BY vp_rowid
+LIMIT 3;
+
+SELECT
+  'split' AS q,
+  818895259 AS ref0,
+  VAR_SAMP(vp_rowid) AS ref1,
+  STD(vp_rowid) AS ref2
+FROM (
+  SELECT l.vp_rowid AS vp_rowid, r.c0 AS c0
+  FROM (SELECT * FROM l) l
+  JOIN (SELECT * FROM r) r
+    ON l.vp_rowid = r.vp_rowid
+) s
+WHERE CASE IFNULL(NULL, c0)
+  WHEN 1 THEN FALSE
+  ELSE -c0
+END
+ORDER BY vp_rowid
+LIMIT 3;
+
+single: ref0=818895259, ref1=NULL, ref2=0
+split : ref0=818895259, ref1=0.5,  ref2=0.5
+
+-- single
+-> Limit: 3 row(s)  (cost=1.24 rows=1)
+    -> Aggregate: var_samp(s.vp_rowid), std(s.vp_rowid)  (cost=1.24 rows=1)
+        -> Filter: (0 <> (case ifnull(NULL,s.c0) when 1 then false else -(s.c0) end))  (cost=0.55 rows=3)
+            -> Covering index scan on s using s_idx  (cost=0.55 rows=3)
+
+-- split
+-> Limit: 3 row(s)  (cost=2.29 rows=1)
+    -> Aggregate: var_samp(l.vp_rowid), std(l.vp_rowid)  (cost=2.29 rows=1)
+        -> Nested loop inner join  (cost=1.6 rows=3)
+            -> Covering index scan on l using PRIMARY  (cost=0.55 rows=3)
+            -> Filter: (0 <> (case ifnull(NULL,r.c0) when 1 then false else -(r.c0) end))  (cost=0.283 rows=1)
+                -> Single-row index lookup on r using PRIMARY (vp_rowid = l.vp_rowid)  (cost=0.283 rows=1)
+
+如果把 s 上的 UNIQUE KEY(c0 DESC) 去掉、改成升序索引，或者单表查询 FORCE INDEX(PRIMARY)，单表结果会变成和 split 一致的 0.5/0.5。所以这个候选很像 MySQL 在 DECIMAL DESC 覆盖索引扫描下，对 CASE IFNULL(NULL,c0) ... ELSE -c0 END 谓词求值/过滤出了问题。
+
+查询的 WHERE 条件等价于：
+
+sql
+CASE c0 WHEN 1 THEN FALSE ELSE -c0 END <> 0
+即只保留 c0 IS NOT NULL AND c0 <> 1 AND c0 <> 0 的行。表中数据为 NULL, 1, 735016270，预期仅 c0=735016270 一行满足条件。
+聚合 VAR_SAMP / STD 对单行应返回 NULL / 0（正确结果），而对两行（c0=1 和 735016270）则返回 0.5 / 0.5。
+
+单表 + 降序索引扫描 → 结果正确（单行）
+
+单表 + 升序索引/PRIMARY，或 JOIN 拆分 → 结果错误（两行）
+
+在 ICP 求值 CASE 时，存储引擎错误地处理了 DECIMAL 列：
+
+对 c0 = 1 的行，CASE c0 WHEN 1 THEN 0 ELSE -c0 END 理应为 0，从而被 0 <> 0 过滤。
+
+但由于 ICP 代码对 DECIMAL 的取负 (-c0) 和比较运算使用了不正确的内部格式（例如直接对 DECIMAL 的整型表示做运算），导致 WHEN 1 分支未匹配，错误地落入 ELSE -c0，得到 -1（或其它非零值）。
+
+0 <> -1 为真，该行被错误保留，致使结果集多出一行。

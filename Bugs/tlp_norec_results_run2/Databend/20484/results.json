@@ -1,0 +1,17 @@
+{
+  "database": "Databend",
+  "source": "/home/lwm/sqlancer/Bugs/Databend/20484.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT c2int % 1.0 AS e1, -c2int AS e2\nFROM source\nORDER BY c2int % 1.0, -c2int",
+      "ok": false,
+      "rows": [],
+      "stderr": "ERROR 1105 (HY000) at line 3: UnwindError. Code: 1104, Text = assertion failed: partition.total > 0.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "SELECT c2int % 1.0 AS e1, -c2int AS e2\nFROM source\nORDER BY c2int % 1.0, -c2int;",
+  "skip_reason": "ORDER BY is not handled by this batch rewriter"
+}

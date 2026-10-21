@@ -1,0 +1,149 @@
+#69296 https://github.com/pingcap/tidb/issues/69296 confirmed as a bug.
+
+1. 单表查询：由于 ORDER BY id 的存在，聚合被拆分为 cop HashAgg + root HashAgg + Sort，MAX(CAST(...AS DATE)) 下推到 TiKV cop 层执行，返回 '0000-00-00'
+2. Split/标量子查询：同样的聚合在 root 层 Projection 中执行，返回 NULL
+3. 更惊人的发现：去掉单表的 ORDER BY id，单表也会返回 NULL——说明 ORDER BY 改变了优化器的下推决策，从而"触发"了跨层语义差异
+
+
+必须保留聚合查询末尾的 ORDER BY id。去掉这个 ORDER BY id 后，单表查询也会返回 NULL，不复现。
+
+
+DROP DATABASE IF EXISTS repro_tidb615_db1_min;
+CREATE DATABASE repro_tidb615_db1_min;
+USE repro_tidb615_db1_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+
+CREATE TABLE src(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c2 TEXT NULL,
+  c4 BIGINT NULL
+);
+
+INSERT INTO src VALUES
+  (5, '', 0),
+  (6, '-541333355', 9223372036854775807);
+
+CREATE TABLE l(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c4 BIGINT NULL
+);
+
+CREATE TABLE r(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c2 TEXT NULL
+);
+
+INSERT INTO l SELECT id, c4 FROM src;
+INSERT INTO r SELECT id, c2 FROM src;
+
+-- 单表：返回 0000-00-00
+SELECT MAX(
+  CAST(
+    CASE c2
+      WHEN id THEN id | c4
+      ELSE CAST(c4 AS DATETIME)
+    END AS DATE
+  )
+) AS single_max
+FROM src
+ORDER BY id;
+
+-- split/scalar subquery：返回 NULL
+SELECT MAX(
+  CAST(
+    CASE v.c2
+      WHEN v.id THEN v.id | v.c4
+      ELSE CAST(v.c4 AS DATETIME)
+    END AS DATE
+  )
+) AS split_max
+FROM (
+  SELECT
+    l.id,
+    (SELECT r.c2 FROM r WHERE r.id = l.id) AS c2,
+    l.c4
+  FROM l
+) v
+ORDER BY v.id;
+
+实测结果：
+single_max = 0000-00-00
+split_max  = NULL
+关键执行计划：
+-- 单表
+Projection_6              root      Column#5->Column#6
+└─Sort_8                  root      src.id
+  └─HashAgg_16            root      funcs:max(Column#7)->Column#5, funcs:firstrow(Column#8)->src.id
+    └─TableReader_17      root      data:HashAgg_10
+      └─HashAgg_10        cop[tikv] funcs:max(cast(case(...), date BINARY))->Column#7,
+                            funcs:firstrow(src.id)->Column#8
+        └─TableFullScan_15 cop[tikv] table:src
+
+-- split/scalar subquery
+Projection_13             root      Column#10->Column#11
+└─Sort_15                 root      l.id
+  └─HashAgg_19            root      funcs:max(Column#12)->Column#10, funcs:firstrow(Column#13)->l.id
+    └─Projection_50       root      cast(case(...), date BINARY)->Column#12, l.id->Column#13
+      └─MergeJoin_22      root      left outer join, left key:l.id, right key:r.id
+        ├─TableReader_34  root      table:r
+        └─TableReader_32  root      table:l
+关键点：
+单表：MAX(CAST(CASE ... AS DATE)) 被下推到 TiKV cop HashAgg_10，返回 0000-00-00。
+split：CAST(CASE ... AS DATE) 在 root Projection_50 中计算，结果全是 NULL，所以 MAX 为 NULL。
+这里 ORDER BY id 很关键。它让计划变成：
+Sort + HashAgg + cop HashAgg(firstrow(id))
+而不是普通无 ORDER BY 的计划。无 ORDER BY 时我测到单表也是 NULL。
+
+单表查询解析
+
+3.1 CASE 表达式分析
+sql
+CASE c2
+  WHEN id THEN id | c4
+  ELSE CAST(c4 AS DATETIME)
+END
+CASE 语法：CASE 表达式 WHEN 值 THEN ... 是等值比较。
+行1：id=5, c2='', c4=0
+表格
+分支	条件	求值
+c2 = id	'' = 5	字符串 '' 转数字 0，0 = 5 → FALSE
+ELSE	—	CAST(0 AS DATETIME) → 零日期 '0000-00-00 00:00:00'
+行2：id=6, c2='-541333355', c4=9223372036854775807
+表格
+分支	条件	求值
+c2 = id	'-541333355' = 6	字符串 '-541333355' 转数字 -541333355，-541333355 = 6 → FALSE
+ELSE	—	CAST(9223372036854775807 AS DATETIME) → 超大数字转日期
+CAST(9223372036854775807 AS DATETIME) 是什么？
+这是一个极大的数字，远超日期范围
+在 MySQL/TiDB 中，超大数字转 DATETIME 会产生溢出或零日期
+可能返回 '0000-00-00' 或 NULL
+所以两行都走 ELSE 分支：
+行1：CAST(0 AS DATETIME) → '0000-00-00'
+行2：CAST(9223372036854775807 AS DATETIME) → 可能是 '0000-00-00' 或 NULL
+3.2 外层 CAST(... AS DATE)
+sql
+CAST( CASE结果 AS DATE )
+行1：CAST('0000-00-00' AS DATE) → '0000-00-00'（零日期）
+行2：如果 CASE 结果是 '0000-00-00' → '0000-00-00'；如果是 NULL → NULL
+3.3 MAX(...) + ORDER BY
+sql
+MAX(...) AS single_max
+FROM src
+ORDER BY id;
+ORDER BY id 的作用：
+这是一个聚合查询（有 MAX），按 SQL 标准，ORDER BY id 在没有 GROUP BY 时是非法的（因为 id 不是聚合列）
+但 TiDB/MySQL 的 ONLY_FULL_GROUP_BY 模式下... 等等，sql_mode 包含了 ONLY_FULL_GROUP_BY！
+矛盾：在 ONLY_FULL_GROUP_BY 模式下，SELECT MAX(...), ... ORDER BY id 应该是非法的，因为 id 既不是聚合函数参数，也不在 GROUP BY 中。
+但实测能执行，说明 TiDB 对此有特殊处理：当查询没有 GROUP BY 且只有聚合函数时，ORDER BY id 被解释为"对聚合结果排序"，而 id 被隐式处理为 ANY_VALUE(id) 或取第一行。
+更关键的是：ORDER BY id 的存在改变了执行计划！原因：ORDER BY id 需要获取每行的 id 值用于排序。当聚合查询需要保留非聚合列（id）时，TiDB 选择两阶段聚合：
+cop 层：HashAgg 计算部分聚合 + firstrow(id) 保留 id
+root 层：合并聚合结果 + Sort
+这个两阶段聚合"意外"地将 MAX(CAST(...AS DATE)) 下推到了 cop 层，从而触发了跨层语义差异。
+去掉 ORDER BY：
+不需要保留 id
+单表聚合可以直接在 root 层完成
+MAX(CAST(...AS DATE)) 在 root 层执行 → 返回 NULL
+与 Split 一致，不复现 Bug 本例是一个"计划选择敏感型"Bug：ORDER BY id 触发单表查询使用两阶段聚合，将 MAX(CAST(...AS DATE)) 下推到 TiKV cop 层执行（返回零日期）；而标量子查询改写为 JOIN 后聚合留在 root 层执行（返回 NULL）。去掉 ORDER BY 后单表也走 root 层，两边一致返回 NULL，Bug"消失"
+

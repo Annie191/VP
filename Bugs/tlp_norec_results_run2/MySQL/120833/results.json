@@ -1,0 +1,19 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120833.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- Single query: 查 src（有索引 → INDEX LOOKUP，0.433 截断为 0 → 错误匹配 2 行）\nSELECT 'single' AS query_type, COUNT(*) AS row_count\nFROM src\nWHERE (IF(NULL, 0.3530399531809283, 0.43307147808600643)) IN (c0)",
+      "ok": true,
+      "rows": [
+        "single\t2"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 12,
+  "target_query": "-- Single query: 查 src（有索引 → INDEX LOOKUP，0.433 截断为 0 → 错误匹配 2 行）\nSELECT 'single' AS query_type, COUNT(*) AS row_count\nFROM src\nWHERE (IF(NULL, 0.3530399531809283, 0.43307147808600643)) IN (c0);",
+  "skip_reason": "only one top-level aggregate expression is supported"
+}

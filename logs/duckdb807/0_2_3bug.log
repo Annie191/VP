@@ -1,0 +1,137 @@
+https://github.com/duckdb/duckdb/issues/24794 ok
+
+# 在同一 JDBC 连接上重复执行包含 LEFT_DELIM_JOIN / MARK JOIN 的查询导致 native 崩溃（SIGSEGV）
+
+## 问题描述
+
+在同一 JDBC 连接上重复执行带有 `LIMIT 0` 的复杂 `SELECT` 查询约 1000 次后，DuckDB native 层发生 `SIGSEGV` 崩溃。崩溃位置在 `org.duckdb.DuckDBNative.duckdb_jdbc_execute_pending`。单次执行 source 查询和 split 查询均返回 0 行且成功；重复执行 source 查询不会崩溃。
+
+这不是普通 SQLancer 假阳性，而是 DuckDB JDBC/native 或执行器的 bug 候选。
+
+## 复现步骤
+
+使用 DuckDB JDBC（v1.5.4）执行以下 SQL 语句。
+
+```sql
+DROP TABLE IF EXISTS repro_duckdb_db0_src;
+DROP TABLE IF EXISTS repro_duckdb_db0_l;
+DROP TABLE IF EXISTS repro_duckdb_db0_r;
+
+CREATE TABLE repro_duckdb_db0_src (
+    vp_rowid BIGINT PRIMARY KEY,
+    c0 BOOLEAN,
+    c1 BOOLEAN,
+    c2 BIGINT
+);
+
+INSERT INTO repro_duckdb_db0_src VALUES
+    (1, TRUE, NULL, NULL),
+    (2, TRUE, FALSE, 42);
+
+CREATE TABLE repro_duckdb_db0_l AS
+SELECT vp_rowid, c2
+FROM repro_duckdb_db0_src;
+
+CREATE TABLE repro_duckdb_db0_r AS
+SELECT vp_rowid, c0, c1
+FROM repro_duckdb_db0_src;
+
+SET threads = 1;
+SET disabled_optimizers = '';
+
+SELECT repro_duckdb_db0_src.c2
+FROM repro_duckdb_db0_src repro_duckdb_db0_src
+ORDER BY repro_duckdb_db0_src.vp_rowid
+LIMIT 0;
+
+SET threads = 4;
+SET disabled_optimizers = 'filter_pushdown,join_order';
+
+SELECT repro_duckdb_db0_src.c2
+FROM (
+    SELECT
+        l.vp_rowid,
+        r.c0,
+        r.c1,
+        l.c2
+    FROM repro_duckdb_db0_l l
+    JOIN repro_duckdb_db0_r r
+      ON l.vp_rowid = r.vp_rowid
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM repro_duckdb_db0_r rx
+        WHERE rx.vp_rowid = l.vp_rowid
+          AND rx.vp_rowid <> l.vp_rowid
+    )
+) repro_duckdb_db0_src
+ORDER BY repro_duckdb_db0_src.vp_rowid
+LIMIT 0;
+```
+
+然后在同一个 JDBC 连接上循环执行最后一个 `SELECT`（即 “split” 查询），例如在 Java 中使用循环。约 1000 次执行后，JVM 进程崩溃。
+
+单次执行输出：
+
+```text
+source: 0 rows
+split:  0 rows
+```
+
+重复执行结果：
+
+```text
+source 查询重复约 1000 次：未崩溃
+split 查询重复约 1000 次：JVM/native 崩溃
+```
+
+## 执行计划差异
+
+source 查询计划：
+
+```text
+PROJECTION
+  ORDER_BY
+    HASH_JOIN
+      Join Type: SEMI
+      SEQ_SCAN repro_duckdb_db0_src
+      TOP_N Top: 0
+```
+
+split 查询计划包含：
+
+```text
+TOP_N Top: 0
+  FILTER (NOT SUBQUERY)
+    LEFT_DELIM_JOIN
+      Join Type: MARK
+      HASH_JOIN
+        Join Type: INNER
+      HASH_JOIN
+        Join Type: MARK
+      HASH_GROUP_BY
+      CROSS_PRODUCT
+        SEQ_SCAN repro_duckdb_db0_r
+        DELIM_SCAN
+```
+
+两侧计划明显发散；split 查询触发了 `LEFT_DELIM_JOIN`、`MARK JOIN`、`HASH_GROUP_BY` 和 `DELIM_SCAN`。
+
+## 环境信息
+
+- OS: Ubuntu 20.04.6 LTS, x86_64
+- DuckDB Version: v1.5.4
+- DuckDB Client: Java JDBC
+- Hardware: Intel Xeon Gold 5218R, 80 cores, 1486G RAM
+- JVM: OpenJDK 17.0.15
+- 崩溃位置: org.duckdb.DuckDBNative.duckdb_jdbc_execute_pending
+
+## 提交前确认
+
+- 是，我已包含所有相关配置（操作系统、架构、DuckDB 版本、JDK）。
+- 是，我已包含复现问题所需的全部代码。
+- 是，我已包含相关数据集（上方已提供 SQL DDL/DML）。
+
+## 身份信息
+
+Full Name: [Your Name]  
+Affiliation: [Your Affiliation]

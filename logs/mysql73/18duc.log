@@ -1,0 +1,115 @@
+https://bugs.mysql.com/bug.php?id=120866&thanks=4 a duplicate of Bug#120429 which is fixed in the upcoming MySQL-9.7 LTS release.
+
+DROP DATABASE IF EXISTS repro73_18;
+CREATE DATABASE repro73_18;
+USE repro73_18;
+
+SET SESSION optimizer_switch =
+  'index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,engine_condition_pushdown=on,index_condition_pushdown=on,mrr=on,mrr_cost_based=on,block_nested_loop=on,batched_key_access=off,materialization=on,semijoin=on,loosescan=on,firstmatch=on,duplicateweedout=on,subquery_materialization_cost_based=on,use_index_extensions=on,condition_fanout_filter=on,derived_merge=on,use_invisible_indexes=off,skip_scan=on,hash_join=on,subquery_to_derived=off,prefer_ordering_index=on,hypergraph_optimizer=off,derived_condition_pushdown=on,hash_set_operations=on';
+
+SET SESSION big_tables = 1;
+
+CREATE TABLE s (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL(20,0),
+  c1 DECIMAL(20,0)
+) ENGINE=InnoDB;
+
+INSERT INTO s VALUES
+  (1, -1713750794, NULL),
+  (2, 0, 0),
+  (3, 0, 1);
+
+CREATE TABLE l (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL(20,0)
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c1 DECIMAL(20,0)
+) ENGINE=InnoDB;
+
+INSERT INTO l SELECT id, c0 FROM s;
+INSERT INTO r SELECT id, c1 FROM s;
+
+CREATE INDEX l_idx ON l(id, c0);
+CREATE INDEX r_idx ON r(c1, id);
+
+SELECT IFNULL(s.id NOT IN (NULL), LEAST(s.c1, s.c0)) AS v
+FROM s
+ORDER BY s.id
+LIMIT 11;
+
+SELECT IFNULL(q.id NOT IN (NULL), LEAST(q.c1, q.c0)) AS v
+FROM (
+  WITH l2 AS (
+    SELECT ROW_NUMBER() OVER (ORDER BY id) AS rn, id, c0
+    FROM l
+  ),
+  r2 AS (
+    SELECT ROW_NUMBER() OVER (ORDER BY id) AS rn, id, c1
+    FROM r
+  )
+  SELECT l2.id, l2.c0, r2.c1
+  FROM l2 JOIN r2 ON l2.rn = r2.rn
+) AS q
+ORDER BY q.id
+LIMIT 11;
+
+mysql> SELECT IFNULL(s.id NOT IN (NULL), LEAST(s.c1, s.c0)) AS v FROM s ORDER BY s.id LIMIT 11;
++------+
+| v    |
++------+
+| NULL |
+| 0    |
+| 0    |
++------+
+
+mysql> SELECT IFNULL(q.id NOT IN (NULL), LEAST(q.c1, q.c0)) AS v FROM (...) q ORDER BY q.id LIMIT 11;
++------+
+| v    |
++------+
+| NULL |
+| NULL |
+| NULL |
++------+
+
+单表：-> Limit: 11 row(s)
+    -> Index scan on s using PRIMARY
+
+重建路径：-> Limit: 11 row(s)
+    -> Sort: id, limit input to 11 row(s) per chunk
+        -> Stream results
+            -> Inner hash join (r2.rn = l2.rn)
+                -> Table scan on r2
+                    -> Materialize CTE r2
+                        -> Window aggregate: row_number() OVER (ORDER BY r.id)
+                            -> Sort: r.id
+                                -> Covering index scan on r using r_idx
+                -> Hash
+                    -> Table scan on l2
+                        -> Materialize CTE l2
+                            -> Window aggregate: row_number() OVER (ORDER BY l.id)
+                                -> Sort: l.id
+                                    -> Covering index scan on l using l_idx
+
+如果把这两个辅助索引和 session 设置进一步砍掉，bug会消失。
+
+问题出在 Hash Join 迭代器 对右表（build 表）可空列的投影逻辑上。
+
+CTE r2 物化出的临时表包含列 rn, id, c1。其中 c1 来自原始表 r，允许 NULL。
+
+Hash Join 在构建阶段扫描 r2，通常会将 等值连接键 和 整行引用（或者所需列值）存入哈希表。
+
+探测阶段，对于左表每一行，若匹配成功，构造输出行时需要将右表的列值（c1）复制到结果行中。
+
+疑似缺陷：在存取物化右表数据时，如果物化表是通过 排序 + 窗口函数 生成的，且使用了覆盖索引扫描，MySQL 内部对 NULL 标志位 的处理可能出现偏差。
+当 big_tables=1 启用磁盘临时表，或者 Hash Join 的缓冲区采用特定压缩/分片策略时，从右表引用中恢复 c1 列时，可能错误地将该列的 NULL 位设为 1，导致 c1 变成 NULL，即使原数据为 0 或 1。
+
+LEAST(c1, c0) 此时左侧输入为 NULL，按照规则必然返回 NULL，因此第二、三行的结果全部变成了 NULL。
+
+5. 为何移除索引和会话设置后 bug 消失
+索引 l_idx, r_idx 移除后，窗口函数的排序无法再使用覆盖索引，优化器会改用全表扫描 + 额外排序，物化表生成路径不同，hash join 的构建输入数据结构发生改变，避开了有缺陷的代码路径。
+
+会话设置 如果关闭 hash_join 或将 big_tables 设为 0，优化器会改用 Nested Loop Join 或 Sort-Merge Join，右表数据直接通过表扫描逐行读取，不再依赖 Hash Join 的内部引用机制，因此 c1 的值可以正确传递，LEAST 运算得到正确结果。

@@ -1,0 +1,196 @@
+https://github.com/databendlabs/databend/issues/20625  confirmed
+
+DROP DATABASE IF EXISTS repro_databend917_db0_min;
+CREATE DATABASE repro_databend917_db0_min;
+USE repro_databend917_db0_min;
+
+CREATE TABLE source (
+    vp_rowid BIGINT NOT NULL,
+    c1date DATE NULL,
+    c2map MAP(VARCHAR, INT64) NULL,
+    c3array ARRAY(INT64) NULL,
+    c4array ARRAY(INT64) NULL
+) ENGINE=FUSE;
+
+CREATE TABLE left_part (
+    vp_rowid BIGINT NOT NULL,
+    c1date DATE NULL,
+    c3array ARRAY(INT64) NULL,
+    c4array ARRAY(INT64) NULL
+) ENGINE=FUSE;
+
+CREATE TABLE right_part (
+    vp_rowid BIGINT NOT NULL,
+    c2map MAP(VARCHAR, INT64) NULL
+) ENGINE=FUSE;
+
+INSERT INTO source VALUES
+(1, DATE '1969-12-23', {'sqlancer':1}, [1,2,3], [1,2,3]),
+(2, DATE '1970-01-15', {'sqlancer':1}, [1,2,3], [1,2,3]),
+(3, NULL, NULL, [1,2,3], NULL),
+(4, DATE '1969-12-31', {'sqlancer':1}, NULL, NULL);
+
+INSERT INTO source VALUES (5, NULL, NULL, [1], NULL);
+
+INSERT INTO left_part
+SELECT vp_rowid, c1date, c3array, c4array FROM source;
+
+INSERT INTO right_part
+SELECT vp_rowid, c2map FROM source;
+
+
+
+
+SELECT MIN(s.c1date), s.vp_rowid, s.vp_rowid
+FROM source s
+WHERE ((s.c2map IS NULL) <> (s.c4array IS NULL))
+GROUP BY s.vp_rowid, s.vp_rowid
+ORDER BY s.vp_rowid, s.vp_rowid;
+
+SELECT MIN(s.c1date), s.vp_rowid, s.vp_rowid
+FROM (
+    SELECT l.vp_rowid, l.c1date, l.c3array, l.c4array, r.c2map
+    FROM left_part l
+    JOIN right_part r ON l.vp_rowid = r.vp_rowid
+) s
+WHERE ((s.c2map IS NULL) <> (s.c4array IS NULL))
+GROUP BY s.vp_rowid, s.vp_rowid
+ORDER BY s.vp_rowid, s.vp_rowid;
+
+单表查询，Databend 直接崩溃：
+ERROR 1105 (HY000):
+UnwindError. Code: 1104,
+Text = called `Result::unwrap()` on an `Err` value: Null.
+
+多表重构查询仍可执行并返回：
+1969-12-31 | 4 | 4
+
+如果是INSERT INTO source VALUES
+(1, DATE '1969-12-23', {'sqlancer':1}, [1,2,3], [1,2,3]),
+(2, DATE '1970-01-15', {'sqlancer':1}, [1,2,3], [1,2,3]),
+(3, NULL, NULL, [1,2,3], NULL),
+(4, DATE '1969-12-31', {'sqlancer':1}, NULL, NULL);
+
+INSERT INTO source VALUES (5, NULL, NULL, [1], NULL);
+
+改为
+
+INSERT INTO source VALUES
+(1, DATE '1969-12-23', {'sqlancer':1}, [1,2,3], [1,2,3]),
+(2, DATE '1970-01-15', {'sqlancer':1}, [1,2,3], [1,2,3]),
+(3, NULL, NULL, [1,2,3], NULL),
+(4, DATE '1969-12-31', {'sqlancer':1}, NULL, NULL),
+(5, NULL, NULL, [1], NULL);
+
+单表和多表查询都返回
+1969-12-31 | 4 | 4
+
+触发前的单表执行计划核心结构是：
+Sort(Single)
+└── AggregateFinal
+    ├── group by: [vp_rowid]
+    ├── aggregate functions: [min(c1date)]
+    └── AggregatePartial
+        ├── group by: [vp_rowid]
+        ├── aggregate functions: [min(c1date)]
+        └── TableScan
+            ├── output columns: [vp_rowid, c1date]
+            └── filters:
+                [(NOT is_not_null(c2map))
+                 <> (NOT is_not_null(c4array))]
+
+关键点在这里：
+
+text
+TableScan
+  filters:
+    [(NOT is_not_null(c2map)) <> (NOT is_not_null(c4array))]
+NOT is_not_null(x) 语义上等价于 x IS NULL。正常 SQL 语义下：
+
+sql
+(c2map IS NULL) <> (c4array IS NULL)
+应该永远返回非 NULL 布尔值。因为 IS NULL / IS NOT NULL 是专门处理 NULL 的谓词，不应返回 NULL。
+
+但 Databend 这里把它改写成：
+
+text
+(NOT is_not_null(c2map)) <> (NOT is_not_null(c4array))
+如果内部 is_not_null 在某些情况下，尤其是整列全 NULL 的 block 上，返回的是 Null 而不是 false，那么：
+
+text
+NOT Null => Null
+Null <> Null => Null
+于是过滤谓词求值结果变成 Null，而 TableScan filter 执行路径期望得到非空 Boolean，调用类似 unwrap_bool() / unwrap()，遇到 Null 就 panic，最终被包装成：
+
+text
+UnwindError. Code: 1104,
+Text = called `Result::unwrap()` on an `Err` value: Null.
+
+数据分两次插入：
+
+sql
+INSERT INTO source VALUES
+(1, ...),
+(2, ...),
+(3, ...),
+(4, ...);
+
+INSERT INTO source VALUES
+(5, NULL, NULL, [1], NULL);
+Databend FUSE 表每次 INSERT 通常会产生新的 block / segment。因此第二个 INSERT 会形成一个只包含 vp_rowid = 5 的 block：
+
+text
+(5, NULL, NULL, [1], NULL)
+这个 block 里：
+
+c2map 全为 NULL
+
+c4array 全为 NULL
+
+单表查询时，filter 被下推到 TableScan。扫描到这个 block 时，表达式：
+
+text
+(NOT is_not_null(c2map)) <> (NOT is_not_null(c4array))
+可能因为两列都是全 NULL，被编码成常量 NULL 列或进入特殊求值路径，最终产生 Null 布尔，触发 panic。
+
+改成一条 INSERT：
+
+sql
+INSERT INTO source VALUES
+(1, ...),
+(2, ...),
+(3, ...),
+(4, ...),
+(5, NULL, NULL, [1], NULL);
+所有行在同一个 block 里。这个 block 中：
+
+c2map 列有非 NULL 值，也有 NULL 值
+
+c4array 列有非 NULL 值，也有 NULL 值
+
+列不是“全 NULL 列”，因此不会进入那个异常路径。于是单表和多表查询都正常返回：
+
+text
+1969-12-31 | 4 | 4
+
+多表重构路径的计划核心结构是：
+Sort(Single)
+└── AggregateFinal
+    ├── group by: [vp_rowid]
+    ├── aggregate functions: [min(c1date)]
+    └── AggregatePartial
+        ├── group by: [vp_rowid]
+        ├── aggregate functions: [min(c1date)]
+        └── HashJoin
+            ├── join type: INNER
+            ├── build keys: [right_part.vp_rowid]
+            ├── probe keys: [left_part.vp_rowid]
+            ├── build join filters:
+            │   └── filter type: bloom,inlist,min_max
+            └── filters:
+                [(NOT is_not_null(right_part.c2map))
+                 <> (NOT is_not_null(left_part.c4array))]
+
+多表路径没有走 TableScan filter 那条容易 panic 的执行路径。HashJoin 的 filter 对 NULL 布尔的处理可能更接近普通谓词逻辑，或者至少不会 unwrap() 非空 Boolean，因此没有崩溃，并正确返回 rowid = 4。
+
+另外，多表路径中 c2map 来自 right_part，c4array 来自 left_part，过滤表达式不容易在 scan 层被折叠成全 NULL 常量表达式，因此避开了单表下推时的特殊路径。

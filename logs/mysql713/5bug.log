@@ -1,0 +1,145 @@
+https://bugs.mysql.com/bug.php?id=120903&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro_db5_final;
+CREATE DATABASE repro_db5_final;
+USE repro_db5_final;
+
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 FLOAT NULL,
+  c1 DECIMAL(65,30) NULL,
+  UNIQUE KEY i1(c0, c1)
+) ENGINE=InnoDB;
+
+INSERT INTO src(c0, c1) VALUES
+  (1.1, NULL),
+  (2.2, NULL),
+  (3.3, 0),
+  (4.4, 0);
+
+CREATE TABLE l (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c1 DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 FLOAT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO l
+SELECT vp_rowid, c1 FROM src;
+
+INSERT INTO r
+SELECT vp_rowid, c0 FROM src;
+
+SELECT 'single' AS qt,
+       src.vp_rowid,
+       -((src.vp_rowid) = ((src.c0) NOT IN (src.c1))) AS ref2,
+       CAST(IFNULL(src.c1, src.vp_rowid) AS SIGNED) AS ref3,
+       BIT_AND(CAST(vp_rowid AS SIGNED)) AS ref4
+FROM src
+GROUP BY
+       -((src.vp_rowid) = ((src.c0) NOT IN (src.c1))),
+       src.vp_rowid,
+       CAST(IFNULL(src.c1, src.vp_rowid) AS SIGNED)
+WITH ROLLUP
+ORDER BY src.vp_rowid
+LIMIT 4;
+
+SELECT 'split' AS qt,
+       s.vp_rowid,
+       -((s.vp_rowid) = ((s.c0) NOT IN (s.c1))) AS ref2,
+       CAST(IFNULL(s.c1, s.vp_rowid) AS SIGNED) AS ref3,
+       BIT_AND(CAST(vp_rowid AS SIGNED)) AS ref4
+FROM (
+    SELECT l.vp_rowid AS vp_rowid, r.c0 AS c0, l.c1 AS c1
+    FROM l
+    JOIN (
+        SELECT vp_rowid, COUNT(*) AS vp_count
+        FROM r
+        GROUP BY vp_rowid
+    ) rg ON l.vp_rowid = rg.vp_rowid
+    JOIN r ON r.vp_rowid = rg.vp_rowid
+) s
+GROUP BY
+       -((s.vp_rowid) = ((s.c0) NOT IN (s.c1))),
+       s.vp_rowid,
+       CAST(IFNULL(s.c1, s.vp_rowid) AS SIGNED)
+WITH ROLLUP
+ORDER BY s.vp_rowid
+LIMIT 4;
+
+single
+
++--------+----------+------+------+------+
+| qt     | vp_rowid | ref2 | ref3 | ref4 |
++--------+----------+------+------+------+
+| single |     NULL |    0 | NULL |    0 |
+| single |     NULL | NULL | NULL |    0 |
+| single |     NULL | NULL | NULL |    0 |
+| single |        1 | NULL | NULL |    1 |
++--------+----------+------+------+------+
+
+split
+
++-------+----------+------+------+------+
+| qt    | vp_rowid | ref2 | ref3 | ref4 |
++-------+----------+------+------+------+
+| split |     NULL | NULL | NULL |    0 |
+| split |     NULL |    0 | NULL |    0 |
+| split |     NULL | NULL | NULL |    0 |
+| split |        1 | NULL |    1 |    1 |
++-------+----------+------+------+------+
+
+-- single
+-- 最后一行是: vp_rowid=1, ref2=NULL, ref3=NULL, ref4=1
+
+-- split
+-- 最后一行是: vp_rowid=1, ref2=NULL, ref3=1, ref4=1
+
+执行计划如下：
+
+-> Limit
+    -> Sort: vp_rowid
+        -> Stream results
+            -> Group aggregate with rollup: bit_and(cast(src.vp_rowid as signed))
+                -> Sort: ref2, vp_rowid, ref3
+                    -> Covering index scan on src using i1
+
+-> Limit
+    -> Sort: vp_rowid
+        -> Stream results
+            -> Group aggregate with rollup: bit_and(tmp_field)
+                -> Sort: ref2, vp_rowid, ref3
+                    -> Stream results
+                        -> Nested loop inner join
+                            -> Nested loop inner join
+                                -> Table scan on l
+                                -> Single-row index lookup on r using PRIMARY
+                            -> Index lookup on rg using <auto_key0>
+                                -> Materialize
+                                    -> Group aggregate: count(0)
+                                        -> Covering index scan on r using PRIMARY
+
+正常行为（single 查询）
+在直接扫描 src 表的查询中：
+
+分组列与选择列表中的 ref3 是同一个表达式。
+
+ROLLUP 行插入时，MySQL 会将所有分组列的值设置为 NULL（包括 ref3 对应的表达式），即无论底层字段是什么，该表达式的结果直接被替换为 NULL。
+
+因此最后一行 vp_rowid=1 的 ROLLUP 行中，ref3 显示为 NULL，符合预期。
+
+异常行为（split 查询）
+split 查询使用了嵌套连接和物化子查询：
+
+这里的派生表 s 会物化或者以临时表形式参与后续的 GROUP BY + ROLLUP。
+
+在 ROLLUP 行生成阶段，对于每个分组表达式，MySQL 应将其结果强制置为 NULL。但对于 ref3 这种 引用了多个底层列的函数表达式（CAST(IFNULL(s.c1, s.vp_rowid) AS SIGNED)），实现上可能没有简单地将整个表达式结果标为 NULL，而是试图通过将依赖的基础列（s.c1, s.vp_rowid）置为 NULL 并重新求值来实现。
+
+由于查询中涉及 JOIN 和物化表，优化器在分解这个表达式时，只正确地将 s.c1 识别为分组列的一部分并将其置 NULL，但 s.vp_rowid 没有被正确地置 NULL。IFNULL(s.c1, s.vp_rowid) 中 s.c1 原本就是 NULL，因此函数返回了第二个参数 s.vp_rowid 的原始值（1），最终 CAST(...) 得到 1。
+
+这说明在复杂子查询环境下，MySQL 的 ROLLUP 代码路径没有对所有依赖列进行一致的 NULL 覆盖，导致表达式被重新计算时获得了非 NULL 的结果。
+
+ref3 含有 IFNULL，当只置空了第一个参数而第二个参数未置空时，IFNULL 的“回退”特性暴露了底层列未被正确 NULL 化的问题。

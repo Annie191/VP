@@ -1,0 +1,63 @@
+https://jira.mariadb.org/browse/MDEV-40977 ok
+
+DROP DATABASE IF EXISTS repro_mariadb_db13_904_min;
+CREATE DATABASE repro_mariadb_db13_904_min;
+USE repro_mariadb_db13_904_min;
+
+-- 单表结构
+CREATE TABLE source_t (
+    v DOUBLE UNSIGNED NOT NULL
+);
+
+INSERT INTO source_t VALUES (9223372036854775807);
+
+-- 多表标量子查询重构结构
+CREATE TABLE left_t (
+    vp_rowid BIGINT NOT NULL
+);
+
+CREATE TABLE right_t (
+    vp_rowid BIGINT NOT NULL,
+    v DOUBLE UNSIGNED NOT NULL
+);
+
+INSERT INTO left_t VALUES (1);
+INSERT INTO right_t VALUES (1, 9223372036854775807);
+
+-- 单表直接计算：实际返回 0
+SELECT ((1503381287 << v) AND -553173254) AS result
+FROM source_t;
+
+-- 多表标量子查询重构：实际返回 1
+SELECT ((1503381287 << v) AND -553173254) AS result
+FROM (
+    SELECT l.vp_rowid,
+           (SELECT r.v
+            FROM right_t r
+            WHERE r.vp_rowid = l.vp_rowid) AS v
+    FROM left_t l
+) AS vp_rel;
+
+单表：0
+多表标量子查询：1
+
+单表执行计划：
+id=1, select_type=SIMPLE, table=source_t, type=ALL, rows=1
+Extra: Using temporary
+
+多表执行计划：
+id=1, select_type=PRIMARY, table=l, type=ALL, rows=1
+Extra: Using temporary
+
+id=3, select_type=DEPENDENT SUBQUERY, table=r, type=ALL, rows=1
+Extra: Using where
+
+补充验证中，两条路径读取到的 v 都显示为 9.223372036854776e18，且：
+CAST(v AS UNSIGNED)
+两边均为 9223372036854775808。差异发生在 MariaDB 对 DOUBLE UNSIGNED 标量子查询结果参与 << 和布尔 AND 表达式的求值路径，不是数据复制、类型声明或 VP 比较器问题。
+
+位移运算 << 将右操作数转换为整数时，会根据操作数的无符号标志选择不同的转换路径：
+
+单表路径：v 被视为有符号，转换时饱和为 LLONG_MAX（0x7FFFFFFFFFFFFFFF），截断为 32 位后得到 0xFFFFFFFF，移位量过大，返回 0。
+
+子查询路径：v 保留了无符号属性，转换结果直接为 2^63（0x8000000000000000），截断低 32 位为 0，等效于 << 0，结果非零。

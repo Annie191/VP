@@ -1,0 +1,66 @@
+DROP DATABASE IF EXISTS repro_db6;
+CREATE DATABASE repro_db6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+USE repro_db6;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+
+CREATE TABLE s (
+  rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci,
+  c1 DATE
+);
+INSERT INTO s (c0, c1) VALUES
+  (NULL,'2025-07-08'),('-','2018-11-07'),('1','2023-05-25'),('1','2024-08-10'),
+  ('E',NULL),('e','2028-01-13'),('{','2025-12-01'),('⟘','2022-01-03');
+
+-- Single（→ E, HEX=45）
+SELECT MAX(CASE c1 WHEN CAST(CAST(c0 AS DECIMAL) AS UNSIGNED) THEN c1 ELSE c0 END) FROM s;
+
+-- VP分表
+CREATE TABLE l (rowid BIGINT NOT NULL PRIMARY KEY, c0 TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci);
+CREATE TABLE r (rowid BIGINT NOT NULL PRIMARY KEY, c1 DATE);
+INSERT INTO l SELECT rowid, c0 FROM s;
+INSERT INTO r SELECT rowid, c1 FROM s;
+
+-- Split (LATERAL_DERIVED)（→ e, HEX=65）
+SELECT MAX(CASE c1 WHEN CAST(CAST(c0 AS DECIMAL) AS UNSIGNED) THEN c1 ELSE c0 END)
+FROM (SELECT l.rowid, l.c0, r.c1
+      FROM l JOIN LATERAL (SELECT * FROM r rr WHERE rr.rowid = l.rowid) r ON TRUE) vp;
+
+
+	   结果	HEX
+Single	E	45
+Split	e	65
+
+Single — TopN 下推到 TiKV：
+
+StreamAgg_13 | funcs:max(...)
+└─TopN_14 | ...:desc, offset:0, count:1
+  └─TableReader_21
+    └─TopN_20 | cop[tikv] | case(...):desc
+      └─Selection_19 | not(isnull(case(...)))
+        └─TableFullScan_18 | table:s, keep order:false
+
+Split — TopN 留在 TiDB root，数据源 MergeJoin：
+
+StreamAgg_18 | funcs:max(...)
+└─TopN_21 | ...:desc, offset:0, count:1
+  └─MergeJoin_25 | inner join, left key:l.rowid, right key:rr.rowid
+    ├─TableReader_41(Build) | table:rr, keep order:true
+    └─TableReader_39(Probe) | table:l, keep order:true
+ 排序规则（Collation）的关键作用
+c0 列显式定义为 utf8mb4_0900_ai_ci。
+
+ai = Accent Insensitive（不区分重音）
+
+ci = Case Insensitive（不区分大小写）
+
+在 utf8mb4_0900_ai_ci 的排序权重（Primary Weight）中，大写 'E' 和小写 'e' 的权重值是完全相等的。对于 MAX() 聚合函数，只要权重相等，两者均被视为“最大值”，返回其中任何一个都符合 SQL 标准（标准允许在这种情况下返回任意值）。
+
+
+Single（下推）：TiKV 在执行 TableFullScan 时，若扫描到 'E' 和 'e'，由于权重相同，它依赖内部 Row 的比较逻辑。在 TiKV 的 Comparator 中，权重相同时会回退到原始字节序（memcmp），'E' (0x45) < 'e' (0x65)，但因为是 MAX（降序取顶），它可能会保留较大的原始字节，或者保留先遇到的那个。您的测试结果显示它返回了 'E'。
+
+Split（上拉）：TiDB 收到 MergeJoin 流式传输的数据后，在 TopN 执行器中进行排序。Go 标准库的 heap 实现或 TiDB 的 chunk 排序器，在权重相等时不会回退到原始字节，而是保留输入顺序或堆顶替换策略，最终堆顶保留了 'e'。
+
+4. 结论与定性
+这不是“数据错误”：因为 'E' 和 'e' 在 utf8mb4_0900_ai_ci 下语义完全等价，两者都满足 MAX 的数学定义。

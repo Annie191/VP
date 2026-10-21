@@ -1,0 +1,1 @@
+-- Database endpoint unavailable; source: /home/lwm/sqlancer/Bugs/ClickHouse/115289.sql

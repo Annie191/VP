@@ -1,0 +1,161 @@
+https://github.com/cockroachdb/cockroach/issues/174729
+
+DROP DATABASE IF EXISTS repro_crdb803_db8_min;
+CREATE DATABASE repro_crdb803_db8_min;
+USE repro_crdb803_db8_min;
+
+SET TimeZone = 'UTC';
+SET vectorize = 'on';
+SET optimizer_use_histograms = 'on';
+SET enable_zigzag_join = 'off';
+SET distsql = 'auto';
+SET opt_split_scan_limit = 2048;
+SET serial_normalization = 'rowid';
+
+-- 单表 src
+CREATE TABLE src (
+  vp_rowid    INT8 PRIMARY KEY,
+  c0          FLOAT NULL,
+  vp_computed INT8 AS (vp_rowid * 2) STORED
+);
+
+-- 垂直拆分：左表 l（c0 + vp_computed）、右表 r（c0）
+CREATE TABLE l (
+  vp_rowid    INT8 PRIMARY KEY,
+  c0          FLOAT NULL,
+  vp_computed INT8 AS (vp_rowid * 2) STORED
+);
+CREATE TABLE r (
+  vp_rowid INT8 PRIMARY KEY,
+  c0       FLOAT NULL
+);
+
+INSERT INTO src (vp_rowid, c0) VALUES
+  (1, -1.370533208e+09),
+  (2, 0.08560940630775526),
+  (3, 0.49184326379793697),
+  (4, 0.619883735554361),
+  (5, 0.6697518608462573),
+  (6, 0.6905402975088976),
+  (7, 2.08893773e+08),
+  (8, 1.275818667e+09);
+INSERT INTO l (vp_rowid, c0) SELECT vp_rowid, c0 FROM src;
+INSERT INTO r (vp_rowid, c0) SELECT vp_rowid, c0 FROM src;
+
+CREATE INDEX l_partial ON l(c0) WHERE c0 IS NOT NULL;
+CREATE INDEX r_partial ON r(c0) WHERE c0 IS NOT NULL;
+
+-- single（等价于原查询的 GROUP BY 常量分组）
+SELECT STDDEV(vp_computed) FROM src GROUP BY CAST(NULL AS INT8);
+
+-- split
+SELECT STDDEV(vp_computed) FROM (
+  SELECT l.vp_rowid, l.c0, l.vp_computed
+  FROM l
+  WHERE EXISTS (SELECT 1 FROM r WHERE r.vp_rowid = l.vp_rowid)
+) AS src GROUP BY CAST(NULL AS INT8);
+
+查询	结果
+single（连跑多次）	恒为 4.8989794855663561964
+split（连跑多次）	...1964, ...1965, ...1965（在 1964/1965 间抖动）
+
+物理层（EXPLAIN (DISTSQL)）两者都是 distribution: full 的分布式计划，区别只在左边：single 直接 scan src@src_pkey FULL SCAN，split 是 merge join (semi) 后 scan l@l_pkey / r@r_pkey FULL SCAN：
+
+
+CockroachDB 对 DECIMAL 的 `STDDEV` 不是简单累加 `sum` 和 `sumSqr`，而是使用 Welford 增量状态 `(count, mean, M2)`。这种状态在插入和合并时包含除法/乘法，DECIMAL 有限精度下不满足结合律。
+`single` 查询因为小表单流执行，合并路径确定，所以稳定；
+`split` 查询因为 join 引入多个局部聚合状态，final merge 顺序非确定，所以最终结果在 `...1964` 和 `...1965` 之间抖动。
+
+
+它不是假阳性，理由有三点：
+1. 两个查询的输入行集合相同。
+   日志中的 single 和 split 都读取同一份 VP source 数据，split 查询只是通过等价的 join、view、subquery 等方式重建数据。
+2. 返回列是 CockroachDB 的 NUMERIC，不是 FLOAT/DOUBLE。
+   当前 oracle 已经对 NUMERIC/DECIMAL 使用精确比较，因此：4.8989794855663561964 vs 4.8989794855663561965
+   是两个不同的数值，不能因为差异只有 1e-19 就自动接受。
+
+3.差异与执行计划相关。
+如果同一个输入关系只因执行计划从单流聚合变为局部聚合加 final merge，就得到不同的 NUMERIC 结果，这说明聚合实现不是数值上的结合运算。对于 DECIMAL 结果，这至少属于确定性和精度保证问题。
+
+官方文档没有声明"DECIMAL 输入的 STDDEV/VARIANCE 允许近似、不保证跨计划一致"。
+恰恰相反：DECIMAL 被文档定义为"exact, fixed-point"，stddev/variance(decimal) 被标注为 Immutable（"in any context 返回相同结果"）。
+因此，我们测出的差异（db8 的 1 ULP、db2 的 ~0.005–0.015）是与官方文档承诺相违背的真实 bug，而不是文档已声明的近似行为。
+
+DROP DATABASE IF EXISTS repro_cockroachdb803_db8_min CASCADE;
+CREATE DATABASE repro_cockroachdb803_db8_min;
+USE repro_cockroachdb803_db8_min;
+
+SET TimeZone = 'UTC';
+SET vectorize = 'on';
+SET optimizer_use_histograms = 'on';
+SET enable_zigzag_join = 'off';
+SET distsql = 'auto';
+SET opt_split_scan_limit = 2048;
+SET serial_normalization = 'rowid';
+
+CREATE TABLE src (
+  vp_rowid INT8 PRIMARY KEY,
+  c0 FLOAT8 NULL,
+  vp_computed INT64 AS (vp_rowid * 2) STORED
+);
+
+CREATE TABLE l (
+  vp_rowid INT8 PRIMARY KEY,
+  c0 FLOAT8 NULL,
+  vp_computed INT64 AS (vp_rowid * 2) STORED
+);
+
+CREATE TABLE r (
+  vp_rowid INT8 PRIMARY KEY,
+  c0 FLOAT8 NULL
+);
+
+INSERT INTO src (vp_rowid, c0) VALUES
+  (1, -1.370533208e+09),
+  (2, 0.08560940630775526),
+  (3, 0.49184326379793697),
+  (4, 0.619883735554361),
+  (5, 0.6697518608462573),
+  (6, 0.6905402975088976),
+  (7, 2.08893773e+08),
+  (8, 1.275818667e+09);
+
+INSERT INTO l (vp_rowid, c0) SELECT vp_rowid, c0 FROM src;
+INSERT INTO r (vp_rowid, c0) SELECT vp_rowid, c0 FROM src;
+
+CREATE INDEX l_partial ON l(c0) WHERE c0 IS NOT NULL;
+CREATE INDEX r_partial ON r(c0) WHERE c0 IS NOT NULL;
+
+#  bigint
+SELECT pg_typeof(vp_computed)
+FROM src
+LIMIT 1;
+
+#  numeric
+SELECT pg_typeof(stddev_value)
+FROM (
+  SELECT STDDEV(vp_computed) AS stddev_value
+  FROM src
+  GROUP BY CAST(NULL AS INT8)
+) AS t;
+
+SELECT STDDEV(vp_computed)
+FROM src
+GROUP BY CAST(NULL AS INT8);
+
+SELECT STDDEV(vp_computed)
+FROM (
+  SELECT l.vp_rowid, l.c0, l.vp_computed
+  FROM l
+  WHERE EXISTS (
+    SELECT 1
+    FROM r
+    WHERE r.vp_rowid = l.vp_rowid
+  )
+) AS q
+GROUP BY CAST(NULL AS INT8);
+
+single: 4.8989794855663561964
+split : 4.8989794855663561965
+
+这里的输入类型是 INT64/BIGINT，聚合返回类型是 NUMERIC，不是 DECIMAL 输入。

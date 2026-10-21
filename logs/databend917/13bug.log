@@ -1,0 +1,92 @@
+https://github.com/databendlabs/databend/issues/20632  confirmed
+
+
+DROP DATABASE IF EXISTS repro_databend917_13;
+CREATE DATABASE repro_databend917_13;
+USE repro_databend917_13;
+
+CREATE TABLE src (
+  id BIGINT,
+  a ARRAY(BIGINT NULL),
+  v VARIANT,
+  s VARCHAR
+) ENGINE=FUSE;
+
+INSERT INTO src VALUES
+  (1, [1,2], '{"x":1}', NULL),
+  (2, NULL,  '{"x":2}', 'abc'),
+  (3, [],    '{"x":3}', '');
+
+CREATE TABLE l (
+  id BIGINT,
+  s VARCHAR,
+  v VARIANT
+) ENGINE=MEMORY;
+
+CREATE TABLE r (
+  id BIGINT,
+  a ARRAY(BIGINT NULL)
+) ENGINE=FUSE;
+
+INSERT INTO l SELECT id, s, v FROM src;
+INSERT INTO r SELECT id, a FROM src;
+
+SELECT a, s, a
+FROM src
+WHERE ((s IS NULL) <> (a IS NULL))
+  AND ('' LIKE s)
+  AND ('' LIKE s);
+
+SELECT x.a, x.s, x.a
+FROM (
+  SELECT l.id, r.a, l.v, l.s
+  FROM l
+  JOIN (
+    SELECT id, JSON_OBJECT('vp', id) AS payload
+    FROM r
+  ) jp
+    ON l.id = CAST(jp.payload:vp AS BIGINT)
+  JOIN r
+    ON r.id = CAST(jp.payload:vp AS BIGINT)
+) x
+WHERE ((x.s IS NULL) <> (x.a IS NULL))
+  AND ('' LIKE x.s)
+  AND ('' LIKE x.s);
+
+原始单表查询：
+0 rows
+
+重构后的多表查询：
+a     s      a
+NULL  abc    NULL
+
+原始查询执行计划：
+TableScan
+├── table: default.repro_databend917_13.src
+├── output columns: [a, s]
+├── read rows: 3
+└── push downs:
+    [(NOT is_not_null(src.s)) <> (NOT is_not_null(src.a))
+     AND like('', src.s)]
+
+LIKE 和 IS NULL 异或条件一起在单表扫描阶段求值。
+对于 id=2，like('', 'abc') 为 false，整个 AND 条件为 false，行被过滤。
+
+重构查询执行计划核心结构：
+HashJoin
+├── output columns: [r.a, l.s]
+├── join type: INNER
+├── filters:
+│   [(NOT is_not_null(l.s)) <> (NOT is_not_null(r.a))]
+├── HashJoin(Build)
+│   ├── build: TableScan l
+│   │   └── filter: is_true(like('', l.s))
+│   └── probe:
+│       EvalScalar
+│       └── TableScan r
+│           └── expression: object_construct('vp', r.id)
+└── TableScan r
+    └── join key: r.id
+
+LIKE 被下推到 l 的 TableScan 后，下推谓词没有保持原 WHERE 中 '' LIKE s 的三值布尔语义，导致 l.s='abc' 这一行本应被 LIKE 过滤掉，却进入了 JOIN。
+之后再与 r.a=NULL 组合，顶层 HashJoin 只检查 (s IS NULL) <> (a IS NULL)，于是这个组合被保留，产生了原单表查询没有的额外行。

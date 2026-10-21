@@ -1,0 +1,303 @@
+[VERTICAL PARTITIONING UNEXPECTED QUERY ERROR]
+Mode: RANDOM_TABLE_REWRITE
+Stage: single-query
+Error text:
+ERROR: internal error: unexpected error from the vectorized runtime: unexpected replacement: original vector is bit[] whereas the replacement is bit[]
+  Detail: stack trace:
+pkg/sql/colexecerror/error.go:143: func1()
+GOROOT/src/runtime/panic.go:783: gopanic()
+pkg/col/coldata/batch.go:402: ReplaceCol()
+pkg/sql/colexec/serial_unordered_synchronizer.go:122: Next()
+pkg/sql/colflow/stats.go:122: next()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/stats.go:130: Next()
+pkg/sql/colexecop/operator.go:476: Next()
+pkg/sql/colflow/stats.go:122: next()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/stats.go:130: Next()
+pkg/sql/colflow/flow_coordinator.go:244: nextAdapter()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/flow_coordinator.go:248: next()
+pkg/sql/colflow/flow_coordinator.go:302: Run()
+pkg/sql/colflow/vectorized_flow.go:317: Run()
+pkg/sql/distsql_running.go:1087: Run()
+pkg/sql/distsql_running.go:2397: PlanAndRun()
+pkg/sql/distsql_running.go:2096: func3()
+pkg/sql/distsql_running.go:2099: PlanAndRunAll()
+pkg/sql/conn_executor_exec.go:3653: execWithDistSQLEngine()
+pkg/sql/conn_executor_exec.go:3137: dispatchToExecutionEngine()
+pkg/sql/conn_executor_exec.go:1122: execStmtInOpenState()
+pkg/sql/conn_executor_exec.go:183: func2()
+pkg/sql/conn_executor_exec.go:4720: func1()
+pkg/util/pprofutil/labels.go:38: Do()
+pkg/sql/conn_executor_exec.go:4717: execWithProfiling()
+pkg/sql/conn_executor_exec.go:182: execStmt()
+pkg/sql/conn_executor_exec.go:333: execPortal()
+pkg/sql/conn_executor.go:2593: func2()
+pkg/sql/conn_executor.go:2595: execCmd()
+pkg/sql/conn_executor.go:2394: run()
+
+  Hint: You have encountered an unexpected error.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+
+Strategy summary: split=SKEWED_SPLIT, reconstruction=JOIN, shape=MULTI_COLUMN, prefix=vp_database2_9532_
+Strategy counts: split={EMPTY_SPLIT=421, SINGLE_REPLICATED=463, SINGLE_RIGHT_ROW_ID_ONLY=463, SINGLE_LEFT_ROW_ID_ONLY=463, EVEN_SPLIT=1932, OVERLAPPED_SPLIT=1931, SKEWED_SPLIT=1930, TYPE_DIRECTED_SPLIT=1930}, reconstruction={JOIN=47663, LEFT_RIGHT_JOIN=47665, FULL_OUTER_SIMULATION=47660, SCALAR_SUBQUERY=47655, EXISTS_FILTER=47655, IN_FILTER=47662, NOT_EXISTS_ANTI=47660, DERIVED_TABLE=47655, CTE=47660, VIEW=47655, TEMP_TABLE=47152, AGGREGATE_THEN_MERGE=47655, ROW_NUMBER_ALIGNMENT=47650, JSON_PACK=47660, STRING_PACK=47665, NATURAL_OR_USING=47660, STRAIGHT_JOIN=47665, LATERAL_DERIVED=47660}
+Database: database2
+CockroachDB version: CockroachDB CCL v26.2.3 (x86_64-pc-linux-gnu, built 2026/06/24 12:27:14, go1.25.5)
+Base table: t2
+Base table DDL: CREATE TABLE public.t2 (
+	c0 TIMETZ NULL,
+	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+	CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+	UNIQUE INDEX i0 (rowid ASC, c0 ASC),
+	INDEX i3 (rowid DESC, c0 DESC)
+) WITH (schema_locked = true);
+Base table engine: N/A
+VP source engine: N/A
+VP left engine: N/A
+VP right engine: N/A
+Base row count: 5
+VP source row count: 5
+Base shape: MULTI_COLUMN
+Stable row order: "c0", "rowid"
+Prefix: vp_database2_9532_
+Split strategy: SKEWED_SPLIT
+Left columns: {c0}
+Right columns: {rowid}
+Overlap columns: {}
+Physical foreign key: true
+Reconstruction strategy: JOIN
+Description: shape=MULTI_COLUMN, split=SKEWED_SPLIT, reconstruction=JOIN
+Session vars: TimeZone=UTC, vectorize=on, optimizer_use_histograms=on, enable_zigzag_join=off, serial_normalization=rowid
+Session SET statements:
+SET TimeZone = 'UTC';
+SET vectorize = 'on';
+SET optimizer_use_histograms = 'on';
+SET enable_zigzag_join = 'off';
+SET serial_normalization = 'rowid';
+Setup statements:
+CREATE TABLE "vp_database2_9532_source" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "c0" TIMETZ NULL, "rowid" INT64 NULL);
+INSERT INTO "vp_database2_9532_source" ("vp_rowid", "c0", "rowid") SELECT ROW_NUMBER() OVER ( ORDER BY "c0", "rowid") AS "vp_rowid", "c0", "rowid" FROM "t2" LIMIT 256;
+CREATE UNIQUE INDEX "vp_database2_9532_src_idx_0" ON "vp_database2_9532_source" (rowid ASC);
+CREATE UNIQUE INDEX "vp_database2_9532_src_idx_1" ON "vp_database2_9532_source" (rowid ASC, c0 ASC);
+CREATE INDEX "vp_database2_9532_src_idx_2" ON "vp_database2_9532_source" (rowid DESC, c0 DESC);
+CREATE TABLE "vp_database2_9532_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" TIMETZ NULL);
+CREATE TABLE "vp_database2_9532_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "rowid" INT64 NULL);
+INSERT INTO "vp_database2_9532_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database2_9532_source";
+INSERT INTO "vp_database2_9532_r" ("vp_rowid", "rowid") SELECT "vp_rowid", "rowid" FROM "vp_database2_9532_source";
+CREATE INDEX "vp_database2_9532_idx_src_1667484568" ON "vp_database2_9532_source"("c0");
+ALTER TABLE "vp_database2_9532_r" ADD CONSTRAINT "vp_database2_9532_fk_r_l" FOREIGN KEY ("vp_rowid") REFERENCES "vp_database2_9532_l"("vp_rowid");
+DROP VIEW IF EXISTS "vp_database2_9532_v";
+CREATE VIEW "vp_database2_9532_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", r."rowid" AS "rowid" FROM "vp_database2_9532_l" l JOIN "vp_database2_9532_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database2_9532_joined";
+CREATE TEMP TABLE "vp_database2_9532_joined" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "c0" TIMETZ NULL, "rowid" INT8 NULL);
+INSERT INTO "vp_database2_9532_joined" ("vp_rowid", "c0", "rowid") SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", r."rowid" AS "rowid" FROM "vp_database2_9532_l" l JOIN "vp_database2_9532_r" r ON l."vp_rowid" = r."vp_rowid";
+VP table DDLs:
+vp_database2_9532_source: CREATE TABLE public.vp_database2_9532_source (
+	vp_rowid INT8 NOT NULL,
+	c0 TIMETZ NULL,
+	rowid INT8 NULL,
+	CONSTRAINT vp_database2_9532_source_pkey PRIMARY KEY (vp_rowid ASC),
+	UNIQUE INDEX vp_database2_9532_src_idx_0 (rowid ASC),
+	UNIQUE INDEX vp_database2_9532_src_idx_1 (rowid ASC, c0 ASC),
+	INDEX vp_database2_9532_src_idx_2 (rowid DESC, c0 DESC),
+	INDEX vp_database2_9532_idx_src_1667484568 (c0 ASC)
+) WITH (schema_locked = true);
+vp_database2_9532_l: CREATE TABLE public.vp_database2_9532_l (
+	vp_rowid INT8 NOT NULL,
+	c0 TIMETZ NULL,
+	CONSTRAINT vp_database2_9532_l_pkey PRIMARY KEY (vp_rowid ASC)
+) WITH (schema_locked = true);
+vp_database2_9532_r: CREATE TABLE public.vp_database2_9532_r (
+	vp_rowid INT8 NOT NULL,
+	rowid INT8 NULL,
+	CONSTRAINT vp_database2_9532_r_pkey PRIMARY KEY (vp_rowid ASC),
+	CONSTRAINT vp_database2_9532_fk_r_l FOREIGN KEY (vp_rowid) REFERENCES public.vp_database2_9532_l(vp_rowid)
+) WITH (schema_locked = true);
+vp_database2_9532_v: CREATE VIEW public.vp_database2_9532_v (
+	vp_rowid,
+	c0,
+	rowid
+) AS SELECT
+		l.vp_rowid AS vp_rowid, l.c0 AS c0, r.rowid AS rowid
+	FROM
+		database2.public.vp_database2_9532_l AS l
+		JOIN database2.public.vp_database2_9532_r AS r ON l.vp_rowid = r.vp_rowid;
+vp_database2_9532_joined: CREATE TEMP TABLE pg_temp_1785130263812270491_1.vp_database2_9532_joined (
+	vp_rowid INT8 NOT NULL,
+	c0 TIMETZ NULL,
+	rowid INT8 NULL,
+	CONSTRAINT vp_database2_9532_joined_pkey PRIMARY KEY (vp_rowid ASC)
+);
+VP source snapshot:
+SELECT "vp_rowid", "c0", "rowid" FROM "vp_database2_9532_source" ORDER BY "vp_rowid";
+1 | 00:45:39+00 | 1196298603243307009
+2 | 07:53:50+00 | 1916262686
+3 | 10:52:16+00 | 707228793
+4 | 16:20:30+00 | -281316487
+5 | 20:20:10+00 | 1944239732
+VP left snapshot:
+SELECT "vp_rowid", "c0" FROM "vp_database2_9532_l" ORDER BY "vp_rowid";
+1 | 00:45:39+00
+2 | 07:53:50+00
+3 | 10:52:16+00
+4 | 16:20:30+00
+5 | 20:20:10+00
+VP right snapshot:
+SELECT "vp_rowid", "rowid" FROM "vp_database2_9532_r" ORDER BY "vp_rowid";
+1 | 1196298603243307009
+2 | 1916262686
+3 | 707228793
+4 | -281316487
+5 | 1944239732
+Failing SQL: (SELECT DISTINCT CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM "vp_database2_9532_source" "vp_database2_9532_source" GROUP BY CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END) UNION ALL ((SELECT NULL, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM "vp_database2_9532_source" "vp_database2_9532_source"))
+Single query: (SELECT DISTINCT CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM "vp_database2_9532_source" "vp_database2_9532_source" GROUP BY CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END) UNION ALL ((SELECT NULL, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM "vp_database2_9532_source" "vp_database2_9532_source"))
+Split query: (SELECT DISTINCT CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", r."rowid" AS "rowid" FROM "vp_database2_9532_l" l JOIN "vp_database2_9532_r" r ON l."vp_rowid" = r."vp_rowid") "vp_database2_9532_source" GROUP BY CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END) UNION ALL ((SELECT NULL, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", r."rowid" AS "rowid" FROM "vp_database2_9532_l" l JOIN "vp_database2_9532_r" r ON l."vp_rowid" = r."vp_rowid") "vp_database2_9532_source"))
+Failing query plan:
+EXPLAIN (OPT) (SELECT DISTINCT CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM "vp_database2_9532_source" "vp_database2_9532_source" GROUP BY CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END) UNION ALL ((SELECT NULL, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM "vp_database2_9532_source" "vp_database2_9532_source"));
+union-all
+ ├── project
+ │    ├── group-by (hash)
+ │    │    ├── project
+ │    │    │    ├── scan vp_database2_9532_source@vp_database2_9532_src_idx_0
+ │    │    │    └── projections
+ │    │    │         └── CASE WHEN rowid IS NOT NULL THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000'] ELSE ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010'] END
+ │    │    └── aggregations
+ │    │         └── avg
+ │    │              └── vp_rowid
+ │    └── projections
+ │         └── ARRAY[]
+ └── project
+      ├── scalar-group-by
+      │    ├── scan vp_database2_9532_source@vp_database2_9532_src_idx_0
+      │    └── aggregations
+      │         └── avg
+      │              └── vp_rowid
+      └── projections
+           ├── CAST(NULL AS BIT(75)[])
+           └── ARRAY[]
+Single query plan:
+EXPLAIN (OPT) (SELECT DISTINCT CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM "vp_database2_9532_source" "vp_database2_9532_source" GROUP BY CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END) UNION ALL ((SELECT NULL, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM "vp_database2_9532_source" "vp_database2_9532_source"));
+union-all
+ ├── project
+ │    ├── group-by (hash)
+ │    │    ├── project
+ │    │    │    ├── scan vp_database2_9532_source@vp_database2_9532_src_idx_0
+ │    │    │    └── projections
+ │    │    │         └── CASE WHEN rowid IS NOT NULL THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000'] ELSE ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010'] END
+ │    │    └── aggregations
+ │    │         └── avg
+ │    │              └── vp_rowid
+ │    └── projections
+ │         └── ARRAY[]
+ └── project
+      ├── scalar-group-by
+      │    ├── scan vp_database2_9532_source@vp_database2_9532_src_idx_0
+      │    └── aggregations
+      │         └── avg
+      │              └── vp_rowid
+      └── projections
+           ├── CAST(NULL AS BIT(75)[])
+           └── ARRAY[]
+Split query plan:
+EXPLAIN (OPT) (SELECT DISTINCT CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", r."rowid" AS "rowid" FROM "vp_database2_9532_l" l JOIN "vp_database2_9532_r" r ON l."vp_rowid" = r."vp_rowid") "vp_database2_9532_source" GROUP BY CASE  WHEN ((vp_database2_9532_source.rowid) IS NOT NULL) THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000']::BIT(75)[]  WHEN (('*')NOT ILIKE(concat(('W.Q2>e(M0')::STRING, ('S5#z4klZ')::STRING))) THEN IF(false, ARRAY[NULL]::BIT(75)[], ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010']::BIT(75)[]) ELSE ARRAY[B'110010011101111011000111101000000111011111011100100111110011001101111010001', B'111010101010001010111011110000101011101110111011110100000110010001010011010']::BIT(75)[] END) UNION ALL ((SELECT NULL, AVG("vp_rowid"), ARRAY[]::VARBIT(97)[] FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", r."rowid" AS "rowid" FROM "vp_database2_9532_l" l JOIN "vp_database2_9532_r" r ON l."vp_rowid" = r."vp_rowid") "vp_database2_9532_source"));
+union-all
+ ├── project
+ │    ├── group-by (hash)
+ │    │    ├── project
+ │    │    │    ├── scan vp_database2_9532_r [as=r]
+ │    │    │    └── projections
+ │    │    │         ├── CASE WHEN rowid IS NOT NULL THEN ARRAY[B'000100010001000110110001110011010110011001000101101110111110101100101010000'] ELSE ARRAY[B'110100011101011010000101111101100000111110010100001100010010111001011111010'] END
+ │    │    │         └── r.vp_rowid
+ │    │    └── aggregations
+ │    │         └── avg
+ │    │              └── l.vp_rowid
+ │    └── projections
+ │         └── ARRAY[]
+ └── project
+      ├── scalar-group-by
+      │    ├── project
+      │    │    ├── scan vp_database2_9532_r [as=r]
+      │    │    └── projections
+      │    │         └── r.vp_rowid
+      │    └── aggregations
+      │         └── avg
+      │              └── l.vp_rowid
+      └── projections
+           ├── CAST(NULL AS BIT(75)[])
+           └── ARRAY[]
+Java stack trace:
+org.postgresql.util.PSQLException: ERROR: internal error: unexpected error from the vectorized runtime: unexpected replacement: original vector is bit[] whereas the replacement is bit[]
+  Detail: stack trace:
+pkg/sql/colexecerror/error.go:143: func1()
+GOROOT/src/runtime/panic.go:783: gopanic()
+pkg/col/coldata/batch.go:402: ReplaceCol()
+pkg/sql/colexec/serial_unordered_synchronizer.go:122: Next()
+pkg/sql/colflow/stats.go:122: next()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/stats.go:130: Next()
+pkg/sql/colexecop/operator.go:476: Next()
+pkg/sql/colflow/stats.go:122: next()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/stats.go:130: Next()
+pkg/sql/colflow/flow_coordinator.go:244: nextAdapter()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/flow_coordinator.go:248: next()
+pkg/sql/colflow/flow_coordinator.go:302: Run()
+pkg/sql/colflow/vectorized_flow.go:317: Run()
+pkg/sql/distsql_running.go:1087: Run()
+pkg/sql/distsql_running.go:2397: PlanAndRun()
+pkg/sql/distsql_running.go:2096: func3()
+pkg/sql/distsql_running.go:2099: PlanAndRunAll()
+pkg/sql/conn_executor_exec.go:3653: execWithDistSQLEngine()
+pkg/sql/conn_executor_exec.go:3137: dispatchToExecutionEngine()
+pkg/sql/conn_executor_exec.go:1122: execStmtInOpenState()
+pkg/sql/conn_executor_exec.go:183: func2()
+pkg/sql/conn_executor_exec.go:4720: func1()
+pkg/util/pprofutil/labels.go:38: Do()
+pkg/sql/conn_executor_exec.go:4717: execWithProfiling()
+pkg/sql/conn_executor_exec.go:182: execStmt()
+pkg/sql/conn_executor_exec.go:333: execPortal()
+pkg/sql/conn_executor.go:2593: func2()
+pkg/sql/conn_executor.go:2595: execCmd()
+pkg/sql/conn_executor.go:2394: run()
+
+  Hint: You have encountered an unexpected error.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2676)
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2366)
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:356)
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:496)
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:413)
+	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:333)
+	at org.postgresql.jdbc.PgStatement.executeCachedSql(PgStatement.java:319)
+	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:295)
+	at org.postgresql.jdbc.PgStatement.executeQuery(PgStatement.java:244)
+	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.getResultMultiset(CockroachDBVerticalPartitioningOracle.java:2510)
+	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.comparePair(CockroachDBVerticalPartitioningOracle.java:2239)
+	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.check(CockroachDBVerticalPartitioningOracle.java:352)
+	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+	at sqlancer.Main$DBMSExecutor.run(Main.java:479)
+	at sqlancer.Main$2.run(Main.java:696)
+	at sqlancer.Main$2.runThread(Main.java:678)
+	at sqlancer.Main$2.run(Main.java:669)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)

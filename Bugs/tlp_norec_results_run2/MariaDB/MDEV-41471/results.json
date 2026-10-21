@@ -1,0 +1,19 @@
+{
+  "database": "MariaDB",
+  "source": "/home/lwm/sqlancer/Bugs/MariaDB/MDEV-41471.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- Q1：单表查询\nSELECT DISTINCT id, CONCAT(CAST(-j AS CHAR), 'a') AS v\nFROM src",
+      "ok": true,
+      "rows": [
+        "1\t0a"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 13,
+  "target_query": "-- Q1：单表查询\nSELECT DISTINCT id, CONCAT(CAST(-j AS CHAR), 'a') AS v\nFROM src;",
+  "skip_reason": "DISTINCT is not handled by this batch rewriter"
+}

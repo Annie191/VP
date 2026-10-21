@@ -1,0 +1,76 @@
+DROP DATABASE IF EXISTS repro_mysql714_db32;
+CREATE DATABASE repro_mysql714_db32;
+USE repro_mysql714_db32;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+SET SESSION big_tables = 1;
+
+CREATE TABLE vp_s (
+    vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    c0       BIGINT NULL,
+    c1       DECIMAL(65, 30) NULL
+) ENGINE = InnoDB;
+
+INSERT INTO vp_s (c0, c1) VALUES (NULL, NULL), (NULL, 0), (0, 0);
+
+ALTER TABLE vp_s ADD KEY i0 (c1, c0 DESC);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c1 DECIMAL(65,30) NULL) ENGINE = InnoDB;
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 BIGINT NULL) ENGINE = InnoDB;
+
+INSERT INTO vp_l SELECT vp_rowid, c1 FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c0 FROM vp_s;
+
+-- 单表查询（covering index → GROUP BY 正确：2 组）
+SELECT IFNULL(CAST(vp_s.c0 AS SIGNED), vp_s.c1) AS ref0, vp_s.c1 AS ref1
+FROM vp_s
+GROUP BY vp_s.c1, IFNULL(CAST(vp_s.c0 AS SIGNED), vp_s.c1), vp_s.c1;
+
+-- JSON_PACK（JOIN 路径 → GROUP BY 异常：3 组，多出一行）
+SELECT IFNULL(CAST(t.c0 AS SIGNED), t.c1) AS ref0, t.c1 AS ref1
+FROM (
+    SELECT l.vp_rowid, r.c0, l.c1
+    FROM vp_l l
+    JOIN (SELECT vp_rowid, JSON_OBJECT('vp', vp_rowid) AS payload FROM vp_r) jp
+      ON l.vp_rowid = jp.vp_rowid
+    JOIN vp_r r ON r.vp_rowid = jp.vp_rowid
+) t
+GROUP BY t.c1, IFNULL(CAST(t.c0 AS SIGNED), t.c1), t.c1;
+
+=== 单表 ===
+| ref0      | ref1      |
+| NULL      | NULL      |   ← row 1
+| 0.000...  | 0.000...  |   ← rows 2,3 合并（GROUP BY 正确）
+
+=== JSON_PACK ===
+| ref0      | ref1      |
+| NULL      | NULL      |   ← row 1
+| NULL      | 0.000...  |   ← 多余行！c1=0 但 IFNULL 被 GROUP BY 视为 NULL
+| 0.000...  | 0.000...  |   ← row 3
+
+执行计划
+单表：
+
+-> Table scan on <temporary>
+    -> Temporary table with deduplication
+        -> Covering index scan on vp_s using i0 (c1, c0 DESC)
+
+JSON_PACK：
+
+-> Table scan on <temporary>
+    -> Temporary table with deduplication
+        -> Nested loop inner join
+            -> Nested loop inner join
+                -> Table scan on l
+                -> Single-row covering index lookup on vp_r using PRIMARY
+            -> Single-row index lookup on r using PRIMARY
+
+JSON_PACK 查询强制使用了临时表去重：执行计划显示 Temporary table with deduplication。子查询中 JSON_OBJECT 的引入使优化器无法合并视图，必须先将 JOIN 结果放入临时表再进行分组。
+
+表达式涉及混合类型且包含 NULL：IFNULL(CAST(c0 AS SIGNED), c1) 中，CAST 返回 BIGINT，而 c1 是 DECIMAL(65,30)。按规则结果类型为 DECIMAL。当 c0 为 NULL 时，理应返回 c1 的值。
+
+缺陷位置：在生成用于分组的临时表时，MySQL 需要预先计算并存储 GROUP BY 表达式的值。此时 IFNULL 内部对 NULL + DECIMAL 的处理出现 bug，未能正确返回 c1 的 DECIMAL 值 0，而是错误地写入了 NULL。
+
+输出表现：SELECT 中的同名表达式 IFNULL(...) 很可能直接复用了临时表中的该错误结果，因此显示 NULL；而单独的 t.c1 不受影响，仍显示 0.000...。

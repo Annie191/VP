@@ -1,0 +1,100 @@
+[
+  {
+    "database": "DuckDB",
+    "source": "/home/lwm/sqlancer/Bugs/DuckDB/24795.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 查询 1：单表，使用 GROUP BY ALL\nSELECT c0, COUNT(*) AS vp_count\nFROM repro_duckdb_database8_min_source\nGROUP BY ALL",
+        "ok": true,
+        "rows": [
+          "┌─────────┬──────────┐",
+          "│   c0    │ vp_count │",
+          "│ varchar │  int64   │",
+          "├─────────┼──────────┤",
+          "│ A       │        1 │",
+          "│ a       │        1 │",
+          "│ b       │        1 │",
+          "└─────────┴──────────┘"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 7,
+    "target_query": "-- 查询 1：单表，使用 GROUP BY ALL\nSELECT c0, COUNT(*) AS vp_count\nFROM repro_duckdb_database8_min_source\nGROUP BY ALL;",
+    "skip_reason": "GROUP BY is not handled by this batch rewriter"
+  },
+  {
+    "database": "DuckDB",
+    "source": "/home/lwm/sqlancer/Bugs/DuckDB/24796.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 单表版本（正常工作）\nSELECT\n    COUNT(*) FILTER (WHERE vp_rowid % 2 = 0) AS even_count,\n    COUNT(c0) FILTER (WHERE vp_rowid % 2 = 0) AS even_nonnull,\n    (\n        SELECT COUNT(*)\n        FROM (\n            SELECT *\n            FROM repro_duckdb_db9_min_source\n            WHERE FALSE\n        ) empty_input\n    ) AS empty_count\nFROM repro_duckdb_db9_min_source",
+        "ok": true,
+        "rows": [
+          "┌────────────┬──────────────┬─────────────┐",
+          "│ even_count │ even_nonnull │ empty_count │",
+          "│   int64    │    int64     │    int64    │",
+          "├────────────┼──────────────┼─────────────┤",
+          "│          1 │            1 │           0 │",
+          "└────────────┴──────────────┴─────────────┘"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 4,
+    "target_query": "-- 单表版本（正常工作）\nSELECT\n    COUNT(*) FILTER (WHERE vp_rowid % 2 = 0) AS even_count,\n    COUNT(c0) FILTER (WHERE vp_rowid % 2 = 0) AS even_nonnull,\n    (\n        SELECT COUNT(*)\n        FROM (\n            SELECT *\n            FROM repro_duckdb_db9_min_source\n            WHERE FALSE\n        ) empty_input\n    ) AS empty_count\nFROM repro_duckdb_db9_min_source;",
+    "skip_reason": "nested query/window/union is not handled by this batch rewriter"
+  },
+  {
+    "database": "DuckDB",
+    "source": "/home/lwm/sqlancer/Bugs/DuckDB/24797.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "-- 单表查询\nSELECT\n    quantile(\n        CASE WHEN vp_rowid % 4 = 0 THEN NULL ELSE c0 END,\n        0.5\n    ) AS median,\n    histogram(\n        CASE WHEN vp_rowid % 4 = 0 THEN NULL ELSE c0 END\n    ) AS hist\nFROM repro_duckdb_db5_hist_min_source",
+        "ok": true,
+        "rows": [
+          "┌────────┬──────────────────────┐",
+          "│ median │         hist         │",
+          "│ double │ map(double, ubigint) │",
+          "├────────┼──────────────────────┤",
+          "│    inf │ {-inf=2, inf=1}      │",
+          "└────────┴──────────────────────┘"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 7,
+    "target_query": "-- 单表查询\nSELECT\n    quantile(\n        CASE WHEN vp_rowid % 4 = 0 THEN NULL ELSE c0 END,\n        0.5\n    ) AS median,\n    histogram(\n        CASE WHEN vp_rowid % 4 = 0 THEN NULL ELSE c0 END\n    ) AS hist\nFROM repro_duckdb_db5_hist_min_source;",
+    "skip_reason": "only one top-level aggregate expression is supported"
+  },
+  {
+    "database": "DuckDB",
+    "source": "/home/lwm/sqlancer/Bugs/DuckDB/24810.sql",
+    "status": "skipped",
+    "queries": {
+      "original": {
+        "sql": "SELECT vp_rowid, c0\nFROM repro_duckdb_db1_interval_source\nORDER BY vp_rowid",
+        "ok": true,
+        "rows": [
+          "┌──────────┬──────────────┐",
+          "│ vp_rowid │      c0      │",
+          "│  int64   │   interval   │",
+          "├──────────┼──────────────┤",
+          "│        0 │ 580063:44:54 │",
+          "└──────────┴──────────────┘"
+        ],
+        "stderr": ""
+      }
+    },
+    "errors": [],
+    "target_statement_index": 10,
+    "target_query": "SELECT vp_rowid, c0\nFROM repro_duckdb_db1_interval_source\nORDER BY vp_rowid;",
+    "skip_reason": "ORDER BY is not handled by this batch rewriter"
+  }
+]

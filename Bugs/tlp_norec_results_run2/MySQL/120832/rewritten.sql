@@ -1,0 +1,23 @@
+DROP DATABASE IF EXISTS repro;
+CREATE DATABASE repro;
+USE repro;
+-- 源表
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 BIGINT
+) ENGINE=InnoDB;
+INSERT INTO src (c0) VALUES (1689933404);
+-- 拆分：l 只存 rowid，r 存 rowid + c0
+CREATE TABLE l (vp_rowid BIGINT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+CREATE TABLE r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 BIGINT) ENGINE=InnoDB;
+INSERT INTO l (vp_rowid) SELECT vp_rowid FROM src;
+INSERT INTO r (vp_rowid, c0) SELECT vp_rowid, c0 FROM src;
+
+-- ORIGINAL SINGLE-TABLE QUERY
+-- Single: 查 src
+SELECT 'single' AS query_type, (((c0) LIKE (NULL)) IS FALSE) IS NULL AS ref0
+FROM src
+WHERE (CAST((vp_rowid) IS NOT NULL AS SIGNED)) IS FALSE
+GROUP BY (((c0) LIKE (NULL)) IS FALSE) IS NULL WITH ROLLUP;
+
+-- SKIPPED TLP/NoREC: GROUP BY is not handled by this batch rewriter

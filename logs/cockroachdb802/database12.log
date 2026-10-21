@@ -1,0 +1,194 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=SKEWED_SPLIT, reconstruction=STRING_PACK, shape=MULTI_COLUMN, prefix=vp_database12_370_
+--Strategy counts: split={EMPTY_SPLIT=21, SINGLE_REPLICATED=12, SINGLE_RIGHT_ROW_ID_ONLY=12, SINGLE_LEFT_ROW_ID_ONLY=13, EVEN_SPLIT=79, OVERLAPPED_SPLIT=79, SKEWED_SPLIT=78, TYPE_DIRECTED_SPLIT=78}, reconstruction={JOIN=1844, LEFT_RIGHT_JOIN=1843, FULL_OUTER_SIMULATION=1843, SCALAR_SUBQUERY=1840, EXISTS_FILTER=1836, IN_FILTER=1837, NOT_EXISTS_ANTI=1837, DERIVED_TABLE=1838, CTE=1835, VIEW=1841, TEMP_TABLE=1836, AGGREGATE_THEN_MERGE=1842, ROW_NUMBER_ALIGNMENT=1835, JSON_PACK=1840, STRING_PACK=1840, NATURAL_OR_USING=1843, STRAIGHT_JOIN=1844, LATERAL_DERIVED=1841}
+--Database: database12
+--CockroachDB version: CockroachDB CCL v26.2.3 (x86_64-pc-linux-gnu, built 2026/06/24 12:27:14, go1.25.5)
+--Base table: t1
+--Base table DDL: CREATE TABLE public.t1 (
+--	c0 DECIMAL NULL,
+--	c1 INT4 NULL DEFAULT 246081558:::INT8,
+--	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+--	CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
+--	UNIQUE INDEX i2 (rowid DESC) STORING (c1, c0),
+--	INDEX i3 (rowid ASC, c0 ASC),
+--	UNIQUE INDEX i4 (rowid ASC) STORING (c0, c1),
+--	INDEX i5 (c1 DESC, rowid ASC),
+--	UNIQUE INDEX i6 (c0 ASC, rowid ASC) STORING (c1)
+--) WITH (schema_locked = true);
+--Base table engine: N/A
+--VP source engine: N/A
+--VP left engine: N/A
+--VP right engine: N/A
+--Base row count: 12
+--VP source row count: 12
+--Base shape: MULTI_COLUMN
+--Stable row order: "c0", "c1", "rowid"
+--Prefix: vp_database12_370_
+--Split strategy: SKEWED_SPLIT
+--Left columns: {rowid}
+--Right columns: {c0, c1}
+--Overlap columns: {}
+--Physical foreign key: true
+--Reconstruction strategy: STRING_PACK
+--Description: shape=MULTI_COLUMN, split=SKEWED_SPLIT, reconstruction=STRING_PACK
+--Optimizer profile: HISTOGRAMS_OFF
+--AS OF SYSTEM TIME: 1785656066660435450.0000000000
+--Session vars: TimeZone=UTC, vectorize=on, optimizer_use_histograms=off, enable_zigzag_join=off, serial_normalization=rowid
+--Session SET statements:
+--SET TimeZone = 'UTC';
+--SET vectorize = 'on';
+--SET optimizer_use_histograms = 'off';
+--SET enable_zigzag_join = 'off';
+--SET serial_normalization = 'rowid';
+--Setup statements:
+--CREATE TABLE "vp_database12_370_source" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "c0" DECIMAL NULL, "c1" INT4 NULL, "rowid" BIGINT NULL);
+--CREATE TABLE "vp_database12_370_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "rowid" INT64 NULL);
+--CREATE TABLE "vp_database12_370_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" DECIMAL NULL, "c1" INT4 NULL);
+--INSERT INTO "vp_database12_370_source" ("vp_rowid", "c0", "c1", "rowid") SELECT ROW_NUMBER() OVER ( ORDER BY "c0", "c1", "rowid") AS "vp_rowid", "c0", "c1", "rowid" FROM "t1" LIMIT 256;
+--CREATE UNIQUE INDEX "vp_database12_370_src_idx_0" ON "vp_database12_370_source" (rowid ASC);
+--CREATE UNIQUE INDEX "vp_database12_370_src_idx_1" ON "vp_database12_370_source" (rowid DESC) STORING (c1, c0);
+--CREATE INDEX "vp_database12_370_src_idx_2" ON "vp_database12_370_source" (rowid ASC, c0 ASC);
+--CREATE UNIQUE INDEX "vp_database12_370_src_idx_3" ON "vp_database12_370_source" (rowid ASC) STORING (c0, c1);
+--CREATE INDEX "vp_database12_370_src_idx_4" ON "vp_database12_370_source" (c1 DESC, rowid ASC);
+--CREATE UNIQUE INDEX "vp_database12_370_src_idx_5" ON "vp_database12_370_source" (c0 ASC, rowid ASC) STORING (c1);
+--INSERT INTO "vp_database12_370_l" ("vp_rowid", "rowid") SELECT "vp_rowid", "rowid" FROM "vp_database12_370_source";
+--INSERT INTO "vp_database12_370_r" ("vp_rowid", "c0", "c1") SELECT "vp_rowid", "c0", "c1" FROM "vp_database12_370_source";
+--CREATE INDEX "vp_database12_370_src_asym_2085068949" ON "vp_database12_370_source"("c1", "vp_rowid");
+--CREATE INDEX "vp_database12_370_l_asym_25611301" ON "vp_database12_370_l"("vp_rowid", "rowid");
+--CREATE INDEX "vp_database12_370_idx_src_1726751099" ON "vp_database12_370_source"("c1", "c0");
+--ALTER TABLE "vp_database12_370_r" ADD CONSTRAINT "vp_database12_370_fk_r_l" FOREIGN KEY ("vp_rowid") REFERENCES "vp_database12_370_l"("vp_rowid");
+--DROP VIEW IF EXISTS "vp_database12_370_v";
+--CREATE VIEW "vp_database12_370_v" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0", r."c1" AS "c1", l."rowid" AS "rowid" FROM "vp_database12_370_l" l JOIN "vp_database12_370_r" r ON l."vp_rowid" = r."vp_rowid";
+--DROP TABLE IF EXISTS "vp_database12_370_joined";
+--CREATE TEMP TABLE "vp_database12_370_joined" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "c0" DECIMAL NULL, "c1" INT4 NULL, "rowid" INT8 NULL);
+--INSERT INTO "vp_database12_370_joined" ("vp_rowid", "c0", "c1", "rowid") SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0", r."c1" AS "c1", l."rowid" AS "rowid" FROM "vp_database12_370_l" l JOIN "vp_database12_370_r" r ON l."vp_rowid" = r."vp_rowid";
+--VP source snapshot:
+--SELECT "vp_rowid", "c0", "c1", "rowid" FROM "vp_database12_370_source" ORDER BY "vp_rowid";
+--1 | NULL | 246081558 | -1358586743
+--2 | NULL | 246081558 | 1158003260
+--3 | 99999999999999999999.9999999999 | -1534277021 | 1197948127510102017
+--4 | 99999999999999999999.9999999999 | -1039497360 | 1197948127510036481
+--5 | 99999999999999999999.9999999999 | -802311496 | 1197948127510134785
+--6 | 99999999999999999999.9999999999 | 246081558 | 1197948127510069249
+--7 | 99999999999999999999.9999999999 | 367732618 | -851304225
+--8 | 99999999999999999999.9999999999 | 604545014 | 1197948127510003713
+--9 | 99999999999999999999.9999999999 | 929658636 | 1197948127510167553
+--10 | 99999999999999999999.9999999999 | 1185757796 | 127820813
+--11 | 99999999999999999999.9999999999 | 1588942742 | 1197948127509970945
+--12 | 99999999999999999999.9999999999 | 2146088802 | 1197948127510200321
+--VP left snapshot:
+--SELECT "vp_rowid", "rowid" FROM "vp_database12_370_l" ORDER BY "vp_rowid";
+--1 | -1358586743
+--2 | 1158003260
+--3 | 1197948127510102017
+--4 | 1197948127510036481
+--5 | 1197948127510134785
+--6 | 1197948127510069249
+--7 | -851304225
+--8 | 1197948127510003713
+--9 | 1197948127510167553
+--10 | 127820813
+--11 | 1197948127509970945
+--12 | 1197948127510200321
+--VP right snapshot:
+--SELECT "vp_rowid", "c0", "c1" FROM "vp_database12_370_r" ORDER BY "vp_rowid";
+--1 | NULL | 246081558
+--2 | NULL | 246081558
+--3 | 99999999999999999999.9999999999 | -1534277021
+--4 | 99999999999999999999.9999999999 | -1039497360
+--5 | 99999999999999999999.9999999999 | -802311496
+--6 | 99999999999999999999.9999999999 | 246081558
+--7 | 99999999999999999999.9999999999 | 367732618
+--8 | 99999999999999999999.9999999999 | 604545014
+--9 | 99999999999999999999.9999999999 | 929658636
+--10 | 99999999999999999999.9999999999 | 1185757796
+--11 | 99999999999999999999.9999999999 | 1588942742
+--12 | 99999999999999999999.9999999999 | 2146088802
+--Single query: SELECT DISTINCT TIMETZ '1969-12-17T15:13:26', VARIANCE("c0") FROM "vp_database12_370_source" AS "vp_database12_370_source" AS OF SYSTEM TIME 1785656066660435450.0000000000
+--Split query: SELECT DISTINCT TIMETZ '1969-12-17T15:13:26', VARIANCE("c0") FROM (SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0", r."c1" AS "c1", l."rowid" AS "rowid" FROM "vp_database12_370_l" l JOIN (SELECT "vp_rowid", concat('vp:', "vp_rowid"::STRING) AS payload FROM "vp_database12_370_r") sp ON concat('vp:', l."vp_rowid"::STRING) = sp.payload JOIN "vp_database12_370_r" r ON r."vp_rowid" = sp."vp_rowid") AS "vp_database12_370_source" AS OF SYSTEM TIME 1785656066660435450.0000000000
+--Single query plan:
+--EXPLAIN (OPT) SELECT DISTINCT TIMETZ '1969-12-17T15:13:26', VARIANCE("c0") FROM "vp_database12_370_source" AS "vp_database12_370_source" AS OF SYSTEM TIME 1785656066660435450.0000000000;
+--project
+-- ├── scalar-group-by
+-- │    ├── scan vp_database12_370_source@vp_database12_370_src_idx_2
+-- │    └── aggregations
+-- │         └── variance
+-- │              └── c0
+-- └── projections
+--      └── '15:13:26+00'
+--Split query plan:
+--EXPLAIN (OPT) SELECT DISTINCT TIMETZ '1969-12-17T15:13:26', VARIANCE("c0") FROM (SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0", r."c1" AS "c1", l."rowid" AS "rowid" FROM "vp_database12_370_l" l JOIN (SELECT "vp_rowid", concat('vp:', "vp_rowid"::STRING) AS payload FROM "vp_database12_370_r") sp ON concat('vp:', l."vp_rowid"::STRING) = sp.payload JOIN "vp_database12_370_r" r ON r."vp_rowid" = sp."vp_rowid") AS "vp_database12_370_source" AS OF SYSTEM TIME 1785656066660435450.0000000000;
+--project
+-- ├── scalar-group-by
+-- │    ├── inner-join (hash)
+-- │    │    ├── project
+-- │    │    │    ├── scan vp_database12_370_l [as=l]
+-- │    │    │    └── projections
+-- │    │    │         └── concat('vp:', l.vp_rowid::STRING)
+-- │    │    ├── inner-join (merge)
+-- │    │    │    ├── project
+-- │    │    │    │    ├── scan vp_database12_370_r
+-- │    │    │    │    └── projections
+-- │    │    │    │         └── concat('vp:', vp_database12_370_r.vp_rowid::STRING)
+-- │    │    │    ├── scan vp_database12_370_r [as=r]
+-- │    │    │    └── filters (true)
+-- │    │    └── filters
+-- │    │         └── column15 = payload
+-- │    └── aggregations
+-- │         └── variance
+-- │              └── r.c0
+-- └── projections
+--      └── '15:13:26+00'
+--Single result sample: S:11:15:13:26+00;S:22:-1111111111.1111111111; x1
+--Split result sample: S:11:15:13:26+00;S:22:-3333333333.3333333333; x1
+--Only in single: S:11:15:13:26+00;S:22:-1111111111.1111111111; x1
+--Only in split: S:11:15:13:26+00;S:22:-3333333333.3333333333; x1
+--
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.comparePair(CockroachDBVerticalPartitioningOracle.java:3075)
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.check(CockroachDBVerticalPartitioningOracle.java:430)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:479)
+--	at sqlancer.Main$2.run(Main.java:696)
+--	at sqlancer.Main$2.runThread(Main.java:678)
+--	at sqlancer.Main$2.run(Main.java:669)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/08/02 07:34:26
+-- Database: database12
+-- Database version: 13.0.0
+-- seed value: 1785655128916
+USE test;
+DROP DATABASE IF EXISTS database12 CASCADE;
+CREATE DATABASE database12;
+USE database12;
+--Don't send automatic bug reports;
+SET CLUSTER SETTING debug.panic_on_failed_assertions = true;
+SET CLUSTER SETTING diagnostics.reporting.enabled = false;
+SET CLUSTER SETTING diagnostics.reporting.send_crash_reports.enabled = false;
+-- Disable the collection of metrics and hope that it helps performance;
+SET CLUSTER SETTING sql.metrics.statement_details.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.dump_to_logs.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.gateway_node.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.index_recommendation_collection.enabled = false;
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+SET CLUSTER SETTING timeseries.storage.enabled = false;
+SET experimental_enable_hash_sharded_indexes = 'on';
+SET experimental_enable_temp_tables = 'on';
+CREATE TABLE t0 (c0 TIME DEFAULT (TIME '1969-12-22T13:22:25'));
+CREATE TABLE t1 (c0 DECIMAL, c1 INT4 DEFAULT (246081558));
+CREATE TABLE t2 (c0 TIMESTAMP NOT NULL , CONSTRAINT "primary" PRIMARY KEY(c0));
+DROP TABLE IF EXISTS "t0" CASCADE;
+CREATE TABLE t0 (c0 FLOAT AS (0.1315789248849486) STORED UNIQUE  NOT NULL , FAMILY "primary" (c0));
+DROP TABLE IF EXISTS "t0" CASCADE;
+CREATE TABLE t0 (c0 TIMETZ DEFAULT (((NULL) ::TIMETZ)) CHECK ((((((c1) ::TIMESTAMPTZ)) >= (CASE  WHEN ((NULL) ::BOOL) THEN c1 END)) AND ((((c1) ::TIMESTAMPTZ)) <= (c1)))), c1 TIMESTAMPTZ CHECK (true));
+DROP TABLE IF EXISTS "t2" CASCADE;
+CREATE TABLE t2 (c0 TIME[] CHECK (((((false) :::BOOL)) :::BOOL)));
+DROP TABLE IF EXISTS "t2" CASCADE;
+CREATE TABLE t2 (c0 DECIMAL, c1 TIME DEFAULT (TIME '1969-12-28T00:12:54'));
+DROP TABLE IF EXISTS "t0" CASCADE;
+CREATE TABLE t0 (c0 STRING COLLATE cmn DEFAULT (concat((concat((concat(('507560101')::STRING, ('d&')::STRING))::STRING, ((('Co') :::STRING))::STRING))::STRING, (concat(((('4]3') ::STRING))::STRING, (((NULL) ::STRING))::STRING))::STRING)), FAMILY "primary" (c0));
+DROP TABLE IF EXISTS "t2" CASCADE;
+CREATE TABLE t2 (c0 SERIAL8);
+DROP TABLE IF EXISTS "t0" CASCADE;

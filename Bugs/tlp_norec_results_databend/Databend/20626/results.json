@@ -1,0 +1,19 @@
+{
+  "database": "Databend",
+  "source": "/home/lwm/sqlancer/Bugs/Databend/20626.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT COUNT(source.c0map)\nFROM source\nLIMIT 2",
+      "ok": true,
+      "rows": [
+        "2"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "SELECT COUNT(source.c0map)\nFROM source\nLIMIT 2;",
+  "skip_reason": "LIMIT is not handled by this batch rewriter"
+}

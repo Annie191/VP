@@ -1,0 +1,161 @@
+#69294   https://github.com/pingcap/tidb/issues/69294 confirmed as a bug.
+
+DROP DATABASE IF EXISTS repro_tidb615_db16_min;
+CREATE DATABASE repro_tidb615_db16_min;
+USE repro_tidb615_db16_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+
+CREATE TABLE src(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DATETIME NULL
+);
+
+INSERT INTO src(c0) VALUES (NULL);
+
+CREATE TABLE l(
+  id BIGINT NOT NULL PRIMARY KEY
+);
+
+CREATE TABLE r(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 DATETIME NULL
+);
+
+INSERT INTO l SELECT id FROM src;
+INSERT INTO r SELECT id, c0 FROM src;
+
+-- 单表：返回 1 行
+SELECT c0, id, 1168174079 AS marker
+FROM src
+WHERE BINARY(id > id) < '}'
+GROUP BY c0, id
+HAVING (
+  CASE id
+    WHEN 'h' THEN c0 IS NULL
+    WHEN id THEN c0
+    ELSE NULL
+  END
+) IS NULL
+ORDER BY id;
+
+-- split/join：错误地返回空集
+SELECT v.c0, v.id, 1168174079 AS marker
+FROM (
+  SELECT l.id, r.c0
+  FROM l JOIN r ON l.id = r.id
+) v
+WHERE BINARY(v.id > v.id) < '}'
+GROUP BY v.c0, v.id
+HAVING (
+  CASE v.id
+    WHEN 'h' THEN v.c0 IS NULL
+    WHEN v.id THEN v.c0
+    ELSE NULL
+  END
+) IS NULL
+ORDER BY v.id;
+
+实测结果：
+-- single
++------+----+------------+
+| c0   | id | marker     |
++------+----+------------+
+| NULL |  1 | 1168174079 |
++------+----+------------+
+
+-- split/join
+Empty set
+关键执行计划：
+-- 单表
+Projection_14             root      src.c0, src.id, 1168174079
+└─TableReader_17          root      data:Selection_16
+  └─Selection_16          cop[tikv] isnull(case(...)), lt(cast(gt(src.id, src.id), binary(1)), "}")
+    └─TableFullScan_15    cop[tikv] table:src
+
+-- split/join
+Projection_50             root      r.c0, l.id, 1168174079
+└─MergeJoin_52            root      inner join, left key:l.id, right key:r.id,
+                            other cond:isnull(case(... cast(r.c0, var_string(19)) ...))
+  ├─TableReader_37        root      data:Selection_36
+  │ └─Selection_36        cop[tikv] lt(from_binary(cast(gt(r.id, r.id), binary(1))), "}")
+  │   └─TableFullScan_35  cop[tikv] table:r
+  └─TableReader_34        root      data:Selection_33
+    └─Selection_33        cop[tikv] lt(cast(gt(l.id, l.id), binary(1)), "}")
+      └─TableFullScan_32  cop[tikv] table:l
+这里有两个关键变化：
+单表：HAVING 的 isnull(case(...)) 被下推成 cop[tikv] Selection
+split：HAVING 的 isnull(case(...)) 变成 MergeJoin_52 的 other cond
+同时 split/join 的 Build 侧又出现了类似问题：
+lt(from_binary(cast(gt(r.id, r.id), binary(1))), "}")
+而单表/Probe 侧是：
+lt(cast(gt(id, id), binary(1)), "}")
+但真正过滤空集主要和 CASE id WHEN 'h' THEN c0 IS NULL WHEN id THEN c0 ELSE NULL END IS NULL 在 join other condition 中的求值有关。单表 cop 层认为该行为满足 IS NULL；join 后 root/other cond 路径认为不满足，行被过滤掉。
+
+关键差异分析（两个维度）
+差异 1：from_binary(...) 问题（与 database2 同类）
+表格
+侧	谓词形式
+Probe 侧 l	lt(cast(gt(l.id, l.id), binary(1)), "}") ✅ 正常
+Build 侧 r	lt(from_binary(cast(gt(r.id, r.id), binary(1))), "}") ❌ 多了 from_binary
+但注意：这个 WHERE 条件本身对两边都是 TRUE（id > id 为 FALSE，BINARY(0) 为 '0'，'0' < '}' 为 TRUE）。所以 from_binary 本身可能不是导致空集的直接原因（虽然它是 Bug）。
+差异 2：HAVING 条件的执行位置变化（真正导致空集的原因）
+表格
+查询	HAVING 执行位置	表达式形式
+单表	cop[tikv] Selection_16	isnull(case(...))
+Split/Join	MergeJoin_52 other cond	isnull(case(... cast(r.c0, var_string(19)) ...))
+关键变化：
+单表：HAVING 下推到 TiKV cop 层
+Split/Join：HAVING 变成 MergeJoin 的 other cond（root 层）
+而且注意到 JOIN 的 other cond 中 CASE 表达式被改写了：
+plain
+case(... cast(r.c0, var_string(19)) ...)
+多了 cast(r.c0, var_string(19))！
+
+HAVING 条件在 JOIN other cond 中求值错误。
+具体机制
+表格
+路径	CASE 返回	IS NULL 判定
+单表 cop	c0 = NULL（DATETIME NULL）	TRUE ✅
+JOIN root other cond	cast(r.c0, var_string(19)) 或某种改写后的值	FALSE ❌（Bug）
+为什么 JOIN 路径认为不是 NULL？
+可能的原因：
+cast(r.c0, var_string(19)) 在 r.c0 为 NULL 时，产生了非 NULL 的空字符串 ''（而不是 SQL NULL）
+或者 CASE 的某个分支在 other cond 求值时走了不同的路径
+或者 c0 IS NULL / c0 的 NULL 传播在类型转换后被破坏
+
+
+
+单表查询解析
+
+3.1 WHERE 条件分析
+sql
+BINARY(id > id) < '}'
+表格
+步骤	表达式	求值
+id > id	1 > 1	FALSE (0)
+BINARY(0)	cast(0, binary)	二进制字符串 0x00 或 '0'
+'0' < '}'	字符串比较	'0' (ASCII 48) < '}' (ASCII 125) → TRUE
+✅ WHERE 条件为 TRUE，行不会被过滤。
+3.2 GROUP BY
+sql
+GROUP BY c0, id
+只有 1 行，c0=NULL, id=1
+分组后还是 1 组
+3.3 HAVING 条件分析（核心）
+sql
+CASE id
+  WHEN 'h' THEN c0 IS NULL    -- 分支1: id='h'?
+  WHEN id THEN c0             -- 分支2: id=id? （即 id 等于自身？）
+  ELSE NULL
+END IS NULL
+CASE 语法：CASE 表达式 WHEN 值 THEN ... 是等值比较。
+表格
+分支	条件	求值	结果
+分支1	id = 'h'	1 = 'h' → 字符串 'h' 转整数 0，1 = 0 → FALSE	不走
+分支2	id = id	1 = 1 → TRUE	✅ 走 THEN c0
+ELSE	—	—	不走
+所以 CASE 返回：c0 = NULL（因为 src.c0 是 NULL）
+然后：NULL IS NULL → TRUE ✅
+✅ HAVING 条件满足，行被保留。

@@ -1,0 +1,130 @@
+#69295 https://github.com/pingcap/tidb/issues/69295 confirmed as a bug.
+
+整个 WHERE 条件在单表查询时被完整下推到 TiKV cop 层执行；在 JOIN 查询时变成 MergeJoin 的 other cond 在 TiDB root 层执行。同一行数据，两边求值结果不同（cop 为 true，root 为 false/NULL），导致 JOIN 返回空集。
+
+DROP DATABASE IF EXISTS repro_tidb615_db7_min;
+CREATE DATABASE repro_tidb615_db7_min;
+USE repro_tidb615_db7_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+
+CREATE TABLE src(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DOUBLE NULL
+);
+
+INSERT INTO src(c0) VALUES (0.25);
+
+CREATE TABLE l(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 DOUBLE NULL
+);
+
+CREATE TABLE r(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 DOUBLE NULL
+);
+
+INSERT INTO l SELECT id, c0 FROM src;
+INSERT INTO r SELECT id, c0 FROM src;
+
+-- 单表：返回 1 行
+SELECT 1 AS ok
+FROM src
+WHERE DATE_FORMAT(
+  CASE 0
+    WHEN CAST(id AS CHAR) THEN NULL
+    WHEN TRUE THEN c0
+    ELSE CAST(c0 AS DATE)
+  END,
+  (c0 OR 1) NOT LIKE TRUE
+) | id;
+
+-- split/join：错误地返回空集
+SELECT 1 AS ok
+FROM (
+  SELECT l.id, r.c0
+  FROM l JOIN r ON l.id = r.id
+) v
+WHERE DATE_FORMAT(
+  CASE 0
+    WHEN CAST(v.id AS CHAR) THEN NULL
+    WHEN TRUE THEN v.c0
+    ELSE CAST(v.c0 AS DATE)
+  END,
+  (v.c0 OR 1) NOT LIKE TRUE
+) | v.id;
+实测结果：
+-- single
++----+
+| ok |
++----+
+|  1 |
++----+
+
+-- split/join
+Empty set
+关键执行计划：
+-- 单表
+Projection_4              root      1->Column#4
+└─TableReader_7           root      data:Selection_6
+  └─Selection_6           cop[tikv] bitor(cast(date_format(cast(case(... src.c0 ...), datetime(6)), ...), bigint), src.id)
+    └─TableFullScan_5     cop[tikv] table:src
+
+-- split/join
+Projection_9              root      1->Column#7
+└─MergeJoin_10            root      inner join, left key:l.id, right key:r.id,
+                            other cond:bitor(cast(date_format(cast(case(... r.c0 ...), datetime(6)), ...), bigint), l.id)
+  ├─TableReader_28        root      table:r
+  └─TableReader_26        root      table:l
+这里最明显的差异是：
+单表：整个 WHERE 条件下推到 cop[tikv] 的 Selection_6 里判断。
+split/join：同一个 WHERE 条件变成 MergeJoin_10 的 other cond，在 root 层 join 时判断。
+同一行数据下，cop 层判断为 true，join other condition 判断为 false/NULL，导致 split/join 空集。
+
+单表查询解析
+
+3.1 WHERE 条件拆解
+这是一个复杂的嵌套表达式，从内到外逐层分析：
+3.1.1 CASE 表达式
+sql
+CASE 0
+  WHEN CAST(id AS CHAR) THEN NULL      -- 分支1: 0 = CAST(1 AS CHAR)?
+  WHEN TRUE THEN c0                    -- 分支2: 0 = TRUE?
+  ELSE CAST(c0 AS DATE)                -- 分支3
+END
+表格
+分支	条件	求值过程	结果
+分支1	0 = CAST(1 AS CHAR)	CAST(1 AS CHAR) = '1'，0 = '1' → 数字 0 vs 字符串 '1' → 字符串转数字得 1，0 = 1 → FALSE	不走
+分支2	0 = TRUE	TRUE = 1，0 = 1 → FALSE	不走
+分支3	ELSE	—	✅ 走 ELSE
+CASE 返回：CAST(c0 AS DATE) = CAST(0.25 AS DATE)
+CAST(0.25 AS DATE) 是什么？
+在 MySQL/TiDB 中，CAST(数值 AS DATE) 将数字解释为日期：
+0 → '0000-00-00'（零日期）
+0.25 → 可能是 '0000-00-00' 或某种内部表示
+在 NO_ZERO_DATE 模式下，零日期应该是非法的，但 cop 层可能宽容处理。
+3.1.2 DATE_FORMAT 的 format 参数
+sql
+(c0 OR 1) NOT LIKE TRUE
+表格
+步骤	表达式	求值
+c0 OR 1	0.25 OR 1	逻辑或，TRUE OR anything = TRUE (1)
+1 NOT LIKE TRUE	1 NOT LIKE 1	LIKE 用于字符串匹配，但两边都是数字/布尔。1 LIKE 1 → TRUE（相等），NOT → FALSE (0)
+format 参数 = 0（FALSE 转为字符串 '0'）
+3.1.3 DATE_FORMAT 整体
+sql
+DATE_FORMAT( CAST(0.25 AS DATE), 0 )
+CAST(0.25 AS DATE) → 某个日期值（可能是零日期或 NULL）
+DATE_FORMAT(日期, '0') → 用格式 '0' 格式化日期
+格式 '0'：MySQL 的 DATE_FORMAT 中，'0' 不是有效的格式说明符，会被当作普通字符原样输出。
+所以 DATE_FORMAT(日期, '0') → 返回字符串 '0'（如果日期非 NULL）。
+3.1.4 最终 WHERE 条件
+sql
+DATE_FORMAT(...) | id
+DATE_FORMAT(...) → '0'（字符串？）或某个值
+'0' | 1：字符串 '0' 转整数 0，0 | 1 = 1（按位或）
+或者：如果 DATE_FORMAT 返回的是字符串 '0'，在按位或操作中转为整数 0。
+0 | 1 = 1 → TRUE（非零）
+✅ WHERE 条件为 TRUE，行保留。

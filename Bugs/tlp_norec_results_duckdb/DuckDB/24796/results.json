@@ -1,0 +1,24 @@
+{
+  "database": "DuckDB",
+  "source": "/home/lwm/sqlancer/Bugs/DuckDB/24796.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 单表版本（正常工作）\nSELECT\n    COUNT(*) FILTER (WHERE vp_rowid % 2 = 0) AS even_count,\n    COUNT(c0) FILTER (WHERE vp_rowid % 2 = 0) AS even_nonnull,\n    (\n        SELECT COUNT(*)\n        FROM (\n            SELECT *\n            FROM repro_duckdb_db9_min_source\n            WHERE FALSE\n        ) empty_input\n    ) AS empty_count\nFROM repro_duckdb_db9_min_source",
+      "ok": true,
+      "rows": [
+        "┌────────────┬──────────────┬─────────────┐",
+        "│ even_count │ even_nonnull │ empty_count │",
+        "│   int64    │    int64     │    int64    │",
+        "├────────────┼──────────────┼─────────────┤",
+        "│          1 │            1 │           0 │",
+        "└────────────┴──────────────┴─────────────┘"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 4,
+  "target_query": "-- 单表版本（正常工作）\nSELECT\n    COUNT(*) FILTER (WHERE vp_rowid % 2 = 0) AS even_count,\n    COUNT(c0) FILTER (WHERE vp_rowid % 2 = 0) AS even_nonnull,\n    (\n        SELECT COUNT(*)\n        FROM (\n            SELECT *\n            FROM repro_duckdb_db9_min_source\n            WHERE FALSE\n        ) empty_input\n    ) AS empty_count\nFROM repro_duckdb_db9_min_source;",
+  "skip_reason": "nested query/window/union is not handled by this batch rewriter"
+}

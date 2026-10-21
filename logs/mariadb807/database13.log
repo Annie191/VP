@@ -1,0 +1,140 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--MariaDB version: 12.3.2-MariaDB-ubu2404
+--Database: database13
+--Strategy summary: split=SINGLE_LEFT_ROW_ID_ONLY, reconstruction=SCALAR_SUBQUERY, shape=NON_EMPTY_SINGLE_COLUMN, prefix=vp_mariadb_database13_44727_
+--Base table: t2
+--Base table DDL: CREATE TABLE t2 (
+--  c0 double unsigned NOT NULL,
+--  PRIMARY KEY (c0)
+--) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci
+--Base engine: INNO_DB
+--VP engines: source=INNO_DB, left=INNO_DB, right=INNO_DB
+--Base row count: 8
+--Left columns: 
+--Right columns: c0
+--Overlap columns: 
+--Description: AST outer query, reconstruction=SCALAR_SUBQUERY
+--Setup statements:
+--CREATE TABLE `vp_mariadb_database13_44727_source` LIKE `t2`;
+--ALTER TABLE `vp_mariadb_database13_44727_source` ADD COLUMN `vp_rowid` BIGINT NOT NULL FIRST;
+--ALTER TABLE `vp_mariadb_database13_44727_source` ENGINE=InnoDB;
+--INSERT INTO `vp_mariadb_database13_44727_source` (`vp_rowid`, `c0`) SELECT ROW_NUMBER() OVER (ORDER BY `c0`), `c0` FROM `t2` LIMIT 256;
+--CREATE TABLE `vp_mariadb_database13_44727_left` (`vp_rowid` BIGINT NOT NULL) ENGINE=InnoDB;
+--CREATE TABLE `vp_mariadb_database13_44727_right` (`vp_rowid` BIGINT NOT NULL, `c0` double unsigned NOT NULL) ENGINE=InnoDB;
+--Direct query: SELECT * FROM (SELECT ((1503381287 << c0) AND -553173254) AS `vp_ast_col_0` FROM `vp_mariadb_database13_44727_source`) q ORDER BY 1
+--Rewritten query: SELECT * FROM (SELECT ((1503381287 << c0) AND -553173254) AS `vp_ast_col_0` FROM (SELECT l.`vp_rowid` AS `vp_rowid`, (SELECT r.`c0` FROM `vp_mariadb_database13_44727_right` r WHERE r.`vp_rowid` = l.`vp_rowid`) AS `c0` FROM `vp_mariadb_database13_44727_left` l) AS vp_rel) q ORDER BY 1
+--Direct plan:
+--1 | SIMPLE | vp_mariadb_database13_44727_source | ALL | null | null | null | null | 8 | Using temporary; Using filesort
+--Rewritten plan:
+--1 | PRIMARY | l | ALL | null | null | null | null | 8 | Using temporary; Using filesort
+--4 | DEPENDENT SUBQUERY | r | ALL | null | null | null | null | 8 | Using where
+--Direct sample: S:1:0; x8
+--Rewritten sample: S:1:0; x7, S:1:1; x1
+--Only in direct: S:1:0; x1
+--Only in rewritten: S:1:1; x1
+--
+--	at sqlancer.mariadb.oracle.MariaDBVerticalPartitioningOracle.compare(MariaDBVerticalPartitioningOracle.java:689)
+--	at sqlancer.mariadb.oracle.MariaDBVerticalPartitioningOracle.check(MariaDBVerticalPartitioningOracle.java:189)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:479)
+--	at sqlancer.Main$2.run(Main.java:696)
+--	at sqlancer.Main$2.runThread(Main.java:678)
+--	at sqlancer.Main$2.run(Main.java:669)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/08/31 21:50:05
+-- Database: database13
+-- Database version: 12.3.2-MariaDB-ubu2404
+-- seed value: 1788171801429
+DROP DATABASE IF EXISTS database13;
+CREATE DATABASE database13;
+USE database13;
+CREATE OR REPLACE TABLE t0(c0 BOOLEAN , c1 MEDIUMINT UNSIGNED  UNIQUE NOT NULL, PRIMARY KEY(c0, c1));
+INSERT INTO t0 VALUES (-2044349989, -2044349989);
+INSERT INTO t0 VALUES (-86486397, -740893960);
+INSERT INTO t0 VALUES (370238687, 906917736);
+INSERT INTO t0 VALUES (-2077102544, -21707140);
+INSERT INTO t0 VALUES (609484173, 1779048307);
+INSERT INTO t0 VALUES (90761767, 828771039);
+INSERT INTO t0 VALUES (828771039, -1120147200);
+INSERT INTO t0 VALUES (1779048307, -1820821695);
+INSERT INTO t0 VALUES (1220889906, 884371760);
+INSERT INTO t0 VALUES (-1440243271, 1220889906);
+INSERT INTO t0 VALUES (1682657225, -73230162);
+INSERT INTO t0 VALUES (1464016565, -512430097);
+DROP TABLE IF EXISTS `t0`;
+CREATE OR REPLACE TABLE t0(c0 CHAR(100)  UNIQUE, PRIMARY KEY(c0)) engine=InnoDB;
+INSERT INTO t0 VALUES ('-73230162');
+INSERT INTO t0 VALUES ('');
+INSERT INTO t0 VALUES ('Ta}#U');
+INSERT INTO t0 VALUES ('-512430097');
+INSERT INTO t0 VALUES ('');
+INSERT INTO t0 VALUES (' ?G^bl2퍣');
+INSERT INTO t0 VALUES ('');
+INSERT INTO t0 VALUES ('828771039');
+INSERT INTO t0 VALUES ('');
+INSERT INTO t0 VALUES ('~|');
+INSERT INTO t0 VALUES ('u');
+CREATE OR REPLACE TABLE t1(c0 VARCHAR(100)  UNIQUE, c1 INT  UNIQUE NOT NULL, PRIMARY KEY(c1)) engine=InnoDB;
+INSERT INTO t1 VALUES ('LG<', -1120147200);
+INSERT INTO t1 VALUES ('', -73230162);
+INSERT INTO t1 VALUES ('6R', -131296935);
+INSERT INTO t1 VALUES ('R', -450568010);
+INSERT INTO t1 VALUES ('u', 1859902580);
+INSERT INTO t1 VALUES ('1464016565', -512430097);
+INSERT INTO t1 VALUES (NULL, 1195113558);
+INSERT INTO t1 VALUES ('6R', -73230162);
+INSERT INTO t1 VALUES ('Vj', 906917736);
+SET SESSION max_sort_length = 7316013;
+SET SESSION optimizer_prune_level = 0;
+SET SESSION unique_checks = ON;
+SET SESSION max_seeks_for_key = 6489898739871346106;
+SET SESSION myisam_repair_threads = 7588264092470783104;
+SET SESSION sql_log_off = ON;
+SET SESSION max_sort_length = 3630424;
+SET SESSION unique_checks = ON;
+SET SESSION max_length_for_sort_data = 7671457;
+REPAIR TABLE t0, t1;
+SET SESSION myisam_repair_threads = 402181516344797403;
+SET SESSION sql_auto_is_null = OFF;
+ANALYZE TABLE t1;
+CHECK TABLE t0 EXTENDED FAST MEDIUM QUICK;
+SET SESSION sql_auto_is_null = OFF;
+SET SESSION sql_auto_is_null = OFF;
+SET SESSION optimizer_search_depth = 58;
+SET SESSION max_sort_length = 8218076;
+SET SESSION optimizer_prune_level = 0;
+SET SESSION max_sort_length = 7756099;
+SET SESSION foreign_key_checks = 1;
+SET SESSION max_sort_length = 50391;
+SET SESSION myisam_stats_method = nulls_equal;
+SET SESSION sql_mode = DEFAULT;
+SET SESSION time_zone = '+00:00';
+SET SESSION group_concat_max_len = 1048576;
+SET SESSION optimizer_switch = DEFAULT;
+SET GLOBAL join_buffer_size = 262144;
+SET GLOBAL join_buffer_space_limit = 2097152;
+SET SESSION join_buffer_size = 262144;
+SET SESSION join_buffer_space_limit = 2097152;
+SET SESSION read_buffer_size = 131072;
+SET SESSION sort_buffer_size = 262144;
+CREATE TABLE `vp_mariadb_database13_1_source` LIKE `t1`;
+ALTER TABLE `vp_mariadb_database13_1_source` ADD COLUMN `vp_rowid` BIGINT NOT NULL FIRST;
+ALTER TABLE `vp_mariadb_database13_1_source` ENGINE=InnoDB;
+INSERT INTO `vp_mariadb_database13_1_source` (`vp_rowid`, `c0`, `c1`) SELECT ROW_NUMBER() OVER (ORDER BY `c1`), `c0`, `c1` FROM `t1` LIMIT 256;
+CREATE TABLE `vp_mariadb_database13_1_left` (`vp_rowid` BIGINT NOT NULL, `c0` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci) ENGINE=InnoDB;
+CREATE TABLE `vp_mariadb_database13_1_right` (`vp_rowid` BIGINT NOT NULL, `c1` int(11) NOT NULL) ENGINE=InnoDB;
+INSERT INTO `vp_mariadb_database13_1_left` (`vp_rowid`, `c0`) SELECT `vp_rowid`, s.`c0` FROM `vp_mariadb_database13_1_source` s;
+INSERT INTO `vp_mariadb_database13_1_right` (`vp_rowid`, `c1`) SELECT `vp_rowid`, s.`c1` FROM `vp_mariadb_database13_1_source` s;
+CREATE INDEX `vp_mariadb_database13_1_idx_r_147910428` ON `vp_mariadb_database13_1_right`(`c1`, `vp_rowid`);
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database13_1_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database13_1_temp` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database13_1_left` l JOIN `vp_mariadb_database13_1_right` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database13_1_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database13_1_temp` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database13_1_left` l JOIN `vp_mariadb_database13_1_right` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database13_1_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database13_1_temp` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database13_1_left` l JOIN `vp_mariadb_database13_1_right` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database13_1_temp`;
+CREATE TEMPORARY TABLE `vp_mariadb_database13_1_temp` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0` AS `c0`, r.`c1` AS `c1` FROM `vp_mariadb_database13_1_left` l JOIN `vp_mariadb_database13_1_right` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TEMPORARY TABLE IF EXISTS `vp_mariadb_database13_1_temp`;

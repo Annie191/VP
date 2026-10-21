@@ -1,0 +1,985 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=OVERLAPPED_SPLIT, reconstruction=STRING_PACK, shape=MULTI_COLUMN, prefix=vp_database16_337_
+--Strategy counts: split={EMPTY_SPLIT=5, SINGLE_REPLICATED=8, SINGLE_RIGHT_ROW_ID_ONLY=10, SINGLE_LEFT_ROW_ID_ONLY=16, EVEN_SPLIT=18, OVERLAPPED_SPLIT=18, SKEWED_SPLIT=21, TYPE_DIRECTED_SPLIT=17}, reconstruction={JOIN=523, LEFT_RIGHT_JOIN=523, FULL_OUTER_SIMULATION=535, SCALAR_SUBQUERY=515, EXISTS_FILTER=513, IN_FILTER=510, NOT_EXISTS_ANTI=507, DERIVED_TABLE=532, CTE=511, VIEW=521, TEMP_TABLE=356, AGGREGATE_THEN_MERGE=507, ROW_NUMBER_ALIGNMENT=514, JSON_PACK=503, STRING_PACK=519, NATURAL_OR_USING=520, LATERAL_DERIVED=525}
+--Database: database16
+--Databend version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+--Base table: t96
+--Base table DDL: CREATE TABLE t96 (
+--  c0bitmap BITMAP NULL,
+--  c1timestamp TIMESTAMP NULL
+--) ENGINE=FUSE
+--Base table engine: FUSE
+--VP source engine: FUSE
+--VP left engine: MEMORY
+--VP right engine: FUSE
+--Base row count: 89
+--Base shape: MULTI_COLUMN
+--Stable row order: `c1timestamp`
+--Prefix: vp_database16_337_
+--Split strategy: OVERLAPPED_SPLIT
+--Left columns: {c1timestamp}
+--Right columns: {c0bitmap, c1timestamp}
+--Overlap columns: {c1timestamp}
+--Physical foreign key: false
+--Schema profile: NULL_DEFAULT
+--Source schema fidelity: column types, nullability, and defaults; keys/constraints/generated expressions omitted
+--Helper schema fidelity: projection-only; columns are nullable and constraints/defaults are not copied
+--Copied source constraints: []
+--Reconstruction strategy: STRING_PACK
+--Description: shape=MULTI_COLUMN, split=OVERLAPPED_SPLIT, reconstruction=STRING_PACK
+--Databend session settings: default_order_by_null=nulls_last, disable_join_reorder=0, enable_bloom_runtime_filter=1, enable_cbo=1, enable_join_runtime_filter=1, enable_query_result_cache=0, max_threads=40, numeric_cast_option=rounding, sql_dialect=PostgreSQL, timezone=UTC
+--Session SET statements:
+--SET default_order_by_null = 'nulls_last';
+--SET disable_join_reorder = 0;
+--SET enable_bloom_runtime_filter = 1;
+--SET enable_cbo = 1;
+--SET enable_join_runtime_filter = 1;
+--SET enable_query_result_cache = 0;
+--SET max_threads = 40;
+--SET numeric_cast_option = 'rounding';
+--SET sql_dialect = 'PostgreSQL';
+--SET timezone = 'UTC';
+--Setup statements:
+---- source schema profile: NULL_DEFAULT;
+---- copied source column nullability and defaults from SHOW CREATE TABLE;
+---- helper columns intentionally remain nullable projections for outer-join reconstruction;
+--CREATE TABLE `vp_database16_337_source` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=FUSE;
+--INSERT INTO `vp_database16_337_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT ROW_NUMBER() OVER (ORDER BY `c1timestamp`), `c0bitmap`, `c1timestamp` FROM `t96` LIMIT 4096;
+--CREATE TABLE `vp_database16_337_l` (`vp_rowid` BIGINT NOT NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=MEMORY;
+--CREATE TABLE `vp_database16_337_r` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=FUSE;
+--INSERT INTO `vp_database16_337_l` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_337_source`;
+--INSERT INTO `vp_database16_337_r` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp` FROM `vp_database16_337_source`;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+--DROP TABLE IF EXISTS `vp_database16_337_joined`;
+--CREATE TEMPORARY TABLE `vp_database16_337_joined` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL);
+--VP source snapshot:
+--SELECT `vp_rowid`, `c0bitmap`, `c1timestamp` FROM `vp_database16_337_source` ORDER BY `vp_rowid` LIMIT 256;
+--1 | NULL | 1969-12-07 05:27:25
+--2 | NULL | 1969-12-08 19:40:33
+--3 | <bitmap binary> | 1969-12-10 21:35:42
+--4 | NULL | 1969-12-12 21:11:33
+--5 | <bitmap binary> | 1969-12-13 09:57:34
+--6 | <bitmap binary> | 1969-12-13 18:37:30
+--7 | <bitmap binary> | 1969-12-13 18:37:30
+--8 | <bitmap binary> | 1969-12-16 11:10:13
+--9 | NULL | 1969-12-16 16:17:19
+--10 | <bitmap binary> | 1969-12-17 08:42:46
+--11 | <bitmap binary> | 1969-12-19 07:32:00
+--12 | <bitmap binary> | 1969-12-19 07:32:00
+--13 | NULL | 1969-12-20 01:05:18
+--14 | <bitmap binary> | 1969-12-25 11:36:07
+--15 | <bitmap binary> | 1969-12-26 18:01:31
+--16 | <bitmap binary> | 1969-12-31 22:18:38
+--17 | <bitmap binary> | 1970-01-02 14:36:10
+--18 | <bitmap binary> | 1970-01-02 15:46:00
+--19 | <bitmap binary> | 1970-01-03 23:45:52
+--20 | NULL | 1970-01-05 03:49:12
+--21 | <bitmap binary> | 1970-01-05 08:10:46
+--22 | <bitmap binary> | 1970-01-05 08:10:46
+--23 | <bitmap binary> | 1970-01-06 00:06:20
+--24 | NULL | 1970-01-06 04:52:39
+--25 | <bitmap binary> | 1970-01-06 08:58:50
+--26 | NULL | 1970-01-06 23:24:42
+--27 | NULL | 1970-01-12 13:21:02
+--28 | <bitmap binary> | 1970-01-13 02:42:44
+--29 | <bitmap binary> | 1970-01-13 02:42:44
+--30 | NULL | 1970-01-13 18:18:13
+--31 | NULL | 1970-01-16 17:07:12
+--32 | <bitmap binary> | 1970-01-17 15:29:14
+--33 | <bitmap binary> | 1970-01-19 07:38:31
+--34 | NULL | 1970-01-19 09:46:24
+--35 | <bitmap binary> | 1970-01-19 09:46:24
+--36 | NULL | 1970-01-19 09:46:24
+--37 | <bitmap binary> | 1970-01-19 10:29:56
+--38 | <bitmap binary> | 1970-01-21 13:22:24
+--39 | NULL | 1970-01-24 02:50:31
+--40 | <bitmap binary> | 1970-01-24 02:50:31
+--41 | NULL | 1970-01-24 02:50:31
+--42 | <bitmap binary> | 1970-01-24 02:50:31
+--43 | <bitmap binary> | 1970-01-24 02:50:31
+--44 | <bitmap binary> | 1970-01-24 22:27:20
+--45 | NULL | 2000-01-01 00:00:00
+--46 | <bitmap binary> | 2000-01-01 00:00:00
+--47 | NULL | 2000-01-01 00:00:00
+--48 | <bitmap binary> | 2000-01-01 00:00:00
+--49 | NULL | 2000-01-02 00:00:00
+--50 | <bitmap binary> | 2000-01-02 00:00:00
+--51 | <bitmap binary> | 2000-01-02 00:00:00
+--52 | <bitmap binary> | 2000-01-02 00:00:00
+--53 | <bitmap binary> | 2000-01-02 00:00:00
+--54 | <bitmap binary> | 2000-01-03 00:00:00
+--55 | <bitmap binary> | 2000-01-04 00:00:00
+--56 | NULL | 2000-01-04 00:00:00
+--57 | NULL | 4716-01-18 20:32:55
+--58 | <bitmap binary> | NULL
+--59 | <bitmap binary> | NULL
+--60 | <bitmap binary> | NULL
+--61 | NULL | NULL
+--62 | NULL | NULL
+--63 | NULL | NULL
+--64 | <bitmap binary> | NULL
+--65 | <bitmap binary> | NULL
+--66 | <bitmap binary> | NULL
+--67 | <bitmap binary> | NULL
+--68 | <bitmap binary> | NULL
+--69 | <bitmap binary> | NULL
+--70 | NULL | NULL
+--71 | NULL | NULL
+--72 | NULL | NULL
+--73 | <bitmap binary> | NULL
+--74 | NULL | NULL
+--75 | NULL | NULL
+--76 | <bitmap binary> | NULL
+--77 | <bitmap binary> | NULL
+--78 | NULL | NULL
+--79 | <bitmap binary> | NULL
+--80 | <bitmap binary> | NULL
+--81 | <bitmap binary> | NULL
+--82 | NULL | NULL
+--83 | <bitmap binary> | NULL
+--84 | <bitmap binary> | NULL
+--85 | <bitmap binary> | NULL
+--86 | <bitmap binary> | NULL
+--87 | <bitmap binary> | NULL
+--88 | NULL | NULL
+--89 | NULL | NULL
+--VP left snapshot:
+--SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_337_l` ORDER BY `vp_rowid` LIMIT 256;
+--1 | 1969-12-07 05:27:25
+--2 | 1969-12-08 19:40:33
+--3 | 1969-12-10 21:35:42
+--4 | 1969-12-12 21:11:33
+--5 | 1969-12-13 09:57:34
+--6 | 1969-12-13 18:37:30
+--7 | 1969-12-13 18:37:30
+--8 | 1969-12-16 11:10:13
+--9 | 1969-12-16 16:17:19
+--10 | 1969-12-17 08:42:46
+--11 | 1969-12-19 07:32:00
+--12 | 1969-12-19 07:32:00
+--13 | 1969-12-20 01:05:18
+--14 | 1969-12-25 11:36:07
+--15 | 1969-12-26 18:01:31
+--16 | 1969-12-31 22:18:38
+--17 | 1970-01-02 14:36:10
+--18 | 1970-01-02 15:46:00
+--19 | 1970-01-03 23:45:52
+--20 | 1970-01-05 03:49:12
+--21 | 1970-01-05 08:10:46
+--22 | 1970-01-05 08:10:46
+--23 | 1970-01-06 00:06:20
+--24 | 1970-01-06 04:52:39
+--25 | 1970-01-06 08:58:50
+--26 | 1970-01-06 23:24:42
+--27 | 1970-01-12 13:21:02
+--28 | 1970-01-13 02:42:44
+--29 | 1970-01-13 02:42:44
+--30 | 1970-01-13 18:18:13
+--31 | 1970-01-16 17:07:12
+--32 | 1970-01-17 15:29:14
+--33 | 1970-01-19 07:38:31
+--34 | 1970-01-19 09:46:24
+--35 | 1970-01-19 09:46:24
+--36 | 1970-01-19 09:46:24
+--37 | 1970-01-19 10:29:56
+--38 | 1970-01-21 13:22:24
+--39 | 1970-01-24 02:50:31
+--40 | 1970-01-24 02:50:31
+--41 | 1970-01-24 02:50:31
+--42 | 1970-01-24 02:50:31
+--43 | 1970-01-24 02:50:31
+--44 | 1970-01-24 22:27:20
+--45 | 2000-01-01 00:00:00
+--46 | 2000-01-01 00:00:00
+--47 | 2000-01-01 00:00:00
+--48 | 2000-01-01 00:00:00
+--49 | 2000-01-02 00:00:00
+--50 | 2000-01-02 00:00:00
+--51 | 2000-01-02 00:00:00
+--52 | 2000-01-02 00:00:00
+--53 | 2000-01-02 00:00:00
+--54 | 2000-01-03 00:00:00
+--55 | 2000-01-04 00:00:00
+--56 | 2000-01-04 00:00:00
+--57 | 4716-01-18 20:32:55
+--58 | NULL
+--59 | NULL
+--60 | NULL
+--61 | NULL
+--62 | NULL
+--63 | NULL
+--64 | NULL
+--65 | NULL
+--66 | NULL
+--67 | NULL
+--68 | NULL
+--69 | NULL
+--70 | NULL
+--71 | NULL
+--72 | NULL
+--73 | NULL
+--74 | NULL
+--75 | NULL
+--76 | NULL
+--77 | NULL
+--78 | NULL
+--79 | NULL
+--80 | NULL
+--81 | NULL
+--82 | NULL
+--83 | NULL
+--84 | NULL
+--85 | NULL
+--86 | NULL
+--87 | NULL
+--88 | NULL
+--89 | NULL
+--VP right snapshot:
+--SELECT `vp_rowid`, `c0bitmap`, `c1timestamp` FROM `vp_database16_337_r` ORDER BY `vp_rowid` LIMIT 256;
+--1 | NULL | 1969-12-07 05:27:25
+--2 | NULL | 1969-12-08 19:40:33
+--3 | <bitmap binary> | 1969-12-10 21:35:42
+--4 | NULL | 1969-12-12 21:11:33
+--5 | <bitmap binary> | 1969-12-13 09:57:34
+--6 | <bitmap binary> | 1969-12-13 18:37:30
+--7 | <bitmap binary> | 1969-12-13 18:37:30
+--8 | <bitmap binary> | 1969-12-16 11:10:13
+--9 | NULL | 1969-12-16 16:17:19
+--10 | <bitmap binary> | 1969-12-17 08:42:46
+--11 | <bitmap binary> | 1969-12-19 07:32:00
+--12 | <bitmap binary> | 1969-12-19 07:32:00
+--13 | NULL | 1969-12-20 01:05:18
+--14 | <bitmap binary> | 1969-12-25 11:36:07
+--15 | <bitmap binary> | 1969-12-26 18:01:31
+--16 | <bitmap binary> | 1969-12-31 22:18:38
+--17 | <bitmap binary> | 1970-01-02 14:36:10
+--18 | <bitmap binary> | 1970-01-02 15:46:00
+--19 | <bitmap binary> | 1970-01-03 23:45:52
+--20 | NULL | 1970-01-05 03:49:12
+--21 | <bitmap binary> | 1970-01-05 08:10:46
+--22 | <bitmap binary> | 1970-01-05 08:10:46
+--23 | <bitmap binary> | 1970-01-06 00:06:20
+--24 | NULL | 1970-01-06 04:52:39
+--25 | <bitmap binary> | 1970-01-06 08:58:50
+--26 | NULL | 1970-01-06 23:24:42
+--27 | NULL | 1970-01-12 13:21:02
+--28 | <bitmap binary> | 1970-01-13 02:42:44
+--29 | <bitmap binary> | 1970-01-13 02:42:44
+--30 | NULL | 1970-01-13 18:18:13
+--31 | NULL | 1970-01-16 17:07:12
+--32 | <bitmap binary> | 1970-01-17 15:29:14
+--33 | <bitmap binary> | 1970-01-19 07:38:31
+--34 | NULL | 1970-01-19 09:46:24
+--35 | <bitmap binary> | 1970-01-19 09:46:24
+--36 | NULL | 1970-01-19 09:46:24
+--37 | <bitmap binary> | 1970-01-19 10:29:56
+--38 | <bitmap binary> | 1970-01-21 13:22:24
+--39 | NULL | 1970-01-24 02:50:31
+--40 | <bitmap binary> | 1970-01-24 02:50:31
+--41 | NULL | 1970-01-24 02:50:31
+--42 | <bitmap binary> | 1970-01-24 02:50:31
+--43 | <bitmap binary> | 1970-01-24 02:50:31
+--44 | <bitmap binary> | 1970-01-24 22:27:20
+--45 | NULL | 2000-01-01 00:00:00
+--46 | <bitmap binary> | 2000-01-01 00:00:00
+--47 | NULL | 2000-01-01 00:00:00
+--48 | <bitmap binary> | 2000-01-01 00:00:00
+--49 | NULL | 2000-01-02 00:00:00
+--50 | <bitmap binary> | 2000-01-02 00:00:00
+--51 | <bitmap binary> | 2000-01-02 00:00:00
+--52 | <bitmap binary> | 2000-01-02 00:00:00
+--53 | <bitmap binary> | 2000-01-02 00:00:00
+--54 | <bitmap binary> | 2000-01-03 00:00:00
+--55 | <bitmap binary> | 2000-01-04 00:00:00
+--56 | NULL | 2000-01-04 00:00:00
+--57 | NULL | 4716-01-18 20:32:55
+--58 | <bitmap binary> | NULL
+--59 | <bitmap binary> | NULL
+--60 | <bitmap binary> | NULL
+--61 | NULL | NULL
+--62 | NULL | NULL
+--63 | NULL | NULL
+--64 | <bitmap binary> | NULL
+--65 | <bitmap binary> | NULL
+--66 | <bitmap binary> | NULL
+--67 | <bitmap binary> | NULL
+--68 | <bitmap binary> | NULL
+--69 | <bitmap binary> | NULL
+--70 | NULL | NULL
+--71 | NULL | NULL
+--72 | NULL | NULL
+--73 | <bitmap binary> | NULL
+--74 | NULL | NULL
+--75 | NULL | NULL
+--76 | <bitmap binary> | NULL
+--77 | <bitmap binary> | NULL
+--78 | NULL | NULL
+--79 | <bitmap binary> | NULL
+--80 | <bitmap binary> | NULL
+--81 | <bitmap binary> | NULL
+--82 | NULL | NULL
+--83 | <bitmap binary> | NULL
+--84 | <bitmap binary> | NULL
+--85 | <bitmap binary> | NULL
+--86 | <bitmap binary> | NULL
+--87 | <bitmap binary> | NULL
+--88 | NULL | NULL
+--89 | NULL | NULL
+--Single query: SELECT AVG(`vp_rowid`) FROM vp_database16_337_source WHERE (((`vp_database16_337_source`.`c1timestamp` IN (`vp_database16_337_source`.`c1timestamp`)))or((('-1148449183')like('1746464811')))) LIMIT 7
+--Split query: SELECT AVG(`vp_rowid`) FROM (SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_337_l` l JOIN (SELECT `vp_rowid`, CONCAT('vp:', `vp_rowid`) AS payload FROM `vp_database16_337_r`) sp ON CONCAT('vp:', l.`vp_rowid`) = sp.payload JOIN `vp_database16_337_r` r ON r.`vp_rowid` = sp.`vp_rowid`) `vp_database16_337_source` WHERE (((`vp_database16_337_source`.`c1timestamp` IN (`vp_database16_337_source`.`c1timestamp`)))or((('-1148449183')LIKE('1746464811')))) LIMIT 7
+--Single query plan:
+--EXPLAIN SELECT AVG(`vp_rowid`) FROM vp_database16_337_source WHERE (((`vp_database16_337_source`.`c1timestamp` IN (`vp_database16_337_source`.`c1timestamp`)))or((('-1148449183')like('1746464811')))) LIMIT 7;
+--EvalScalar
+--├── output columns: [sum(vp_rowid) / if(count(vp_rowid) = 0, 1, count(vp_rowid)) (#5)]
+--├── expressions: [sum(`vp_rowid`) (#3) / CAST(if(CAST(count(`vp_rowid`) (#4) = 0 AS Boolean NULL), 1, count(`vp_rowid`) (#4)) AS UInt64 NULL)]
+--├── estimated rows: 1.00
+--└── Limit
+--    ├── output columns: [sum(`vp_rowid`) (#3), count(`vp_rowid`) (#4)]
+--    ├── limit: 7
+--    ├── offset: 0
+--    ├── estimated rows: 1.00
+--    └── AggregateFinal
+--        ├── output columns: [sum(`vp_rowid`) (#3), count(`vp_rowid`) (#4)]
+--        ├── group by: []
+--        ├── aggregate functions: [sum(vp_rowid), count()]
+--        ├── estimated rows: 1.00
+--        └── AggregatePartial
+--            ├── group by: []
+--            ├── aggregate functions: [sum(vp_rowid), count()]
+--            ├── estimated rows: 1.00
+--            ├── rank limit: 7
+--            └── TableScan
+--                ├── table: default.database16.vp_database16_337_source
+--                ├── scan id: 0
+--                ├── output columns: [vp_rowid (#0)]
+--                ├── read rows: 89
+--                ├── read size: < 1 KiB
+--                ├── partitions total: 1
+--                ├── partitions scanned: 1
+--                ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 1 to 1 cost: 1 ms>]
+--                ├── push downs: [filters: [is_true(vp_database16_337_source.c1timestamp (#2) = vp_database16_337_source.c1timestamp (#2))], limit: NONE]
+--                └── estimated rows: 17.80
+--Split query plan:
+--EXPLAIN SELECT AVG(`vp_rowid`) FROM (SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_337_l` l JOIN (SELECT `vp_rowid`, CONCAT('vp:', `vp_rowid`) AS payload FROM `vp_database16_337_r`) sp ON CONCAT('vp:', l.`vp_rowid`) = sp.payload JOIN `vp_database16_337_r` r ON r.`vp_rowid` = sp.`vp_rowid`) `vp_database16_337_source` WHERE (((`vp_database16_337_source`.`c1timestamp` IN (`vp_database16_337_source`.`c1timestamp`)))or((('-1148449183')LIKE('1746464811')))) LIMIT 7;
+--EvalScalar
+--├── output columns: [sum(vp_rowid) / if(count(vp_rowid) = 0, 1, count(vp_rowid)) (#11)]
+--├── expressions: [sum(`vp_rowid`) (#9) / CAST(if(CAST(count(`vp_rowid`) (#10) = 0 AS Boolean NULL), 1, count(`vp_rowid`) (#10)) AS UInt64 NULL)]
+--├── estimated rows: 1.00
+--└── Limit
+--    ├── output columns: [sum(`vp_rowid`) (#9), count(`vp_rowid`) (#10)]
+--    ├── limit: 7
+--    ├── offset: 0
+--    ├── estimated rows: 1.00
+--    └── AggregateFinal
+--        ├── output columns: [sum(`vp_rowid`) (#9), count(`vp_rowid`) (#10)]
+--        ├── group by: []
+--        ├── aggregate functions: [sum(vp_rowid), count()]
+--        ├── estimated rows: 1.00
+--        └── AggregatePartial
+--            ├── group by: []
+--            ├── aggregate functions: [sum(vp_rowid), count()]
+--            ├── estimated rows: 1.00
+--            ├── rank limit: 7
+--            └── HashJoin
+--                ├── output columns: [l.vp_rowid (#0)]
+--                ├── join type: INNER
+--                ├── build keys: [r.vp_rowid (#6)]
+--                ├── probe keys: [sp.vp_rowid (#2)]
+--                ├── keys is null equal: [false]
+--                ├── filters: []
+--                ├── build join filters:
+--                │   └── filter id:0, build key:r.vp_rowid (#6), probe targets:[sp.vp_rowid (#2)@scan1], filter type:bloom,inlist,min_max
+--                ├── estimated rows: 89.00
+--                ├── TableScan(Build)
+--                │   ├── table: default.database16.vp_database16_337_r
+--                │   ├── scan id: 2
+--                │   ├── output columns: [vp_rowid (#6)]
+--                │   ├── read rows: 89
+--                │   ├── read size: < 1 KiB
+--                │   ├── partitions total: 1
+--                │   ├── partitions scanned: 1
+--                │   ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 1 to 1 cost: 1 ms>]
+--                │   ├── push downs: [filters: [], limit: NONE]
+--                │   └── estimated rows: 89.00
+--                └── HashJoin(Probe)
+--                    ├── output columns: [l.vp_rowid (#0), vp_database16_337_r.vp_rowid (#2)]
+--                    ├── join type: INNER
+--                    ├── build keys: [sp.payload (#5)]
+--                    ├── probe keys: [concat('vp:', CAST(l.vp_rowid (#0) AS String))]
+--                    ├── keys is null equal: [false]
+--                    ├── filters: []
+--                    ├── estimated rows: 7921.00
+--                    ├── EvalScalar(Build)
+--                    │   ├── output columns: [vp_database16_337_r.vp_rowid (#2), payload (#5)]
+--                    │   ├── expressions: [concat('vp:', CAST(vp_database16_337_r.vp_rowid (#2) AS String))]
+--                    │   ├── estimated rows: 89.00
+--                    │   └── TableScan
+--                    │       ├── table: default.database16.vp_database16_337_r
+--                    │       ├── scan id: 1
+--                    │       ├── output columns: [vp_rowid (#2)]
+--                    │       ├── read rows: 89
+--                    │       ├── read size: < 1 KiB
+--                    │       ├── partitions total: 1
+--                    │       ├── partitions scanned: 1
+--                    │       ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 1 to 1 cost: 1 ms>]
+--                    │       ├── push downs: [filters: [], limit: NONE]
+--                    │       ├── apply join filters: [#0]
+--                    │       └── estimated rows: 89.00
+--                    └── TableScan(Probe)
+--                        ├── table: default.database16.vp_database16_337_l
+--                        ├── scan id: 0
+--                        ├── output columns: [vp_rowid (#0)]
+--                        ├── read rows: 89
+--                        ├── read size: < 1 KiB
+--                        ├── partitions total: 0
+--                        ├── partitions scanned: 0
+--                        ├── push downs: [filters: [], limit: NONE]
+--                        └── estimated rows: 89.00
+--Single result sample: S:2:29; x1
+--Split result sample: S:2:45; x1
+--Only in single: S:2:29; x1
+--Only in split: S:2:45; x1
+--
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.comparePair(DatabendVerticalPartitioningOracle.java:3092)
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.check(DatabendVerticalPartitioningOracle.java:551)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:487)
+--	at sqlancer.Main$2.run(Main.java:708)
+--	at sqlancer.Main$2.runThread(Main.java:690)
+--	at sqlancer.Main$2.run(Main.java:681)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/10/08 08:01:01
+-- Database: database16
+-- Database version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+-- seed value: 1791443211647
+DROP DATABASE IF EXISTS database16;
+CREATE DATABASE database16;
+USE database16;
+CREATE TABLE t84(c0INT BIGINT NULL);
+CREATE TABLE t96(c0BITMAP BITMAP NULL, c1TIMESTAMP TIMESTAMP NULL);
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (TIMESTAMP '1970-01-05 08:10:46', TO_BITMAP('1,2,3')), (TIMESTAMP '1970-01-19 09:46:24', NULL);
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (NULL, NULL), (TIMESTAMP '2000-01-02 00:00:00', TO_BITMAP('1'));
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (NULL, NULL), (TIMESTAMP '2000-01-02 00:00:00', TO_BITMAP('1')), (TIMESTAMP '2000-01-01 00:00:00', TO_BITMAP('0')), (TIMESTAMP '2000-01-04 00:00:00', TO_BITMAP('3'));
+INSERT INTO t96(c1timestamp) VALUES (TIMESTAMP '1970-01-24 02:50:31');
+INSERT INTO t96(c0bitmap) VALUES (NULL), (TO_BITMAP('0')), (TO_BITMAP('2')), (TO_BITMAP('0'));
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (NULL, NULL), (TIMESTAMP '2000-01-03 00:00:00', TO_BITMAP('2'));
+INSERT INTO t96(c0bitmap) VALUES (TO_BITMAP('1,2,3')), (TO_BITMAP('1,2,3'));
+INSERT INTO t96(c0bitmap) VALUES (TO_BITMAP('1,2,3')), (TO_BITMAP('1,2,3'));
+INSERT INTO t96(c0bitmap, c1timestamp) VALUES (NULL, NULL), (TO_BITMAP('1'), TIMESTAMP '2000-01-02 00:00:00');
+INSERT INTO t96(c0bitmap, c1timestamp) VALUES (TO_BITMAP('1,2,3'), TIMESTAMP '1970-01-13 02:42:44'), (TO_BITMAP('1,2,3'), TIMESTAMP '1970-01-24 02:50:31'), (TO_BITMAP('1,2,3'), TIMESTAMP '1969-12-17 08:42:46'), (TO_BITMAP('1,2,3'), TIMESTAMP '1970-01-05 08:10:46');
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (TIMESTAMP '1970-01-13 02:42:44', TO_BITMAP('1,2,3'));
+INSERT INTO t96(c0bitmap) VALUES (TO_BITMAP('1,2,3'));
+INSERT INTO t96(c0bitmap) VALUES (TO_BITMAP('1,2,3'));
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (TIMESTAMP '1970-01-19 09:46:24', TO_BITMAP('1,2,3')), (TIMESTAMP '1970-01-21 13:22:24', TO_BITMAP('1,2,3'));
+INSERT INTO t96(c0bitmap) VALUES (NULL), (TO_BITMAP('0'));
+INSERT INTO t96(c0bitmap, c1timestamp) VALUES (TO_BITMAP('1,2,3'), TIMESTAMP '1970-01-24 02:50:31');
+INSERT INTO t96(c1timestamp) VALUES (TIMESTAMP '1970-01-24 02:50:31');
+INSERT INTO t96(c0bitmap) VALUES (NULL), (TO_BITMAP('0'));
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (TIMESTAMP '1970-01-24 02:50:31', TO_BITMAP('1,2,3'));
+INSERT INTO t96(c0bitmap, c1timestamp) VALUES (NULL, TIMESTAMP '1969-12-12 21:11:33');
+INSERT INTO t96(c0bitmap) VALUES (NULL), (TO_BITMAP('2'));
+DROP STREAM IF EXISTS `vp_database16_246_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_246_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_246_right_stream`;
+DROP VIEW IF EXISTS `vp_database16_246_v`;
+DROP TABLE IF EXISTS `vp_database16_246_joined`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database16_246_r`;
+DROP TABLE IF EXISTS `vp_database16_246_l`;
+DROP TABLE IF EXISTS `vp_database16_246_source`;
+CREATE TABLE `vp_database16_246_source` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT ROW_NUMBER() OVER (ORDER BY `c1timestamp`), `c0bitmap`, `c1timestamp` FROM `t96` LIMIT 4096;
+CREATE TABLE `vp_database16_246_l` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database16_246_r` (`vp_rowid` BIGINT NOT NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database16_246_l` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_246_source`;
+INSERT INTO `vp_database16_246_r` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_246_source`;
+DROP TABLE IF EXISTS `vp_database16_246_joined`;
+CREATE TEMPORARY TABLE `vp_database16_246_joined` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL);
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_source_stream_251`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_left_stream_251`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_right_stream_251`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_source_delta_251`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_left_delta_251`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_right_delta_251`;
+CREATE STREAM `vp_database16_246_mutation_source_stream_251` ON TABLE `vp_database16_246_source`;
+CREATE STREAM `vp_database16_246_mutation_left_stream_251` ON TABLE `vp_database16_246_l`;
+CREATE STREAM `vp_database16_246_mutation_right_stream_251` ON TABLE `vp_database16_246_r`;
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_source_delta_251` (`vp_rowid` BIGINT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL);
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_left_delta_251` (`vp_rowid` BIGINT NULL, `c0bitmap` BITMAP NULL);
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_right_delta_251` (`vp_rowid` BIGINT NULL, `c1timestamp` TIMESTAMP NULL);
+INSERT INTO `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT 41, `c0bitmap`, `c1timestamp` FROM `vp_database16_246_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database16_246_l` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_246_source` WHERE `vp_rowid` = 41;
+INSERT INTO `vp_database16_246_r` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_246_source` WHERE `vp_rowid` = 41;
+INSERT INTO `vp_database16_246_mutation_source_delta_251` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp` FROM `vp_database16_246_mutation_source_stream_251`;
+INSERT INTO `vp_database16_246_mutation_left_delta_251` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_246_mutation_left_stream_251`;
+INSERT INTO `vp_database16_246_mutation_right_delta_251` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_246_mutation_right_stream_251`;
+DELETE FROM `vp_database16_246_source` WHERE `vp_rowid` = 1;
+DELETE FROM `vp_database16_246_l` WHERE `vp_rowid` = 1;
+DELETE FROM `vp_database16_246_r` WHERE `vp_rowid` = 1;
+INSERT OVERWRITE `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp` FROM `vp_database16_246_source`;
+INSERT OVERWRITE `vp_database16_246_l` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_246_source`;
+INSERT OVERWRITE `vp_database16_246_r` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_246_source`;
+OPTIMIZE TABLE `vp_database16_246_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_r` COMPACT;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP STREAM IF EXISTS `vp_database16_246_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_246_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_246_right_stream`;
+CREATE STREAM `vp_database16_246_source_stream` ON TABLE `vp_database16_246_source`;
+CREATE STREAM `vp_database16_246_left_stream` ON TABLE `vp_database16_246_l`;
+CREATE STREAM `vp_database16_246_right_stream` ON TABLE `vp_database16_246_r`;
+INSERT INTO `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT 42, `c0bitmap`, `c1timestamp` FROM `vp_database16_246_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database16_246_l` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_246_source` WHERE `vp_rowid` = 42;
+INSERT INTO `vp_database16_246_r` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_246_source` WHERE `vp_rowid` = 42;
+DROP VIEW IF EXISTS `vp_database16_246_v`;
+CREATE VIEW `vp_database16_246_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0bitmap` AS `c0bitmap`, r.`c1timestamp` AS `c1timestamp` FROM `vp_database16_246_l` l JOIN `vp_database16_246_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_246_v`;
+CREATE VIEW `vp_database16_246_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0bitmap` AS `c0bitmap`, r.`c1timestamp` AS `c1timestamp` FROM `vp_database16_246_l` l JOIN `vp_database16_246_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_246_v`;
+CREATE VIEW `vp_database16_246_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0bitmap` AS `c0bitmap`, r.`c1timestamp` AS `c1timestamp` FROM `vp_database16_246_l` l JOIN `vp_database16_246_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_246_v`;
+CREATE VIEW `vp_database16_246_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0bitmap` AS `c0bitmap`, r.`c1timestamp` AS `c1timestamp` FROM `vp_database16_246_l` l JOIN `vp_database16_246_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_246_v`;
+CREATE VIEW `vp_database16_246_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0bitmap` AS `c0bitmap`, r.`c1timestamp` AS `c1timestamp` FROM `vp_database16_246_l` l JOIN `vp_database16_246_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_source_stream_262`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_left_stream_262`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_right_stream_262`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_source_delta_262`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_left_delta_262`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_right_delta_262`;
+CREATE STREAM `vp_database16_246_mutation_source_stream_262` ON TABLE `vp_database16_246_source`;
+CREATE STREAM `vp_database16_246_mutation_left_stream_262` ON TABLE `vp_database16_246_l`;
+CREATE STREAM `vp_database16_246_mutation_right_stream_262` ON TABLE `vp_database16_246_r`;
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_source_delta_262` (`vp_rowid` BIGINT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL);
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_left_delta_262` (`vp_rowid` BIGINT NULL, `c0bitmap` BITMAP NULL);
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_right_delta_262` (`vp_rowid` BIGINT NULL, `c1timestamp` TIMESTAMP NULL);
+INSERT INTO `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT 43, `c0bitmap`, `c1timestamp` FROM `vp_database16_246_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database16_246_l` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_246_source` WHERE `vp_rowid` = 43;
+INSERT INTO `vp_database16_246_r` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_246_source` WHERE `vp_rowid` = 43;
+INSERT INTO `vp_database16_246_mutation_source_delta_262` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp` FROM `vp_database16_246_mutation_source_stream_262`;
+INSERT INTO `vp_database16_246_mutation_left_delta_262` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_246_mutation_left_stream_262`;
+INSERT INTO `vp_database16_246_mutation_right_delta_262` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_246_mutation_right_stream_262`;
+DELETE FROM `vp_database16_246_source` WHERE `vp_rowid` = 2;
+DELETE FROM `vp_database16_246_l` WHERE `vp_rowid` = 2;
+DELETE FROM `vp_database16_246_r` WHERE `vp_rowid` = 2;
+INSERT OVERWRITE `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp` FROM `vp_database16_246_source`;
+INSERT OVERWRITE `vp_database16_246_l` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_246_source`;
+INSERT OVERWRITE `vp_database16_246_r` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_246_source`;
+OPTIMIZE TABLE `vp_database16_246_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_r` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_r` COMPACT;
+TRUNCATE TABLE `vp_database16_246_joined`;
+INSERT INTO `vp_database16_246_joined` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0bitmap` AS `c0bitmap`, r.`c1timestamp` AS `c1timestamp` FROM `vp_database16_246_l` l JOIN `vp_database16_246_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_246_joined`;
+INSERT INTO `vp_database16_246_joined` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0bitmap` AS `c0bitmap`, r.`c1timestamp` AS `c1timestamp` FROM `vp_database16_246_l` l JOIN `vp_database16_246_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_246_joined`;
+INSERT INTO `vp_database16_246_joined` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0bitmap` AS `c0bitmap`, r.`c1timestamp` AS `c1timestamp` FROM `vp_database16_246_l` l JOIN `vp_database16_246_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_246_joined`;
+INSERT INTO `vp_database16_246_joined` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0bitmap` AS `c0bitmap`, r.`c1timestamp` AS `c1timestamp` FROM `vp_database16_246_l` l JOIN `vp_database16_246_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_246_joined`;
+INSERT INTO `vp_database16_246_joined` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0bitmap` AS `c0bitmap`, r.`c1timestamp` AS `c1timestamp` FROM `vp_database16_246_l` l JOIN `vp_database16_246_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_source_stream_267`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_left_stream_267`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_right_stream_267`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_source_delta_267`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_left_delta_267`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_right_delta_267`;
+CREATE STREAM `vp_database16_246_mutation_source_stream_267` ON TABLE `vp_database16_246_source`;
+CREATE STREAM `vp_database16_246_mutation_left_stream_267` ON TABLE `vp_database16_246_l`;
+CREATE STREAM `vp_database16_246_mutation_right_stream_267` ON TABLE `vp_database16_246_r`;
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_source_delta_267` (`vp_rowid` BIGINT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL);
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_left_delta_267` (`vp_rowid` BIGINT NULL, `c0bitmap` BITMAP NULL);
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_right_delta_267` (`vp_rowid` BIGINT NULL, `c1timestamp` TIMESTAMP NULL);
+INSERT INTO `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT 44, `c0bitmap`, `c1timestamp` FROM `vp_database16_246_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database16_246_l` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_246_source` WHERE `vp_rowid` = 44;
+INSERT INTO `vp_database16_246_r` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_246_source` WHERE `vp_rowid` = 44;
+INSERT INTO `vp_database16_246_mutation_source_delta_267` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp` FROM `vp_database16_246_mutation_source_stream_267`;
+INSERT INTO `vp_database16_246_mutation_left_delta_267` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_246_mutation_left_stream_267`;
+INSERT INTO `vp_database16_246_mutation_right_delta_267` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_246_mutation_right_stream_267`;
+DELETE FROM `vp_database16_246_source` WHERE `vp_rowid` = 3;
+DELETE FROM `vp_database16_246_l` WHERE `vp_rowid` = 3;
+DELETE FROM `vp_database16_246_r` WHERE `vp_rowid` = 3;
+INSERT OVERWRITE `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp` FROM `vp_database16_246_source`;
+INSERT OVERWRITE `vp_database16_246_l` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_246_source`;
+INSERT OVERWRITE `vp_database16_246_r` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_246_source`;
+OPTIMIZE TABLE `vp_database16_246_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_r` COMPACT;
+ALTER TABLE `vp_database16_246_source` ADD COLUMN `vp_database16_246_evolved_273` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database16_246_l` ADD COLUMN `vp_database16_246_evolved_273` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database16_246_r` ADD COLUMN `vp_database16_246_evolved_273` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database16_246_joined`;
+CREATE TEMPORARY TABLE `vp_database16_246_joined` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL, `vp_database16_246_evolved_273` BIGINT NULL);
+ALTER TABLE `vp_database16_246_source` ADD COLUMN `vp_database16_246_evolved_274` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database16_246_l` ADD COLUMN `vp_database16_246_evolved_274` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database16_246_r` ADD COLUMN `vp_database16_246_evolved_274` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database16_246_joined`;
+CREATE TEMPORARY TABLE `vp_database16_246_joined` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL, `vp_database16_246_evolved_273` BIGINT NULL, `vp_database16_246_evolved_274` BIGINT NULL);
+DROP STREAM IF EXISTS `vp_database16_246_mutation_source_stream_277`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_left_stream_277`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_right_stream_277`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_source_delta_277`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_left_delta_277`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_right_delta_277`;
+CREATE STREAM `vp_database16_246_mutation_source_stream_277` ON TABLE `vp_database16_246_source`;
+CREATE STREAM `vp_database16_246_mutation_left_stream_277` ON TABLE `vp_database16_246_l`;
+CREATE STREAM `vp_database16_246_mutation_right_stream_277` ON TABLE `vp_database16_246_r`;
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_source_delta_277` (`vp_rowid` BIGINT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL, `vp_database16_246_evolved_273` BIGINT NULL, `vp_database16_246_evolved_274` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_left_delta_277` (`vp_rowid` BIGINT NULL, `c0bitmap` BITMAP NULL, `vp_database16_246_evolved_273` BIGINT NULL, `vp_database16_246_evolved_274` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_right_delta_277` (`vp_rowid` BIGINT NULL, `c1timestamp` TIMESTAMP NULL, `vp_database16_246_evolved_273` BIGINT NULL, `vp_database16_246_evolved_274` BIGINT NULL);
+INSERT INTO `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT 45, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database16_246_l` (`vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source` WHERE `vp_rowid` = 45;
+INSERT INTO `vp_database16_246_r` (`vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source` WHERE `vp_rowid` = 45;
+INSERT INTO `vp_database16_246_mutation_source_delta_277` (`vp_rowid`, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_mutation_source_stream_277`;
+INSERT INTO `vp_database16_246_mutation_left_delta_277` (`vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_mutation_left_stream_277`;
+INSERT INTO `vp_database16_246_mutation_right_delta_277` (`vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_mutation_right_stream_277`;
+DELETE FROM `vp_database16_246_source` WHERE `vp_rowid` = 4;
+DELETE FROM `vp_database16_246_l` WHERE `vp_rowid` = 4;
+DELETE FROM `vp_database16_246_r` WHERE `vp_rowid` = 4;
+INSERT OVERWRITE `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source`;
+INSERT OVERWRITE `vp_database16_246_l` (`vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source`;
+INSERT OVERWRITE `vp_database16_246_r` (`vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source`;
+OPTIMIZE TABLE `vp_database16_246_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_r` COMPACT;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_source_stream_281`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_left_stream_281`;
+DROP STREAM IF EXISTS `vp_database16_246_mutation_right_stream_281`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_source_delta_281`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_left_delta_281`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_right_delta_281`;
+CREATE STREAM `vp_database16_246_mutation_source_stream_281` ON TABLE `vp_database16_246_source`;
+CREATE STREAM `vp_database16_246_mutation_left_stream_281` ON TABLE `vp_database16_246_l`;
+CREATE STREAM `vp_database16_246_mutation_right_stream_281` ON TABLE `vp_database16_246_r`;
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_source_delta_281` (`vp_rowid` BIGINT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL, `vp_database16_246_evolved_273` BIGINT NULL, `vp_database16_246_evolved_274` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_left_delta_281` (`vp_rowid` BIGINT NULL, `c0bitmap` BITMAP NULL, `vp_database16_246_evolved_273` BIGINT NULL, `vp_database16_246_evolved_274` BIGINT NULL);
+CREATE TEMPORARY TABLE `vp_database16_246_mutation_right_delta_281` (`vp_rowid` BIGINT NULL, `c1timestamp` TIMESTAMP NULL, `vp_database16_246_evolved_273` BIGINT NULL, `vp_database16_246_evolved_274` BIGINT NULL);
+INSERT INTO `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT 46, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source` ORDER BY `vp_rowid` LIMIT 1;
+INSERT INTO `vp_database16_246_l` (`vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source` WHERE `vp_rowid` = 46;
+INSERT INTO `vp_database16_246_r` (`vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source` WHERE `vp_rowid` = 46;
+INSERT INTO `vp_database16_246_mutation_source_delta_281` (`vp_rowid`, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_mutation_source_stream_281`;
+INSERT INTO `vp_database16_246_mutation_left_delta_281` (`vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_mutation_left_stream_281`;
+INSERT INTO `vp_database16_246_mutation_right_delta_281` (`vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_mutation_right_stream_281`;
+DELETE FROM `vp_database16_246_source` WHERE `vp_rowid` = 5;
+DELETE FROM `vp_database16_246_l` WHERE `vp_rowid` = 5;
+DELETE FROM `vp_database16_246_r` WHERE `vp_rowid` = 5;
+INSERT OVERWRITE `vp_database16_246_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source`;
+INSERT OVERWRITE `vp_database16_246_l` (`vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c0bitmap`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source`;
+INSERT OVERWRITE `vp_database16_246_r` (`vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274`) SELECT `vp_rowid`, `c1timestamp`, `vp_database16_246_evolved_273`, `vp_database16_246_evolved_274` FROM `vp_database16_246_source`;
+OPTIMIZE TABLE `vp_database16_246_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_246_r` COMPACT;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP STREAM IF EXISTS `vp_database16_246_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_246_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_246_right_stream`;
+DROP VIEW IF EXISTS `vp_database16_246_v`;
+DROP TABLE IF EXISTS `vp_database16_246_joined`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database16_246_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database16_246_r`;
+DROP TABLE IF EXISTS `vp_database16_246_l`;
+DROP TABLE IF EXISTS `vp_database16_246_source`;
+DROP STREAM IF EXISTS `vp_database16_285_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_285_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_285_right_stream`;
+DROP VIEW IF EXISTS `vp_database16_285_v`;
+DROP TABLE IF EXISTS `vp_database16_285_joined`;
+DROP TABLE IF EXISTS `vp_database16_285_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database16_285_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database16_285_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database16_285_r`;
+DROP TABLE IF EXISTS `vp_database16_285_l`;
+DROP TABLE IF EXISTS `vp_database16_285_source`;
+CREATE TABLE `vp_database16_285_source` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database16_285_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT ROW_NUMBER() OVER (ORDER BY `c1timestamp`), `c0bitmap`, `c1timestamp` FROM `t96` LIMIT 4096;
+CREATE TABLE `vp_database16_285_l` (`vp_rowid` BIGINT NOT NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=MEMORY;
+CREATE TABLE `vp_database16_285_r` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database16_285_l` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_285_source`;
+INSERT INTO `vp_database16_285_r` (`vp_rowid`, `c0bitmap`) SELECT `vp_rowid`, `c0bitmap` FROM `vp_database16_285_source`;
+DROP TABLE IF EXISTS `vp_database16_285_joined`;
+CREATE TEMPORARY TABLE `vp_database16_285_joined` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL);
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+TRUNCATE TABLE `vp_database16_285_joined`;
+INSERT INTO `vp_database16_285_joined` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_285_l` l JOIN `vp_database16_285_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_285_joined`;
+INSERT INTO `vp_database16_285_joined` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_285_l` l JOIN `vp_database16_285_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_285_joined`;
+INSERT INTO `vp_database16_285_joined` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_285_l` l JOIN `vp_database16_285_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_285_joined`;
+INSERT INTO `vp_database16_285_joined` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_285_l` l JOIN `vp_database16_285_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_285_joined`;
+INSERT INTO `vp_database16_285_joined` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_285_l` l JOIN `vp_database16_285_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_285_v`;
+CREATE VIEW `vp_database16_285_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_285_l` l JOIN `vp_database16_285_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_285_v`;
+CREATE VIEW `vp_database16_285_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_285_l` l JOIN `vp_database16_285_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_285_v`;
+CREATE VIEW `vp_database16_285_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_285_l` l JOIN `vp_database16_285_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_285_v`;
+CREATE VIEW `vp_database16_285_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_285_l` l JOIN `vp_database16_285_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_285_v`;
+CREATE VIEW `vp_database16_285_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0bitmap` AS `c0bitmap`, l.`c1timestamp` AS `c1timestamp` FROM `vp_database16_285_l` l JOIN `vp_database16_285_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP STREAM IF EXISTS `vp_database16_285_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_285_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_285_right_stream`;
+DROP VIEW IF EXISTS `vp_database16_285_v`;
+DROP TABLE IF EXISTS `vp_database16_285_joined`;
+DROP TABLE IF EXISTS `vp_database16_285_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database16_285_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database16_285_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database16_285_r`;
+DROP TABLE IF EXISTS `vp_database16_285_l`;
+DROP TABLE IF EXISTS `vp_database16_285_source`;
+DROP STREAM IF EXISTS `vp_database16_300_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_300_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_300_right_stream`;
+DROP VIEW IF EXISTS `vp_database16_300_v`;
+DROP TABLE IF EXISTS `vp_database16_300_joined`;
+DROP TABLE IF EXISTS `vp_database16_300_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database16_300_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database16_300_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database16_300_r`;
+DROP TABLE IF EXISTS `vp_database16_300_l`;
+DROP TABLE IF EXISTS `vp_database16_300_source`;
+CREATE TABLE `vp_database16_300_source` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database16_300_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT ROW_NUMBER() OVER (ORDER BY `c1timestamp`), `c0bitmap`, `c1timestamp` FROM `t96` LIMIT 4096;
+UPDATE `vp_database16_300_source` SET `c1timestamp` = TIMESTAMP '2026-10-03 03:17:18.123456' WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database16_300_source`);
+UPDATE `vp_database16_300_source` SET `c0bitmap` = NULL WHERE `vp_rowid` = (SELECT MAX(`vp_rowid`) FROM `vp_database16_300_source` WHERE `vp_rowid` <> (SELECT MIN(`vp_rowid`) FROM `vp_database16_300_source`));
+REMOVE @~/vp_database16_300_copy;
+DROP TABLE IF EXISTS `vp_database16_300_copy_reference`;
+CREATE TEMPORARY TABLE `vp_database16_300_copy_reference` AS SELECT * FROM `vp_database16_300_source`;
+COPY INTO @~/vp_database16_300_copy FROM (SELECT * FROM `vp_database16_300_source`) FILE_FORMAT=(TYPE=PARQUET);
+TRUNCATE TABLE `vp_database16_300_source`;
+COPY INTO `vp_database16_300_source` FROM @~/vp_database16_300_copy FILE_FORMAT=(TYPE=PARQUET) FORCE=TRUE;
+DROP STREAM IF EXISTS `vp_database16_304_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_304_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_304_right_stream`;
+DROP VIEW IF EXISTS `vp_database16_304_v`;
+DROP TABLE IF EXISTS `vp_database16_304_joined`;
+DROP TABLE IF EXISTS `vp_database16_304_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database16_304_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database16_304_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database16_304_r`;
+DROP TABLE IF EXISTS `vp_database16_304_l`;
+DROP TABLE IF EXISTS `vp_database16_304_source`;
+CREATE TABLE `vp_database16_304_source` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database16_304_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT ROW_NUMBER() OVER (ORDER BY `c1timestamp`), `c0bitmap`, `c1timestamp` FROM `t96` LIMIT 4096;
+UPDATE `vp_database16_304_source` SET `c1timestamp` = TIMESTAMP '2026-10-03 03:17:18.123456' WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database16_304_source`);
+UPDATE `vp_database16_304_source` SET `c0bitmap` = NULL WHERE `vp_rowid` = (SELECT MAX(`vp_rowid`) FROM `vp_database16_304_source` WHERE `vp_rowid` <> (SELECT MIN(`vp_rowid`) FROM `vp_database16_304_source`));
+REMOVE @~/vp_database16_304_copy;
+DROP TABLE IF EXISTS `vp_database16_304_copy_reference`;
+CREATE TEMPORARY TABLE `vp_database16_304_copy_reference` AS SELECT * FROM `vp_database16_304_source`;
+COPY INTO @~/vp_database16_304_copy FROM (SELECT * FROM `vp_database16_304_source`) FILE_FORMAT=(TYPE=PARQUET);
+TRUNCATE TABLE `vp_database16_304_source`;
+COPY INTO `vp_database16_304_source` FROM @~/vp_database16_304_copy FILE_FORMAT=(TYPE=PARQUET) FORCE=TRUE;
+DROP STREAM IF EXISTS `vp_database16_310_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_310_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_310_right_stream`;
+DROP VIEW IF EXISTS `vp_database16_310_v`;
+DROP TABLE IF EXISTS `vp_database16_310_joined`;
+DROP TABLE IF EXISTS `vp_database16_310_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database16_310_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database16_310_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database16_310_r`;
+DROP TABLE IF EXISTS `vp_database16_310_l`;
+DROP TABLE IF EXISTS `vp_database16_310_source`;
+CREATE TABLE `vp_database16_310_source` (`vp_rowid` BIGINT NOT NULL, `c0int` BIGINT NULL) ENGINE=FUSE;
+INSERT INTO `vp_database16_310_source` (`vp_rowid`, `c0int`) SELECT ROW_NUMBER() OVER (ORDER BY `c0int`), `c0int` FROM `t84` LIMIT 4096;
+CREATE TABLE `vp_database16_310_l` (`vp_rowid` BIGINT NOT NULL, `c0int` BIGINT NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database16_310_r` (`vp_rowid` BIGINT NOT NULL, `c0int` BIGINT NULL) ENGINE=FUSE;
+INSERT INTO `vp_database16_310_l` (`vp_rowid`, `c0int`) SELECT `vp_rowid`, `c0int` FROM `vp_database16_310_source`;
+INSERT INTO `vp_database16_310_r` (`vp_rowid`, `c0int`) SELECT `vp_rowid`, `c0int` FROM `vp_database16_310_source`;
+DROP TABLE IF EXISTS `vp_database16_310_joined`;
+CREATE TEMPORARY TABLE `vp_database16_310_joined` (`vp_rowid` BIGINT NOT NULL, `c0int` BIGINT NULL);
+TRUNCATE TABLE `vp_database16_310_joined`;
+INSERT INTO `vp_database16_310_joined` (`vp_rowid`, `c0int`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0int` AS `c0int` FROM `vp_database16_310_l` l JOIN `vp_database16_310_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_310_joined`;
+INSERT INTO `vp_database16_310_joined` (`vp_rowid`, `c0int`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0int` AS `c0int` FROM `vp_database16_310_l` l JOIN `vp_database16_310_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_310_joined`;
+INSERT INTO `vp_database16_310_joined` (`vp_rowid`, `c0int`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0int` AS `c0int` FROM `vp_database16_310_l` l JOIN `vp_database16_310_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_310_joined`;
+INSERT INTO `vp_database16_310_joined` (`vp_rowid`, `c0int`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0int` AS `c0int` FROM `vp_database16_310_l` l JOIN `vp_database16_310_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_310_joined`;
+INSERT INTO `vp_database16_310_joined` (`vp_rowid`, `c0int`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0int` AS `c0int` FROM `vp_database16_310_l` l JOIN `vp_database16_310_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+OPTIMIZE TABLE `vp_database16_310_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_r` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_r` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_r` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_r` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_r` COMPACT;
+DROP VIEW IF EXISTS `vp_database16_310_v`;
+CREATE VIEW `vp_database16_310_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0int` AS `c0int` FROM `vp_database16_310_l` l JOIN `vp_database16_310_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_310_v`;
+CREATE VIEW `vp_database16_310_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0int` AS `c0int` FROM `vp_database16_310_l` l JOIN `vp_database16_310_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_310_v`;
+CREATE VIEW `vp_database16_310_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0int` AS `c0int` FROM `vp_database16_310_l` l JOIN `vp_database16_310_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+OPTIMIZE TABLE `vp_database16_310_source` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_l` COMPACT;
+OPTIMIZE TABLE `vp_database16_310_r` COMPACT;
+DROP VIEW IF EXISTS `vp_database16_310_v`;
+CREATE VIEW `vp_database16_310_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0int` AS `c0int` FROM `vp_database16_310_l` l JOIN `vp_database16_310_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_310_v`;
+CREATE VIEW `vp_database16_310_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0int` AS `c0int` FROM `vp_database16_310_l` l JOIN `vp_database16_310_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP STREAM IF EXISTS `vp_database16_310_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_310_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_310_right_stream`;
+DROP VIEW IF EXISTS `vp_database16_310_v`;
+DROP TABLE IF EXISTS `vp_database16_310_joined`;
+DROP TABLE IF EXISTS `vp_database16_310_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database16_310_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database16_310_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database16_310_r`;
+DROP TABLE IF EXISTS `vp_database16_310_l`;
+DROP TABLE IF EXISTS `vp_database16_310_source`;
+DROP TABLE IF EXISTS `t84`;
+CREATE TABLE t0(c0INT INT16 NULL);
+INSERT INTO t96(c0bitmap) VALUES (TO_BITMAP('1,2,3'));
+INSERT INTO t96(c1timestamp) VALUES (NULL), (TIMESTAMP '2000-01-01 00:00:00'), (TIMESTAMP '2000-01-01 00:00:00'), (TIMESTAMP '2000-01-02 00:00:00');
+INSERT INTO t96(c0bitmap, c1timestamp) VALUES (TO_BITMAP('1,2,3'), TIMESTAMP '1970-01-24 22:27:20');
+INSERT INTO t96(c0bitmap) VALUES (TO_BITMAP('1,2,3'));
+INSERT INTO t96(c0bitmap) VALUES (TO_BITMAP('1,2,3'));
+INSERT INTO t96(c1timestamp) VALUES (TIMESTAMP '1969-12-16 16:17:19');
+INSERT INTO t96(c0bitmap, c1timestamp) VALUES (TO_BITMAP('1,2,3'), TIMESTAMP '1969-12-16 11:10:13'), (TO_BITMAP('1,2,3'), TIMESTAMP '1969-12-13 09:57:34');
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (TIMESTAMP '1970-01-03 23:45:52', TO_BITMAP('1,2,3'));
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (NULL, NULL), (TIMESTAMP '2000-01-01 00:00:00', TO_BITMAP('0'));
+INSERT INTO t96(c0bitmap, c1timestamp) VALUES (TO_BITMAP('1,2,3'), TIMESTAMP '1969-12-13 18:37:30'), (TO_BITMAP('1,2,3'), TIMESTAMP '1969-12-13 18:37:30');
+INSERT INTO t96(c0bitmap) VALUES (TO_BITMAP('1,2,3'));
+INSERT INTO t96(c1timestamp) VALUES (TIMESTAMP '1970-01-16 17:07:12');
+INSERT INTO t96(c0bitmap) VALUES (TO_BITMAP('1,2,3'));
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (NULL, NULL), (TIMESTAMP '2000-01-02 00:00:00', TO_BITMAP('1'));
+INSERT INTO t96(c1timestamp) VALUES (NULL), (TIMESTAMP '2000-01-04 00:00:00');
+DROP STREAM IF EXISTS `vp_database16_323_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_323_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_323_right_stream`;
+DROP VIEW IF EXISTS `vp_database16_323_v`;
+DROP TABLE IF EXISTS `vp_database16_323_joined`;
+DROP TABLE IF EXISTS `vp_database16_323_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database16_323_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database16_323_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database16_323_r`;
+DROP TABLE IF EXISTS `vp_database16_323_l`;
+DROP TABLE IF EXISTS `vp_database16_323_source`;
+CREATE TABLE `vp_database16_323_source` (`vp_rowid` BIGINT NOT NULL, `c0int` BIGINT NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database16_323_source` (`vp_rowid`, `c0int`) SELECT ROW_NUMBER() OVER (ORDER BY `c0int`), `c0int` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database16_323_l` (`vp_rowid` BIGINT NOT NULL, `c0int` BIGINT NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database16_323_r` (`vp_rowid` BIGINT NOT NULL, `c0int` BIGINT NULL) ENGINE=FUSE;
+INSERT INTO `vp_database16_323_l` (`vp_rowid`, `c0int`) SELECT `vp_rowid`, `c0int` FROM `vp_database16_323_source`;
+INSERT INTO `vp_database16_323_r` (`vp_rowid`, `c0int`) SELECT `vp_rowid`, `c0int` FROM `vp_database16_323_source`;
+DROP TABLE IF EXISTS `vp_database16_323_joined`;
+CREATE TEMPORARY TABLE `vp_database16_323_joined` (`vp_rowid` BIGINT NOT NULL, `c0int` BIGINT NULL);
+TRUNCATE TABLE `vp_database16_323_joined`;
+INSERT INTO `vp_database16_323_joined` (`vp_rowid`, `c0int`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0int` AS `c0int` FROM `vp_database16_323_l` l JOIN `vp_database16_323_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_323_joined`;
+INSERT INTO `vp_database16_323_joined` (`vp_rowid`, `c0int`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0int` AS `c0int` FROM `vp_database16_323_l` l JOIN `vp_database16_323_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_323_joined`;
+INSERT INTO `vp_database16_323_joined` (`vp_rowid`, `c0int`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0int` AS `c0int` FROM `vp_database16_323_l` l JOIN `vp_database16_323_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_323_joined`;
+INSERT INTO `vp_database16_323_joined` (`vp_rowid`, `c0int`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0int` AS `c0int` FROM `vp_database16_323_l` l JOIN `vp_database16_323_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database16_323_joined`;
+INSERT INTO `vp_database16_323_joined` (`vp_rowid`, `c0int`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0int` AS `c0int` FROM `vp_database16_323_l` l JOIN `vp_database16_323_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_323_v`;
+CREATE VIEW `vp_database16_323_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0int` AS `c0int` FROM `vp_database16_323_l` l JOIN `vp_database16_323_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_323_v`;
+CREATE VIEW `vp_database16_323_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0int` AS `c0int` FROM `vp_database16_323_l` l JOIN `vp_database16_323_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_323_v`;
+CREATE VIEW `vp_database16_323_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0int` AS `c0int` FROM `vp_database16_323_l` l JOIN `vp_database16_323_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_323_v`;
+CREATE VIEW `vp_database16_323_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0int` AS `c0int` FROM `vp_database16_323_l` l JOIN `vp_database16_323_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database16_323_v`;
+CREATE VIEW `vp_database16_323_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0int` AS `c0int` FROM `vp_database16_323_l` l JOIN `vp_database16_323_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP STREAM IF EXISTS `vp_database16_323_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_323_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_323_right_stream`;
+DROP VIEW IF EXISTS `vp_database16_323_v`;
+DROP TABLE IF EXISTS `vp_database16_323_joined`;
+DROP TABLE IF EXISTS `vp_database16_323_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database16_323_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database16_323_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database16_323_r`;
+DROP TABLE IF EXISTS `vp_database16_323_l`;
+DROP TABLE IF EXISTS `vp_database16_323_source`;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE t0(c0BOOLEAN BOOL NULL, c1DATE DATE NULL, c2ARRAY ARRAY(INT64) NULL DEFAULT([1, 2, 3]), c3ARRAY ARRAY(INT64) NOT NULL, c4MAP MAP(VARCHAR, INT64) NULL);
+INSERT INTO t0(c2array, c1date, c3array, c4map, c0boolean) VALUES ([1, 2, 3], DATE '1969-12-12', [1, 2, 3], {'sqlancer': 1, 'databend': 2}, false);
+INSERT INTO t0(c2array, c1date, c4map, c0boolean) VALUES ([2, 2], NULL, {'vp': 2}, true), ([0, 0], DATE '2000-01-01', NULL, NULL);
+INSERT INTO t0(c3array, c1date, c0boolean, c2array) VALUES ([1, 2, 3], DATE '1970-01-24', true, [1, 2, 3]), ([1, 2, 3], DATE '1969-12-07', true, [1, 2, 3]);
+INSERT INTO t0(c0boolean) VALUES (true);
+INSERT INTO t0(c0boolean, c2array, c3array, c4map, c1date) VALUES (true, [1, 2, 3], [1, 2, 3], {'sqlancer': 1, 'databend': 2}, DATE '1969-12-16');
+INSERT INTO t0(c1date, c3array, c4map, c0boolean, c2array) VALUES (DATE '1969-12-14', [1, 2, 3], {'sqlancer': 1, 'databend': 2}, true, [1, 2, 3]);
+INSERT INTO t0(c1date) VALUES (DATE '1970-01-18');
+INSERT INTO t0(c3array, c1date, c2array) VALUES ([1, 2, 3], DATE '1969-12-21', [1, 2, 3]), ([1, 2, 3], DATE '1969-12-23', [1, 2, 3]);
+INSERT INTO t0(c3array, c2array, c0boolean, c4map) VALUES ([1, 2, 3], [1, 2, 3], false, {'sqlancer': 1, 'databend': 2});
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (TIMESTAMP '1970-01-17 15:29:14', TO_BITMAP('1,2,3')), (TIMESTAMP '1970-01-02 15:46:00', TO_BITMAP('1,2,3')), (TIMESTAMP '1969-12-26 18:01:31', TO_BITMAP('1,2,3'));
+INSERT INTO t0(c0boolean) VALUES (false), (NULL);
+INSERT INTO t0(c1date, c2array, c0boolean, c3array) VALUES (NULL, [-3, -3], true, [-3, -3]), (DATE '2000-01-01', [0, 0], NULL, [0, 0]), (DATE '2000-01-01', NULL, false, [0, 0]), (DATE '2000-01-01', [0, 0], false, [0, 0]);
+INSERT INTO t0(c2array, c1date, c3array, c4map) VALUES ([0, 0], NULL, [0, 0], {'vp': 0}), ([-2, -2], DATE '2000-01-03', [-2, -2], NULL), (NULL, DATE '2000-01-01', [0, 0], {'vp': 0}), ([0, 0], DATE '2000-01-01', [0, 0], {'vp': 0});
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (TIMESTAMP '1970-01-06 08:58:50', TO_BITMAP('1,2,3'));
+INSERT INTO t0(c0boolean, c4map, c1date, c2array) VALUES (false, {'sqlancer': 1, 'databend': 2}, DATE '1970-01-17', [1, 2, 3]), (false, {'sqlancer': 1, 'databend': 2}, DATE '1970-01-11', [1, 2, 3]);
+INSERT INTO t96(c0bitmap, c1timestamp) VALUES (TO_BITMAP('1,2,3'), TIMESTAMP '1970-01-19 07:38:31'), (TO_BITMAP('1,2,3'), TIMESTAMP '1970-01-06 00:06:20');
+INSERT INTO t0(c3array, c1date) VALUES ([1, 2, 3], DATE '1970-01-04'), ([1, 2, 3], DATE '1970-01-11');
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (TIMESTAMP '1969-12-19 07:32:00', TO_BITMAP('1,2,3'));
+INSERT INTO t0(c2array, c4map, c3array, c1date, c0boolean) VALUES ([1, 2, 3], {'sqlancer': 1, 'databend': 2}, [1, 2, 3], DATE '1970-01-12', true);
+INSERT INTO t0(c4map, c2array, c0boolean) VALUES ({'sqlancer': 1, 'databend': 2}, [1, 2, 3], false);
+INSERT INTO t96(c0bitmap, c1timestamp) VALUES (TO_BITMAP('1,2,3'), TIMESTAMP '1969-12-10 21:35:42');
+INSERT INTO t0(c1date, c2array, c4map, c0boolean, c3array) VALUES (NULL, [0, 0], {'vp': 0}, false, [0, 0]), (DATE '2000-01-04', [-3, -3], NULL, NULL, [-3, -3]);
+INSERT INTO t0(c4map, c2array) VALUES ({'vp': 1}, [1, 1]), (NULL, [3, 3]), ({'vp': 0}, NULL), ({'vp': -2}, [-2, -2]);
+INSERT INTO t96(c1timestamp) VALUES (TIMESTAMP '1970-01-13 18:18:13');
+INSERT INTO t0(c3array, c4map, c1date) VALUES ([1, 2, 3], {'sqlancer': 1, 'databend': 2}, DATE '1970-01-06');
+INSERT INTO t96(c1timestamp) VALUES (TIMESTAMP '1970-01-06 23:24:42'), (TIMESTAMP '1969-12-07 05:27:25');
+INSERT INTO t96(c1timestamp) VALUES (TIMESTAMP '1970-01-12 13:21:02'), (TIMESTAMP '1969-12-08 19:40:33'), (TIMESTAMP '1969-12-20 01:05:18');
+INSERT INTO t96(c1timestamp) VALUES (TIMESTAMP '1970-01-19 09:46:24'), (TIMESTAMP '4716-01-18 20:32:55'), (TIMESTAMP '1970-01-06 04:52:39');
+INSERT INTO t96(c0bitmap, c1timestamp) VALUES (TO_BITMAP('1,2,3'), TIMESTAMP '1970-01-02 14:36:10');
+INSERT INTO t0(c4map, c2array, c0boolean) VALUES ({'vp': 3}, [3, 3], true), (NULL, [2, 2], NULL);
+INSERT INTO t96(c0bitmap) VALUES (TO_BITMAP('1,2,3')), (TO_BITMAP('1,2,3')), (TO_BITMAP('1,2,3'));
+INSERT INTO t96(c1timestamp) VALUES (TIMESTAMP '1970-01-05 03:49:12');
+INSERT INTO t0(c4map) VALUES ({'sqlancer': 1, 'databend': 2});
+INSERT INTO t96(c0bitmap, c1timestamp) VALUES (TO_BITMAP('1,2,3'), TIMESTAMP '1969-12-31 22:18:38'), (TO_BITMAP('1,2,3'), TIMESTAMP '1969-12-25 11:36:07'), (TO_BITMAP('1,2,3'), TIMESTAMP '1969-12-19 07:32:00');
+INSERT INTO t96(c1timestamp, c0bitmap) VALUES (TIMESTAMP '1970-01-19 10:29:56', TO_BITMAP('1,2,3'));
+DROP STREAM IF EXISTS `vp_database16_337_source_stream`;
+DROP STREAM IF EXISTS `vp_database16_337_left_stream`;
+DROP STREAM IF EXISTS `vp_database16_337_right_stream`;
+DROP VIEW IF EXISTS `vp_database16_337_v`;
+DROP TABLE IF EXISTS `vp_database16_337_joined`;
+DROP TABLE IF EXISTS `vp_database16_337_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database16_337_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database16_337_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database16_337_r`;
+DROP TABLE IF EXISTS `vp_database16_337_l`;
+DROP TABLE IF EXISTS `vp_database16_337_source`;
+CREATE TABLE `vp_database16_337_source` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database16_337_source` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT ROW_NUMBER() OVER (ORDER BY `c1timestamp`), `c0bitmap`, `c1timestamp` FROM `t96` LIMIT 4096;
+CREATE TABLE `vp_database16_337_l` (`vp_rowid` BIGINT NOT NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=MEMORY;
+CREATE TABLE `vp_database16_337_r` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database16_337_l` (`vp_rowid`, `c1timestamp`) SELECT `vp_rowid`, `c1timestamp` FROM `vp_database16_337_source`;
+INSERT INTO `vp_database16_337_r` (`vp_rowid`, `c0bitmap`, `c1timestamp`) SELECT `vp_rowid`, `c0bitmap`, `c1timestamp` FROM `vp_database16_337_source`;
+DROP TABLE IF EXISTS `vp_database16_337_joined`;
+CREATE TEMPORARY TABLE `vp_database16_337_joined` (`vp_rowid` BIGINT NOT NULL, `c0bitmap` BITMAP NULL, `c1timestamp` TIMESTAMP NULL);

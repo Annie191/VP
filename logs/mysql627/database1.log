@@ -1,0 +1,389 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=SINGLE_LEFT_ROW_ID_ONLY, reconstruction=ROW_NUMBER_ALIGNMENT, shape=SINGLE_COLUMN, prefix=vp_database10_304_
+--Strategy counts: split={EMPTY_SPLIT=17, SINGLE_REPLICATED=35, SINGLE_RIGHT_ROW_ID_ONLY=35, SINGLE_LEFT_ROW_ID_ONLY=34, EVEN_SPLIT=45, OVERLAPPED_SPLIT=44, SKEWED_SPLIT=45, TYPE_DIRECTED_SPLIT=42}, reconstruction={JOIN=505, LEFT_RIGHT_JOIN=480, FULL_OUTER_SIMULATION=462, SCALAR_SUBQUERY=498, EXISTS_FILTER=445, IN_FILTER=479, NOT_EXISTS_ANTI=460, DERIVED_TABLE=482, CTE=464, VIEW=492, TEMP_TABLE=464, AGGREGATE_THEN_MERGE=479, ROW_NUMBER_ALIGNMENT=490, JSON_PACK=508, STRING_PACK=464, NATURAL_OR_USING=455, STRAIGHT_JOIN=524, LATERAL_DERIVED=468}
+--Database: database10
+--MySQL version: 9.6.0
+--Base table: t0
+--Base table DDL: CREATE TABLE t0 (
+--  c0 text /*!50606 STORAGE DISK */
+--) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci STATS_PERSISTENT=0 STATS_AUTO_RECALC=0 STATS_SAMPLE_PAGES=28231
+--Base table engine: InnoDB
+--VP source engine: InnoDB
+--VP left engine: InnoDB
+--VP right engine: InnoDB
+--Base row count: 3
+--Base shape: SINGLE_COLUMN
+--Stable row order: `c0`
+--Prefix: vp_database10_304_
+--Split strategy: SINGLE_LEFT_ROW_ID_ONLY
+--Left columns: {}
+--Right columns: {c0}
+--Overlap columns: {}
+--Physical foreign key: true
+--Reconstruction strategy: ROW_NUMBER_ALIGNMENT
+--Description: shape=SINGLE_COLUMN, split=SINGLE_LEFT_ROW_ID_ONLY, reconstruction=ROW_NUMBER_ALIGNMENT
+--Session vars: sql_mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION, time_zone=+00:00, character_set_connection=utf8mb4, collation_connection=utf8mb4_0900_ai_ci, optimizer_switch=index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,engine_condition_pushdown=on,index_condition_pushdown=on,mrr=on,mrr_cost_based=on,block_nested_loop=on,batched_key_access=off,materialization=on,semijoin=on,loosescan=on,firstmatch=on,duplicateweedout=on,subquery_materialization_cost_based=on,use_index_extensions=on,condition_fanout_filter=on,derived_merge=on,use_invisible_indexes=off,skip_scan=on,hash_join=on,subquery_to_derived=off,prefer_ordering_index=on,hypergraph_optimizer=off,derived_condition_pushdown=on,hash_set_operations=on, big_tables=1, sql_buffer_result=0, max_sort_length=2115942, tmp_table_size=16777216, max_heap_table_size=16777216, internal_tmp_mem_storage_engine=TempTable, sort_buffer_size=262144, read_rnd_buffer_size=262144, join_buffer_size=262144
+--Session SET statements:
+--SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+--SET SESSION optimizer_switch = 'index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,engine_condition_pushdown=on,index_condition_pushdown=on,mrr=on,mrr_cost_based=on,block_nested_loop=on,batched_key_access=off,materialization=on,semijoin=on,loosescan=on,firstmatch=on,duplicateweedout=on,subquery_materialization_cost_based=on,use_index_extensions=on,condition_fanout_filter=on,derived_merge=on,use_invisible_indexes=off,skip_scan=on,hash_join=on,subquery_to_derived=off,prefer_ordering_index=on,hypergraph_optimizer=off,derived_condition_pushdown=on,hash_set_operations=on';
+--SET SESSION big_tables = 1;
+--SET SESSION internal_tmp_mem_storage_engine = 'TempTable';
+--Setup statements:
+--CREATE TABLE `vp_database10_304_source` (`vp_rowid` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, `c0` TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL) ENGINE=InnoDB;
+--INSERT INTO `vp_database10_304_source` (`c0`) SELECT `c0` FROM `t0` ORDER BY `c0` LIMIT 256;
+--CREATE TABLE `vp_database10_304_l` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+--CREATE TABLE `vp_database10_304_r` (`vp_rowid` BIGINT NOT NULL PRIMARY KEY, `c0` TEXT NULL) ENGINE=InnoDB;
+--INSERT INTO `vp_database10_304_l` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database10_304_source`;
+--INSERT INTO `vp_database10_304_r` (`vp_rowid`, `c0`) SELECT `vp_rowid`, `c0` FROM `vp_database10_304_source`;
+--ALTER TABLE `vp_database10_304_r` ADD CONSTRAINT `vp_database10_304_fk_r_l` FOREIGN KEY (`vp_rowid`) REFERENCES `vp_database10_304_l`(`vp_rowid`);
+--VP source snapshot:
+--SELECT `vp_rowid`, `c0` FROM `vp_database10_304_source` ORDER BY `vp_rowid`;
+--1 | 0
+--2 | 1521367719
+--3 | f~O_1
+--VP left snapshot:
+--SELECT `vp_rowid` FROM `vp_database10_304_l` ORDER BY `vp_rowid`;
+--1
+--2
+--3
+--VP right snapshot:
+--SELECT `vp_rowid`, `c0` FROM `vp_database10_304_r` ORDER BY `vp_rowid`;
+--1 | 0
+--2 | 1521367719
+--3 | f~O_1
+--Single query: SELECT ALL CAST(LEAST("z", '_ejEZpA(1', "2090248689", vp_database10_304_source.c0) AS SIGNED) AS ref0 FROM vp_database10_304_source ORDER BY vp_database10_304_source.vp_rowid LIMIT 24
+--Split query: SELECT ALL CAST(LEAST("z", '_ejEZpA(1', "2090248689", vp_database10_304_source.c0) AS SIGNED) AS ref0 FROM (WITH l AS (SELECT ROW_NUMBER() OVER (ORDER BY `vp_rowid`) AS rn, `vp_rowid` FROM `vp_database10_304_l`), r AS (SELECT ROW_NUMBER() OVER (ORDER BY `vp_rowid`) AS rn, `vp_rowid`, `c0` FROM `vp_database10_304_r`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0` FROM l JOIN r ON l.rn = r.rn) `vp_database10_304_source` ORDER BY vp_database10_304_source.vp_rowid LIMIT 24
+--Single query plan:
+--EXPLAIN FORMAT=TREE SELECT ALL CAST(LEAST("z", '_ejEZpA(1', "2090248689", vp_database10_304_source.c0) AS SIGNED) AS ref0 FROM vp_database10_304_source ORDER BY vp_database10_304_source.vp_rowid LIMIT 24;
+---> Limit: 24 row(s)  (cost=0.55 rows=3)
+--    -> Index scan on vp_database10_304_source using PRIMARY  (cost=0.55 rows=3)
+--
+--Split query plan:
+--EXPLAIN FORMAT=TREE SELECT ALL CAST(LEAST("z", '_ejEZpA(1', "2090248689", vp_database10_304_source.c0) AS SIGNED) AS ref0 FROM (WITH l AS (SELECT ROW_NUMBER() OVER (ORDER BY `vp_rowid`) AS rn, `vp_rowid` FROM `vp_database10_304_l`), r AS (SELECT ROW_NUMBER() OVER (ORDER BY `vp_rowid`) AS rn, `vp_rowid`, `c0` FROM `vp_database10_304_r`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0` AS `c0` FROM l JOIN r ON l.rn = r.rn) `vp_database10_304_source` ORDER BY vp_database10_304_source.vp_rowid LIMIT 24;
+---> Limit: 24 row(s)
+--    -> Sort: vp_rowid, limit input to 24 row(s) per chunk
+--        -> Stream results  (cost=1.53 rows=1)
+--            -> Inner hash join (r.rn = l.rn)  (cost=1.53 rows=1)
+--                -> Table scan on r  (cost=0.858..1.19 rows=3)
+--                    -> Materialize CTE r  (cost=0.691..0.691 rows=3)
+--                        -> Window aggregate: row_number() OVER (ORDER BY vp_database10_304_r.vp_rowid )   (cost=0 rows=3)
+--                            -> Sort: vp_database10_304_r.vp_rowid  (cost=0.55 rows=3)
+--                                -> Table scan on vp_database10_304_r  (cost=0.55 rows=3)
+--                -> Hash
+--                    -> Table scan on l  (cost=0.73..0.73 rows=1)
+--                        -> Materialize CTE l  (cost=0.23..0.23 rows=1)
+--                            -> Window aggregate: row_number() OVER (ORDER BY vp_database10_304_l.vp_rowid )   (cost=0 rows=1)
+--                                -> Sort: vp_database10_304_l.vp_rowid  (cost=0.35 rows=1)
+--                                    -> Covering index scan on vp_database10_304_l using PRIMARY  (cost=0.35 rows=1)
+--
+--Single result sample: S:1:0; x1, S:10:1521367719; x1, S:10:2090248689; x1
+--Split result sample: S:1:0; x3
+--Only in single: S:10:1521367719; x1, S:10:2090248689; x1
+--Only in split: S:1:0; x2
+--
+--	at sqlancer.mysql.oracle.MySQLVerticalPartitioningOracle.comparePair(MySQLVerticalPartitioningOracle.java:1538)
+--	at sqlancer.mysql.oracle.MySQLVerticalPartitioningOracle.check(MySQLVerticalPartitioningOracle.java:295)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:468)
+--	at sqlancer.Main$2.run(Main.java:685)
+--	at sqlancer.Main$2.runThread(Main.java:667)
+--	at sqlancer.Main$2.run(Main.java:658)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/06/28 12:48:00
+-- Database: database10
+-- Database version: 9.6.0
+-- seed value: 1782650795412
+DROP DATABASE IF EXISTS database10;
+CREATE DATABASE database10;
+USE database10;
+CREATE TABLE t0(c0 TINYINT  NULL UNIQUE KEY, c1 DECIMAL ZEROFILL  ) ;
+CHECK TABLE `t0` MEDIUM CHANGED EXTENDED;
+CHECKSUM TABLE `t0` QUICK;
+DROP INDEX c0 ON `t0`;
+CHECK TABLE `t0` QUICK FAST CHANGED;
+SET SESSION query_alloc_block_size = 280729243;
+REPAIR TABLE `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+CHECK TABLE `t0` CHANGED MEDIUM;
+ALTER TABLE `t0` ROW_FORMAT COMPACT;
+REPAIR TABLE `t0` EXTENDED;
+ALTER TABLE `t0` DELAY_KEY_WRITE 1;
+SET SESSION sql_auto_is_null = OFF;
+ANALYZE TABLE `t0` UPDATE HISTOGRAM ON `c1`;
+ALTER TABLE `t0` ROW_FORMAT REDUNDANT;
+CREATE UNIQUE INDEX i6 ON `t0`(`c1`, `c0` ASC);
+INSERT INTO t0(c1, c0) VALUES("hv", NULL);
+CHECK TABLE `t0` MEDIUM CHANGED QUICK;
+REPAIR TABLE `t0`;
+REPLACE LOW_PRIORITY INTO t0(c1) VALUES(655523087);
+CHECK TABLE `t0` CHANGED;
+ANALYZE TABLE `t0` UPDATE HISTOGRAM ON `c1`, `c0`;
+CHECKSUM TABLE `t0` QUICK;
+ALTER TABLE `t0` FORCE;
+DROP INDEX i6 ON `t0`;
+CHECK TABLE `t0` FAST MEDIUM FOR UPGRADE EXTENDED QUICK CHANGED;
+REPAIR TABLE `t0` QUICK;
+INSERT INTO t0(c1) VALUES(1480761525);
+ANALYZE TABLE `t0` UPDATE HISTOGRAM ON `c0`, `c1`;
+ANALYZE TABLE `t0`;
+ANALYZE TABLE `t0`;
+CREATE INDEX i0 ON `t0`(`c0`);
+REPAIR TABLE `t0` QUICK USE_FRM;
+OPTIMIZE LOCAL TABLE `t0`;
+REPAIR TABLE `t0` EXTENDED;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't0';
+OPTIMIZE TABLE `t0`;
+REPAIR TABLE `t0` USE_FRM;
+CHECK TABLE `t0` FOR UPGRADE FAST QUICK EXTENDED MEDIUM;
+CREATE TABLE IF NOT EXISTS t1(c0 FLOAT  COLUMN_FORMAT DEFAULT COMMENT 'asdf'  PRIMARY KEY NOT NULL STORAGE MEMORY UNIQUE, c1 FLOAT  COLUMN_FORMAT DYNAMIC, c2 BIGINT  UNIQUE COLUMN_FORMAT FIXED, c3 DECIMAL   NULL UNIQUE COMMENT 'asdf'  COLUMN_FORMAT DYNAMIC STORAGE MEMORY) ;
+CHECKSUM TABLE `t1`;
+CREATE UNIQUE INDEX i1 ON `t1`(`c3` ASC);
+CHECKSUM TABLE `t1`;
+CHECKSUM TABLE `t1` QUICK;
+ANALYZE TABLE `t1`;
+SET SESSION optimizer_search_depth = 25;
+DROP INDEX c2 ON `t1`;
+CHECKSUM TABLE `t1`;
+ANALYZE TABLE `t1` UPDATE HISTOGRAM ON `c0`;
+ALTER TABLE `t1` CHECKSUM 1;
+REPAIR TABLE `t1` QUICK EXTENDED;
+ALTER TABLE `t1` FORCE;
+DROP INDEX c3 ON `t1`;
+CREATE INDEX i2 ON `t1`(`c1` DESC);
+SET SESSION read_buffer_size = 1013698341;
+REPAIR TABLE `t1` EXTENDED;
+CHECKSUM TABLE `t1` EXTENDED;
+REPAIR TABLE `t1` QUICK USE_FRM;
+ALTER TABLE `t1` STATS_PERSISTENT DEFAULT;
+SET SESSION sql_quote_show_create = OFF;
+DROP INDEX i1 ON `t1`;
+CHECK TABLE `t1` EXTENDED FOR UPGRADE FAST QUICK;
+DROP INDEX i2 ON `t1`;
+CHECKSUM TABLE `t1` QUICK;
+ANALYZE TABLE `t1`;
+CREATE UNIQUE INDEX i1 ON `t1`(`c1`, `c2`, `c3` DESC, `c0` DESC);
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't1';
+SET SESSION preload_buffer_size = 322848877;
+DROP INDEX i1 ON `t1`;
+OPTIMIZE TABLE `t1`;
+ANALYZE TABLE `t1`;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't1';
+DROP INDEX c0 ON `t1`;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't1';
+DROP INDEX `PRIMARY` ON `t1`;
+INSERT IGNORE INTO t1(c2) VALUES(NULL);
+UPDATE `t1` SET `c2`='' WHERE ( EXISTS (SELECT 1 wHERE FALSE)) IN ("E*");
+CREATE TABLE t2(c0 FLOAT   STORAGE MEMORY UNIQUE KEY, c1 FLOAT ZEROFILL  COMMENT 'asdf'   STORAGE DISK COLUMN_FORMAT FIXED) ;
+OPTIMIZE LOCAL TABLE `t2`;
+ANALYZE TABLE `t2`;
+CREATE UNIQUE INDEX i1 ON `t2`(`c0` DESC);
+SET SESSION unique_checks = OFF;
+CHECK TABLE `t2` MEDIUM FOR UPGRADE CHANGED EXTENDED QUICK FAST;
+SET SESSION range_optimizer_max_mem_size = 1643376681343561611;
+UPDATE `t2` SET `c0`=0.0000000000000001, `c1`=-685217962 WHERE ((- ((NOT (NULL))))) IN ((- (IF(t2.c1, t2.c0, NULL))));
+DROP INDEX i1 ON `t2`;
+ALTER TABLE `t2` ENABLE KEYS;
+REPLACE INTO t2(c0, c1) VALUES(0.053540336817152645, -1034398007), (0.9882392009079438, 0.3861831717016636), ("1480761525", NULL);
+OPTIMIZE LOCAL TABLE `t2`;
+REPAIR TABLE `t2`;
+ALTER TABLE `t2` PACK_KEYS 0;
+DROP INDEX c0 ON `t2`;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't2';
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't2';
+REPAIR TABLE `t2` QUICK USE_FRM;
+CREATE UNIQUE INDEX i1 ON `t2`(`c0` DESC, `c1`);
+SET SESSION big_tables = ON;
+REPAIR TABLE `t2` USE_FRM;
+CHECKSUM TABLE `t2`;
+UPDATE `t2` SET `c0`=NULL, `c1`=DEFAULT;
+OPTIMIZE TABLE `t2`;
+CHECKSUM TABLE `t2`;
+ANALYZE TABLE `t2`;
+ALTER TABLE `t2` STATS_AUTO_RECALC 0;
+ANALYZE TABLE `t2` UPDATE HISTOGRAM ON `c1` WITH 591 BUCKETS;
+REPAIR TABLE `t2` QUICK EXTENDED USE_FRM;
+OPTIMIZE TABLE `t2`;
+CHECK TABLE `t2`;
+CHECK TABLE `t2` FAST FOR UPGRADE EXTENDED MEDIUM QUICK CHANGED;
+DROP INDEX i1 ON `t2`;
+OPTIMIZE TABLE `t2`;
+OPTIMIZE TABLE `t2`;
+SET SESSION max_sp_recursion_depth = 43;
+CHECK TABLE `t2` FOR UPGRADE FAST CHANGED EXTENDED;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't2';
+DROP TABLE IF EXISTS `t1`;
+CREATE TABLE IF NOT EXISTS t1(c0 FLOAT  STORAGE DISK NULL UNIQUE, c1 FLOAT ZEROFILL , c2 DOUBLE  COLUMN_FORMAT DEFAULT COMMENT 'asdf'   STORAGE DISK, c3 MEDIUMTEXT  COLUMN_FORMAT DYNAMIC) ;
+INSERT IGNORE INTO t1(c0) VALUES(NULL), (1951316346), (130036545);
+REPAIR TABLE `t1` QUICK;
+DROP INDEX c0 ON `t1`;
+REPAIR TABLE `t1` QUICK;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't1';
+OPTIMIZE TABLE `t1`;
+CREATE UNIQUE INDEX i1 ON `t1`(`c1`, `c3` DESC, `c0`, `c2` ASC);
+CHECKSUM TABLE `t1` QUICK;
+CHECKSUM TABLE `t1` QUICK;
+CHECK TABLE `t1`;
+SET SESSION range_optimizer_max_mem_size = 5486934744274431835;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't1';
+UPDATE `t1` SET `c3`=DEFAULT WHERE BIT_COUNT(t1.c3);
+CHECKSUM TABLE `t1` EXTENDED;
+UPDATE `t1` SET `c3`=0.2938462390514486, `c0`=1725899720, `c2`=0.5495327260697915 WHERE t1.c0;
+CHECKSUM TABLE `t1` EXTENDED;
+CHECKSUM TABLE `t1` QUICK;
+ALTER TABLE `t1` STATS_AUTO_RECALC 0;
+ANALYZE TABLE `t1` UPDATE HISTOGRAM ON `c1`, `c0` WITH 591 BUCKETS;
+ANALYZE TABLE `t1`;
+ALTER TABLE `t1` DELAY_KEY_WRITE 1;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't1';
+CHECK TABLE `t1`;
+CHECKSUM TABLE `t1`;
+CHECK TABLE `t1` MEDIUM CHANGED FAST;
+ANALYZE TABLE `t1` UPDATE HISTOGRAM ON `c1`, `c2`, `c3`, `c0` WITH 19 BUCKETS;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't1';
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't1';
+SET SESSION myisam_stats_method = nulls_unequal;
+CREATE INDEX i1 ON `t1`(`c3` DESC);
+REPLACE DELAYED INTO t1(c0) VALUES(0.4458075831094761);
+SET SESSION unique_checks = ON;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE IF NOT EXISTS t0(c0 BIGINT(8)   UNIQUE , c1 INT  ) ;
+INSERT HIGH_PRIORITY IGNORE INTO t0(c0, c1) VALUES(0.9471747442597639, 0.3034985510634307);
+SET SESSION preload_buffer_size = 635815327;
+ANALYZE TABLE `t0` UPDATE HISTOGRAM ON `c1`, `c0` WITH 516 BUCKETS;
+CHECK TABLE `t0` EXTENDED;
+UPDATE `t0` SET `c0`=0.34537615241489583;
+CHECKSUM TABLE `t0` QUICK;
+ANALYZE TABLE `t0`;
+REPAIR TABLE `t0` USE_FRM;
+INSERT DELAYED IGNORE INTO t0(c1) VALUES("-1963328852"), (0.8512522948501823), (-1299713352);
+OPTIMIZE TABLE `t0`;
+ALTER TABLE `t0` STATS_AUTO_RECALC 1;
+ALTER TABLE `t0` STATS_PERSISTENT 1;
+UPDATE `t0` SET `c0`="-1823871581", `c1`=-444866724 WHERE CAST(0.13681182243125012 AS SIGNED);
+ANALYZE TABLE `t0`;
+OPTIMIZE NO_WRITE_TO_BINLOG TABLE `t0`;
+UPDATE `t0` SET `c1`=-9223372036854775808, `c0`= EXISTS (SELECT 1 wHERE FALSE);
+DROP INDEX c0 ON `t0`;
+CHECKSUM TABLE `t0` EXTENDED;
+ALTER TABLE `t0` STATS_PERSISTENT DEFAULT;
+INSERT INTO t0(c0) VALUES(-1129776531), (0.004011563953002062), (0.12609645038588402);
+CHECK TABLE `t0` MEDIUM QUICK CHANGED FOR UPGRADE EXTENDED;
+CREATE UNIQUE INDEX i0 ON `t0`(`c1`, `c0` ASC);
+ALTER TABLE `t0` DELAY_KEY_WRITE 1;
+OPTIMIZE LOCAL TABLE `t0`;
+ALTER TABLE `t0` ENABLE KEYS;
+CHECK TABLE `t0` FOR UPGRADE FAST;
+CHECK TABLE `t0` QUICK;
+CREATE UNIQUE INDEX i1 ON `t0`(`c0`);
+OPTIMIZE TABLE `t0`;
+CHECK TABLE `t0` FAST QUICK MEDIUM;
+INSERT IGNORE INTO t0(c1) VALUES(-1.433944551E9), (1864247824), (NULL);
+CREATE INDEX i1 ON `t0`(`c1` ASC);
+CHECK TABLE `t0` EXTENDED MEDIUM CHANGED FAST;
+CHECKSUM TABLE `t0`;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't0';
+OPTIMIZE NO_WRITE_TO_BINLOG TABLE `t0`;
+DROP TABLE IF EXISTS `t1`;
+CREATE TABLE t1(c0 BIGINT(6)  COMMENT 'asdf'    STORAGE DISK) AUTO_INCREMENT = 96020838, DELAY_KEY_WRITE = 0;
+SET SESSION max_sp_recursion_depth = 146;
+ALTER TABLE `t1` STATS_AUTO_RECALC 0;
+REPAIR TABLE `t1` EXTENDED USE_FRM;
+UPDATE `t1` SET `c0`=-1 WHERE (! ( EXISTS (SELECT 1)));
+ANALYZE TABLE `t1` UPDATE HISTOGRAM ON `c0`;
+CHECKSUM TABLE `t1` QUICK;
+SET SESSION unique_checks = OFF;
+SET SESSION rbr_exec_mode = STRICT;
+OPTIMIZE TABLE `t1`;
+UPDATE `t1` SET `c0`=9223372036854775807;
+ANALYZE TABLE `t1` UPDATE HISTOGRAM ON `c0` WITH 490 BUCKETS;
+CHECKSUM TABLE `t1` EXTENDED;
+INSERT HIGH_PRIORITY IGNORE INTO t1(c0) VALUES('u7(4');
+CHECK TABLE `t1` EXTENDED QUICK MEDIUM FAST;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't1';
+SET SESSION max_sort_length = 2115942;
+CREATE UNIQUE INDEX i68 ON `t1`(`c0`);
+CHECKSUM TABLE `t1` QUICK;
+INSERT INTO t1(c0) VALUES(0.46795449664220234);
+REPAIR TABLE `t1` QUICK;
+ANALYZE TABLE `t1` UPDATE HISTOGRAM ON `c0` WITH 878 BUCKETS;
+CREATE INDEX i2 ON `t1`(`c0`);
+DROP INDEX i68 ON `t1`;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't1';
+SET SESSION max_heap_table_size = 5766344279012232649;
+CREATE UNIQUE INDEX i3 ON `t1`(`c0` ASC);
+OPTIMIZE TABLE `t1`;
+REPAIR TABLE `t1` QUICK EXTENDED USE_FRM;
+OPTIMIZE NO_WRITE_TO_BINLOG TABLE `t1`;
+DROP INDEX i2 ON `t1`;
+UPDATE `t1` SET `c0`=0.8005210354479755 WHERE "-1466722849";
+ALTER TABLE `t1` PACK_KEYS 0;
+REPAIR TABLE `t1` QUICK EXTENDED;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE t0(c0 TEXT  STORAGE DISK ) STATS_SAMPLE_PAGES = 28231, DELAY_KEY_WRITE = 0;
+ALTER TABLE `t0` PACK_KEYS DEFAULT;
+CREATE INDEX i0 ON `t0`(`c0`(3) ASC);
+REPLACE INTO t0(c0) VALUES('');
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't0';
+CHECK TABLE `t0` MEDIUM;
+OPTIMIZE NO_WRITE_TO_BINLOG TABLE `t0`;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't0';
+ANALYZE TABLE `t0` UPDATE HISTOGRAM ON `c0`;
+CHECKSUM TABLE `t0` QUICK;
+SET SESSION foreign_key_checks = 1;
+CHECK TABLE `t0` FAST QUICK MEDIUM EXTENDED CHANGED FOR UPGRADE;
+REPAIR TABLE `t0` EXTENDED;
+CHECK TABLE `t0`;
+UPDATE `t0` SET `c0`= EXISTS (SELECT 1 wHERE FALSE);
+ANALYZE TABLE `t0` UPDATE HISTOGRAM ON `c0`;
+OPTIMIZE LOCAL TABLE `t0`;
+REPAIR TABLE `t0` QUICK USE_FRM;
+OPTIMIZE TABLE `t0`;
+CHECK TABLE `t0` EXTENDED FAST;
+INSERT DELAYED INTO t0(c0) VALUES(1521367719);
+CHECK TABLE `t0`;
+REPLACE INTO t0(c0) VALUES('f~O_1');
+CREATE INDEX i1 ON `t0`(`c0`(4));
+ALTER TABLE `t0` STATS_AUTO_RECALC 0;
+ANALYZE TABLE `t0`;
+ALTER TABLE `t0` STATS_PERSISTENT 0;
+ANALYZE TABLE `t0` UPDATE HISTOGRAM ON `c0`;
+DROP INDEX i1 ON `t0`;
+ALTER TABLE `t0` DELAY_KEY_WRITE 0;
+DROP INDEX i0 ON `t0`;
+DROP TABLE IF EXISTS `t2`;
+CREATE TABLE IF NOT EXISTS t2(c0 TEXT ) ;
+SET SESSION foreign_key_checks = 1;
+UPDATE `t2` SET `c0`='Infinity';
+ANALYZE TABLE `t2`;
+SET SESSION big_tables = ON;
+REPAIR TABLE `t2` USE_FRM;
+REPLACE INTO t2(c0) VALUES('');
+REPLACE DELAYED INTO t2(c0) VALUES('-1466722849');
+REPAIR TABLE `t2`;
+INSERT IGNORE INTO t2(c0) VALUES(1350551025), (NULL), ('*l'), (0.927065753555882), (-204362445);
+CHECKSUM TABLE `t2`;
+CHECKSUM TABLE `t2` QUICK;
+REPLACE DELAYED INTO t2(c0) VALUES(NULL);
+REPAIR TABLE `t2` QUICK EXTENDED USE_FRM;
+OPTIMIZE TABLE `t2`;
+INSERT HIGH_PRIORITY IGNORE INTO t2(c0) VALUES(993431737);
+REPAIR TABLE `t2` QUICK USE_FRM;
+REPAIR TABLE `t2` QUICK EXTENDED USE_FRM;
+REPAIR TABLE `t2` EXTENDED USE_FRM;
+ANALYZE TABLE `t2`;
+ALTER TABLE `t2` ROW_FORMAT COMPACT;
+CHECK TABLE `t2` EXTENDED MEDIUM CHANGED FAST QUICK;
+CHECK TABLE `t2` FOR UPGRADE EXTENDED CHANGED FAST MEDIUM QUICK;
+SET SESSION old_alter_table = ON;
+CHECKSUM TABLE `t2`;
+CHECK TABLE `t2` CHANGED;
+CHECK TABLE `t2` EXTENDED FAST FOR UPGRADE MEDIUM;
+CREATE INDEX i0 ON `t2`(`c0`);
+REPAIR TABLE `t2` EXTENDED USE_FRM;
+select TABLE_NAME, ENGINE from information_schema.TABLES where table_schema = 'database10' and TABLE_NAME = 't2';
+SET SESSION unique_checks = ON;
+CHECKSUM TABLE `t2`;
+DROP TABLE IF EXISTS `t1`;

@@ -1,0 +1,60 @@
+DROP DATABASE IF EXISTS repro_mariadb817_db2_min;
+CREATE DATABASE repro_mariadb817_db2_min;
+USE repro_mariadb817_db2_min;
+
+CREATE TABLE s (
+    vp_rowid BIGINT NOT NULL,
+    c0 BIT(16) NOT NULL,
+    UNIQUE KEY (vp_rowid),
+    KEY idx_s (vp_rowid, c0)
+) ENGINE=Aria;
+
+CREATE TABLE lpart (
+    vp_rowid BIGINT NOT NULL PRIMARY KEY,
+    c0 BIT(16) NOT NULL
+) ENGINE=Aria;
+
+CREATE TABLE rpart (
+    vp_rowid BIGINT NOT NULL PRIMARY KEY
+) ENGINE=Aria;
+
+INSERT INTO s VALUES
+(1, b'0000000000001000'),
+(2, b'0000000000000000'),
+(3, b'0000000000000010'),
+(4, b'0000000000000011'),
+(5, b'0000000000000100'),
+(6, b'0000000000000101'),
+(7, b'0000000000000110'),
+(8, b'0000000000000111');
+
+INSERT INTO lpart SELECT * FROM s;
+INSERT INTO rpart SELECT vp_rowid FROM s;
+
+SET SESSION optimizer_switch='derived_merge=off';
+
+-- 单表路径
+SELECT DISTINCT c0 + 0
+FROM s
+WHERE (
+    CONCAT(
+        CAST(c0 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+        CAST(59615238 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+        CAST('2017-12-25 07:22:08' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin
+    ) IN ('2035-02-08 07:06:22', c0)
+);
+
+-- 多表重建路径
+SELECT DISTINCT c0 + 0
+FROM (
+    SELECT l.vp_rowid, l.c0
+    FROM lpart l
+    JOIN rpart r USING (vp_rowid)
+) AS reconstructed
+WHERE (
+    CONCAT(
+        CAST(c0 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+        CAST(59615238 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+        CAST('2017-12-25 07:22:08' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin
+    ) IN ('2035-02-08 07:06:22', c0)
+);

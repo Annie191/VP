@@ -1,0 +1,31 @@
+DROP DATABASE IF EXISTS repro_ob730_db13_min;
+CREATE DATABASE repro_ob730_db13_min;
+USE repro_ob730_db13_min;
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 DOUBLE NULL
+) PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+CREATE TABLE l (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 DOUBLE NULL
+) PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY
+) PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+INSERT INTO src VALUES (1,-0.999),(2,-0.999);
+INSERT INTO src VALUES (3,-0.999),(4,-0.999);
+INSERT INTO src VALUES
+  (5,-0.999),(6,-0.999),(7,-0.999),(8,-0.999);
+INSERT INTO src VALUES
+  (9,-0.999),(10,-0.999),(11,-0.999),(12,-0.999),
+  (13,-0.999),(14,-0.999),(15,-0.999);
+INSERT INTO l SELECT * FROM src;
+INSERT INTO r SELECT vp_rowid FROM src;
+SET SESSION ob_enable_aggregation_pushdown = OFF;
+
+-- ORIGINAL SINGLE-TABLE QUERY
+-- 单表
+SELECT /*+ PARALLEL(4) */ STD(c0) AS single_std, VAR_POP(c0) AS single_var
+FROM src;
+
+-- SKIPPED TLP/NoREC: only one top-level aggregate expression is supported

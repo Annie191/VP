@@ -1,0 +1,411 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=SINGLE_REPLICATED, reconstruction=TEMP_TABLE, shape=SINGLE_COLUMN, prefix=vp_database20_346_
+--Strategy counts: split={EMPTY_SPLIT=5, SINGLE_REPLICATED=9, SINGLE_RIGHT_ROW_ID_ONLY=10, SINGLE_LEFT_ROW_ID_ONLY=16, EVEN_SPLIT=18, OVERLAPPED_SPLIT=18, SKEWED_SPLIT=21, TYPE_DIRECTED_SPLIT=17}, reconstruction={JOIN=525, LEFT_RIGHT_JOIN=523, FULL_OUTER_SIMULATION=535, SCALAR_SUBQUERY=520, EXISTS_FILTER=518, IN_FILTER=510, NOT_EXISTS_ANTI=510, DERIVED_TABLE=532, CTE=520, VIEW=529, TEMP_TABLE=357, AGGREGATE_THEN_MERGE=519, ROW_NUMBER_ALIGNMENT=523, JSON_PACK=510, STRING_PACK=520, NATURAL_OR_USING=521, LATERAL_DERIVED=525}
+--Database: database20
+--Databend version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+--Base table: t1
+--Base table DDL: CREATE TABLE t1 (
+--  c0geometry GEOMETRY NULL DEFAULT 'POINT(1 2)'
+--) ENGINE=FUSE
+--Base table engine: FUSE
+--VP source engine: MEMORY
+--VP left engine: FUSE
+--VP right engine: MEMORY
+--Base row count: 46
+--Base shape: SINGLE_COLUMN
+--Stable row order: NONE
+--Prefix: vp_database20_346_
+--Split strategy: SINGLE_REPLICATED
+--Left columns: {c0geometry}
+--Right columns: {c0geometry}
+--Overlap columns: {c0geometry}
+--Physical foreign key: false
+--Schema profile: NULL_DEFAULT
+--Source schema fidelity: column types, nullability, and defaults; keys/constraints/generated expressions omitted
+--Helper schema fidelity: projection-only; columns are nullable and constraints/defaults are not copied
+--Copied source constraints: []
+--Reconstruction strategy: TEMP_TABLE
+--Description: shape=SINGLE_COLUMN, split=SINGLE_REPLICATED, reconstruction=TEMP_TABLE
+--Databend session settings: default_order_by_null=nulls_last, disable_join_reorder=0, enable_bloom_runtime_filter=1, enable_cbo=1, enable_join_runtime_filter=1, enable_query_result_cache=0, max_threads=40, numeric_cast_option=rounding, sql_dialect=PostgreSQL, timezone=UTC
+--Session SET statements:
+--SET default_order_by_null = 'nulls_last';
+--SET disable_join_reorder = 0;
+--SET enable_bloom_runtime_filter = 1;
+--SET enable_cbo = 1;
+--SET enable_join_runtime_filter = 1;
+--SET enable_query_result_cache = 0;
+--SET max_threads = 40;
+--SET numeric_cast_option = 'rounding';
+--SET sql_dialect = 'PostgreSQL';
+--SET timezone = 'UTC';
+--Setup statements:
+---- source schema profile: NULL_DEFAULT;
+---- copied source column nullability and defaults from SHOW CREATE TABLE;
+---- helper columns intentionally remain nullable projections for outer-join reconstruction;
+--CREATE TABLE `vp_database20_346_source` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL) ENGINE=MEMORY;
+--INSERT INTO `vp_database20_346_source` (`vp_rowid`, `c0geometry`) SELECT ROW_NUMBER() OVER (ORDER BY 1), `c0geometry` FROM `t1` LIMIT 4096;
+--CREATE TABLE `vp_database20_346_l` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL) ENGINE=FUSE;
+--CREATE TABLE `vp_database20_346_r` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL) ENGINE=MEMORY;
+--INSERT OVERWRITE `vp_database20_346_l` (`vp_rowid`, `c0geometry`) SELECT `vp_rowid`, `c0geometry` FROM `vp_database20_346_source`;
+--INSERT OVERWRITE `vp_database20_346_r` (`vp_rowid`, `c0geometry`) SELECT `vp_rowid`, `c0geometry` FROM `vp_database20_346_source`;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+--DROP TABLE IF EXISTS `vp_database20_346_joined`;
+--CREATE TEMPORARY TABLE `vp_database20_346_joined` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL);
+--TRUNCATE TABLE `vp_database20_346_joined`;
+--INSERT INTO `vp_database20_346_joined` (`vp_rowid`, `c0geometry`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_346_l` l JOIN `vp_database20_346_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+--VP source snapshot:
+--SELECT `vp_rowid`, `c0geometry` FROM `vp_database20_346_source` ORDER BY `vp_rowid` LIMIT 256;
+--1 | {"type": "Point", "coordinates": [1,2]}
+--2 | {"type": "Point", "coordinates": [1,2]}
+--3 | {"type": "Point", "coordinates": [1,2]}
+--4 | {"type": "Point", "coordinates": [1,2]}
+--5 | {"type": "Point", "coordinates": [1,2]}
+--6 | {"type": "Point", "coordinates": [1,2]}
+--7 | {"type": "Point", "coordinates": [1,2]}
+--8 | {"type": "Point", "coordinates": [1,2]}
+--9 | {"type": "Point", "coordinates": [1,2]}
+--10 | {"type": "Point", "coordinates": [1,2]}
+--11 | {"type": "Point", "coordinates": [0,0]}
+--12 | NULL
+--13 | {"type": "Point", "coordinates": [1,2]}
+--14 | {"type": "Point", "coordinates": [0,0]}
+--15 | NULL
+--16 | {"type": "Point", "coordinates": [0,0]}
+--17 | NULL
+--18 | {"type": "Point", "coordinates": [1,2]}
+--19 | {"type": "Point", "coordinates": [1,2]}
+--20 | {"type": "Point", "coordinates": [1,2]}
+--21 | {"type": "Point", "coordinates": [1,2]}
+--22 | {"type": "Point", "coordinates": [1,2]}
+--23 | {"type": "Point", "coordinates": [1,2]}
+--24 | {"type": "Point", "coordinates": [1,2]}
+--25 | {"type": "Point", "coordinates": [1,2]}
+--26 | {"type": "Point", "coordinates": [1,2]}
+--27 | {"type": "Point", "coordinates": [1,2]}
+--28 | {"type": "Point", "coordinates": [1,2]}
+--29 | {"type": "Point", "coordinates": [1,2]}
+--30 | {"type": "Point", "coordinates": [1,2]}
+--31 | {"type": "Point", "coordinates": [1,2]}
+--32 | {"type": "Point", "coordinates": [0,0]}
+--33 | NULL
+--34 | {"type": "Point", "coordinates": [1,1]}
+--35 | NULL
+--36 | {"type": "Point", "coordinates": [1,2]}
+--37 | {"type": "Point", "coordinates": [1,2]}
+--38 | {"type": "Point", "coordinates": [-3,-3]}
+--39 | NULL
+--40 | {"type": "Point", "coordinates": [0,0]}
+--41 | {"type": "Point", "coordinates": [0,0]}
+--42 | {"type": "Point", "coordinates": [0,0]}
+--43 | NULL
+--44 | {"type": "Point", "coordinates": [3,3]}
+--45 | NULL
+--46 | {"type": "Point", "coordinates": [1,2]}
+--VP left snapshot:
+--SELECT `vp_rowid`, `c0geometry` FROM `vp_database20_346_l` ORDER BY `vp_rowid` LIMIT 256;
+--1 | {"type": "Point", "coordinates": [1,2]}
+--2 | {"type": "Point", "coordinates": [1,2]}
+--3 | {"type": "Point", "coordinates": [1,2]}
+--4 | {"type": "Point", "coordinates": [1,2]}
+--5 | {"type": "Point", "coordinates": [1,2]}
+--6 | {"type": "Point", "coordinates": [1,2]}
+--7 | {"type": "Point", "coordinates": [1,2]}
+--8 | {"type": "Point", "coordinates": [1,2]}
+--9 | {"type": "Point", "coordinates": [1,2]}
+--10 | {"type": "Point", "coordinates": [1,2]}
+--11 | {"type": "Point", "coordinates": [0,0]}
+--12 | NULL
+--13 | {"type": "Point", "coordinates": [1,2]}
+--14 | {"type": "Point", "coordinates": [0,0]}
+--15 | NULL
+--16 | {"type": "Point", "coordinates": [0,0]}
+--17 | NULL
+--18 | {"type": "Point", "coordinates": [1,2]}
+--19 | {"type": "Point", "coordinates": [1,2]}
+--20 | {"type": "Point", "coordinates": [1,2]}
+--21 | {"type": "Point", "coordinates": [1,2]}
+--22 | {"type": "Point", "coordinates": [1,2]}
+--23 | {"type": "Point", "coordinates": [1,2]}
+--24 | {"type": "Point", "coordinates": [1,2]}
+--25 | {"type": "Point", "coordinates": [1,2]}
+--26 | {"type": "Point", "coordinates": [1,2]}
+--27 | {"type": "Point", "coordinates": [1,2]}
+--28 | {"type": "Point", "coordinates": [1,2]}
+--29 | {"type": "Point", "coordinates": [1,2]}
+--30 | {"type": "Point", "coordinates": [1,2]}
+--31 | {"type": "Point", "coordinates": [1,2]}
+--32 | {"type": "Point", "coordinates": [0,0]}
+--33 | NULL
+--34 | {"type": "Point", "coordinates": [1,1]}
+--35 | NULL
+--36 | {"type": "Point", "coordinates": [1,2]}
+--37 | {"type": "Point", "coordinates": [1,2]}
+--38 | {"type": "Point", "coordinates": [-3,-3]}
+--39 | NULL
+--40 | {"type": "Point", "coordinates": [0,0]}
+--41 | {"type": "Point", "coordinates": [0,0]}
+--42 | {"type": "Point", "coordinates": [0,0]}
+--43 | NULL
+--44 | {"type": "Point", "coordinates": [3,3]}
+--45 | NULL
+--46 | {"type": "Point", "coordinates": [1,2]}
+--VP right snapshot:
+--SELECT `vp_rowid`, `c0geometry` FROM `vp_database20_346_r` ORDER BY `vp_rowid` LIMIT 256;
+--1 | {"type": "Point", "coordinates": [1,2]}
+--2 | {"type": "Point", "coordinates": [1,2]}
+--3 | {"type": "Point", "coordinates": [1,2]}
+--4 | {"type": "Point", "coordinates": [1,2]}
+--5 | {"type": "Point", "coordinates": [1,2]}
+--6 | {"type": "Point", "coordinates": [1,2]}
+--7 | {"type": "Point", "coordinates": [1,2]}
+--8 | {"type": "Point", "coordinates": [1,2]}
+--9 | {"type": "Point", "coordinates": [1,2]}
+--10 | {"type": "Point", "coordinates": [1,2]}
+--11 | {"type": "Point", "coordinates": [0,0]}
+--12 | NULL
+--13 | {"type": "Point", "coordinates": [1,2]}
+--14 | {"type": "Point", "coordinates": [0,0]}
+--15 | NULL
+--16 | {"type": "Point", "coordinates": [0,0]}
+--17 | NULL
+--18 | {"type": "Point", "coordinates": [1,2]}
+--19 | {"type": "Point", "coordinates": [1,2]}
+--20 | {"type": "Point", "coordinates": [1,2]}
+--21 | {"type": "Point", "coordinates": [1,2]}
+--22 | {"type": "Point", "coordinates": [1,2]}
+--23 | {"type": "Point", "coordinates": [1,2]}
+--24 | {"type": "Point", "coordinates": [1,2]}
+--25 | {"type": "Point", "coordinates": [1,2]}
+--26 | {"type": "Point", "coordinates": [1,2]}
+--27 | {"type": "Point", "coordinates": [1,2]}
+--28 | {"type": "Point", "coordinates": [1,2]}
+--29 | {"type": "Point", "coordinates": [1,2]}
+--30 | {"type": "Point", "coordinates": [1,2]}
+--31 | {"type": "Point", "coordinates": [1,2]}
+--32 | {"type": "Point", "coordinates": [0,0]}
+--33 | NULL
+--34 | {"type": "Point", "coordinates": [1,1]}
+--35 | NULL
+--36 | {"type": "Point", "coordinates": [1,2]}
+--37 | {"type": "Point", "coordinates": [1,2]}
+--38 | {"type": "Point", "coordinates": [-3,-3]}
+--39 | NULL
+--40 | {"type": "Point", "coordinates": [0,0]}
+--41 | {"type": "Point", "coordinates": [0,0]}
+--42 | {"type": "Point", "coordinates": [0,0]}
+--43 | NULL
+--44 | {"type": "Point", "coordinates": [3,3]}
+--45 | NULL
+--46 | {"type": "Point", "coordinates": [1,2]}
+--Single query: SELECT HEX(ST_ASWKB(`vp_database20_346_source`.`c0geometry`)) FROM vp_database20_346_source ORDER BY `vp_database20_346_source`.`vp_rowid` LIMIT 21
+--Split query: SELECT HEX(ST_ASWKB(`vp_database20_346_source`.`c0geometry`)) FROM `vp_database20_346_joined` `vp_database20_346_source` ORDER BY `vp_database20_346_source`.`vp_rowid` LIMIT 21
+--Single query plan:
+--EXPLAIN SELECT HEX(ST_ASWKB(`vp_database20_346_source`.`c0geometry`)) FROM vp_database20_346_source ORDER BY `vp_database20_346_source`.`vp_rowid` LIMIT 21;
+--Limit
+--├── output columns: [vp_database20_346_source.vp_rowid (#0), hex(st_aswkb(vp_database20_346_source.c0geometry)) (#2)]
+--├── limit: 21
+--├── offset: 0
+--├── estimated rows: 21.00
+--└── Sort(Single)
+--    ├── output columns: [vp_database20_346_source.vp_rowid (#0), hex(st_aswkb(vp_database20_346_source.c0geometry)) (#2)]
+--    ├── sort keys: [vp_rowid ASC NULLS LAST]
+--    ├── estimated rows: 46.00
+--    └── EvalScalar
+--        ├── output columns: [vp_database20_346_source.vp_rowid (#0), hex(st_aswkb(vp_database20_346_source.c0geometry)) (#2)]
+--        ├── expressions: [hex(st_aswkb(vp_database20_346_source.c0geometry (#1)))]
+--        ├── estimated rows: 46.00
+--        └── TableScan
+--            ├── table: default.database20.vp_database20_346_source
+--            ├── scan id: 0
+--            ├── output columns: [vp_rowid (#0), c0geometry (#1)]
+--            ├── read rows: 46
+--            ├── read size: 1.70 KiB
+--            ├── partitions total: 0
+--            ├── partitions scanned: 0
+--            ├── push downs: [filters: [], limit: 21]
+--            └── estimated rows: 46.00
+--Split query plan:
+--EXPLAIN SELECT HEX(ST_ASWKB(`vp_database20_346_source`.`c0geometry`)) FROM `vp_database20_346_joined` `vp_database20_346_source` ORDER BY `vp_database20_346_source`.`vp_rowid` LIMIT 21;
+--RowFetch
+--├── output columns: [vp_database20_346_source.vp_rowid (#0), vp_database20_346_source._row_id (#3), hex(st_aswkb(vp_database20_346_source.c0geometry)) (#2), vp_database20_346_source.c0geometry (#1)]
+--├── columns to fetch: [c0geometry]
+--├── estimated rows: 21.00
+--└── Limit
+--    ├── output columns: [vp_database20_346_source.vp_rowid (#0), vp_database20_346_source._row_id (#3), hex(st_aswkb(vp_database20_346_source.c0geometry)) (#2)]
+--    ├── limit: 21
+--    ├── offset: 0
+--    ├── estimated rows: 21.00
+--    └── Sort(Single)
+--        ├── output columns: [vp_database20_346_source.vp_rowid (#0), vp_database20_346_source._row_id (#3), hex(st_aswkb(vp_database20_346_source.c0geometry)) (#2)]
+--        ├── sort keys: [vp_rowid ASC NULLS LAST]
+--        ├── estimated rows: 46.00
+--        └── EvalScalar
+--            ├── output columns: [vp_database20_346_source.vp_rowid (#0), vp_database20_346_source._row_id (#3), hex(st_aswkb(vp_database20_346_source.c0geometry)) (#2)]
+--            ├── expressions: [hex(st_aswkb(vp_database20_346_source.c0geometry (#1)))]
+--            ├── estimated rows: 46.00
+--            └── TableScan
+--                ├── table: default.database20.vp_database20_346_joined
+--                ├── scan id: 0
+--                ├── output columns: [vp_rowid (#0), c0geometry (#1), _row_id (#3)]
+--                ├── read rows: 35
+--                ├── read size: < 1 KiB
+--                ├── partitions total: 10
+--                ├── partitions scanned: 6
+--                ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 10 to 10 cost: 1 ms, topn pruning: 10 to 6 cost: 1 ms>]
+--                ├── push downs: [filters: [], limit: 21]
+--                └── estimated rows: 46.00
+--Single result sample: S:42:0101000000000000000000f03f0000000000000040; x15, S:42:010100000000000000000000000000000000000000; x3, N; x3
+--Split result sample: S:42:0101000000000000000000f03f0000000000000040; x17, S:42:010100000000000000000000000000000000000000; x2, N; x2
+--Only in single: S:42:010100000000000000000000000000000000000000; x1, N; x1
+--Only in split: S:42:0101000000000000000000f03f0000000000000040; x2
+--
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.comparePair(DatabendVerticalPartitioningOracle.java:3092)
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.check(DatabendVerticalPartitioningOracle.java:551)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:487)
+--	at sqlancer.Main$2.run(Main.java:708)
+--	at sqlancer.Main$2.runThread(Main.java:690)
+--	at sqlancer.Main$2.run(Main.java:681)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/10/08 08:01:50
+-- Database: database20
+-- Database version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+-- seed value: 1791443211651
+DROP DATABASE IF EXISTS database20;
+CREATE DATABASE database20;
+USE database20;
+CREATE TABLE t0(c0VARCHAR VARCHAR NULL);
+INSERT INTO t0(c0varchar) VALUES ('Fl\\a#a_k');
+INSERT INTO t0(c0varchar) VALUES ('fl\\a#a_k');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_1');
+INSERT INTO t0(c0varchar) VALUES (NULL);
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_3');
+CREATE TABLE t1(c0GEOMETRY GEOMETRY NULL DEFAULT(ST_GEOMETRYFROMWKT('POINT(1 2)')));
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(0 0)')), (NULL);
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0'), ('vp_0'), ('vp_-2'), (NULL), ('vp_2');
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(0 0)')), (NULL);
+INSERT INTO t0(c0varchar) VALUES ('充/');
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(-3 -3)')), (NULL), (ST_GEOMETRYFROMWKT('POINT(0 0)')), (ST_GEOMETRYFROMWKT('POINT(0 0)')), (ST_GEOMETRYFROMWKT('POINT(0 0)')), (NULL);
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(3 3)')), (NULL);
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t0(c0varchar) VALUES ('充/');
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_1'), ('vp_-3'), ('vp_1'), (NULL), ('vp_-3');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0'), ('vp_3'), ('vp_3');
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t0(c0varchar) VALUES (''), (''), ('-1930823052');
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(0 0)')), (NULL);
+INSERT INTO t0(c0varchar) VALUES ('-1930823052');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_-3');
+INSERT INTO t0(c0varchar) VALUES ('-1930823052'), ('');
+INSERT INTO t0(c0varchar) VALUES ('.9!{''充)'), ('-1930823052');
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('-1930823052');
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('nu');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('充/');
+INSERT INTO t0(c0varchar) VALUES ('r1'), ('-1930823052');
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(0 0)')), (NULL);
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0'), ('vp_0'), ('vp_0');
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 1)')), (NULL);
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0');
+INSERT INTO t1(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t0(c0varchar) VALUES ('G');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0'), ('vp_-1'), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('-1930823052');
+DROP STREAM IF EXISTS `vp_database20_328_source_stream`;
+DROP STREAM IF EXISTS `vp_database20_328_left_stream`;
+DROP STREAM IF EXISTS `vp_database20_328_right_stream`;
+DROP VIEW IF EXISTS `vp_database20_328_v`;
+DROP TABLE IF EXISTS `vp_database20_328_joined`;
+DROP TABLE IF EXISTS `vp_database20_328_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database20_328_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database20_328_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database20_328_r`;
+DROP TABLE IF EXISTS `vp_database20_328_l`;
+DROP TABLE IF EXISTS `vp_database20_328_source`;
+CREATE TABLE `vp_database20_328_source` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database20_328_source` (`vp_rowid`, `c0geometry`) SELECT ROW_NUMBER() OVER (ORDER BY 1), `c0geometry` FROM `t1` LIMIT 4096;
+CREATE TABLE `vp_database20_328_l` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database20_328_r` (`vp_rowid` BIGINT NOT NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database20_328_l` (`vp_rowid`, `c0geometry`) SELECT `vp_rowid`, `c0geometry` FROM `vp_database20_328_source`;
+INSERT INTO `vp_database20_328_r` (`vp_rowid`) SELECT `vp_rowid` FROM `vp_database20_328_source`;
+DROP TABLE IF EXISTS `vp_database20_328_joined`;
+CREATE TEMPORARY TABLE `vp_database20_328_joined` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL);
+DROP VIEW IF EXISTS `vp_database20_328_v`;
+CREATE VIEW `vp_database20_328_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_328_l` l JOIN `vp_database20_328_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database20_328_v`;
+CREATE VIEW `vp_database20_328_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_328_l` l JOIN `vp_database20_328_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database20_328_v`;
+CREATE VIEW `vp_database20_328_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_328_l` l JOIN `vp_database20_328_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database20_328_v`;
+CREATE VIEW `vp_database20_328_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_328_l` l JOIN `vp_database20_328_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database20_328_v`;
+CREATE VIEW `vp_database20_328_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_328_l` l JOIN `vp_database20_328_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database20_328_joined`;
+INSERT INTO `vp_database20_328_joined` (`vp_rowid`, `c0geometry`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_328_l` l JOIN `vp_database20_328_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database20_328_joined`;
+INSERT INTO `vp_database20_328_joined` (`vp_rowid`, `c0geometry`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_328_l` l JOIN `vp_database20_328_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database20_328_joined`;
+INSERT INTO `vp_database20_328_joined` (`vp_rowid`, `c0geometry`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_328_l` l JOIN `vp_database20_328_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database20_328_joined`;
+INSERT INTO `vp_database20_328_joined` (`vp_rowid`, `c0geometry`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_328_l` l JOIN `vp_database20_328_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database20_328_joined`;
+INSERT INTO `vp_database20_328_joined` (`vp_rowid`, `c0geometry`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_328_l` l JOIN `vp_database20_328_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP STREAM IF EXISTS `vp_database20_328_source_stream`;
+DROP STREAM IF EXISTS `vp_database20_328_left_stream`;
+DROP STREAM IF EXISTS `vp_database20_328_right_stream`;
+DROP VIEW IF EXISTS `vp_database20_328_v`;
+DROP TABLE IF EXISTS `vp_database20_328_joined`;
+DROP TABLE IF EXISTS `vp_database20_328_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database20_328_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database20_328_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database20_328_r`;
+DROP TABLE IF EXISTS `vp_database20_328_l`;
+DROP TABLE IF EXISTS `vp_database20_328_source`;
+DROP STREAM IF EXISTS `vp_database20_346_source_stream`;
+DROP STREAM IF EXISTS `vp_database20_346_left_stream`;
+DROP STREAM IF EXISTS `vp_database20_346_right_stream`;
+DROP VIEW IF EXISTS `vp_database20_346_v`;
+DROP TABLE IF EXISTS `vp_database20_346_joined`;
+DROP TABLE IF EXISTS `vp_database20_346_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database20_346_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database20_346_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database20_346_r`;
+DROP TABLE IF EXISTS `vp_database20_346_l`;
+DROP TABLE IF EXISTS `vp_database20_346_source`;
+CREATE TABLE `vp_database20_346_source` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database20_346_source` (`vp_rowid`, `c0geometry`) SELECT ROW_NUMBER() OVER (ORDER BY 1), `c0geometry` FROM `t1` LIMIT 4096;
+CREATE TABLE `vp_database20_346_l` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database20_346_r` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL) ENGINE=MEMORY;
+INSERT OVERWRITE `vp_database20_346_l` (`vp_rowid`, `c0geometry`) SELECT `vp_rowid`, `c0geometry` FROM `vp_database20_346_source`;
+INSERT OVERWRITE `vp_database20_346_r` (`vp_rowid`, `c0geometry`) SELECT `vp_rowid`, `c0geometry` FROM `vp_database20_346_source`;
+DROP TABLE IF EXISTS `vp_database20_346_joined`;
+CREATE TEMPORARY TABLE `vp_database20_346_joined` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL);
+TRUNCATE TABLE `vp_database20_346_joined`;
+INSERT INTO `vp_database20_346_joined` (`vp_rowid`, `c0geometry`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry` FROM `vp_database20_346_l` l JOIN `vp_database20_346_r` r ON l.`vp_rowid` = r.`vp_rowid`;

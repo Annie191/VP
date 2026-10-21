@@ -1,0 +1,24 @@
+{
+  "database": "DuckDB",
+  "source": "/home/lwm/sqlancer/Bugs/DuckDB/24810.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT vp_rowid, c0\nFROM repro_duckdb_db1_interval_source\nORDER BY vp_rowid",
+      "ok": true,
+      "rows": [
+        "┌──────────┬──────────────┐",
+        "│ vp_rowid │      c0      │",
+        "│  int64   │   interval   │",
+        "├──────────┼──────────────┤",
+        "│        0 │ 580063:44:54 │",
+        "└──────────┴──────────────┘"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 10,
+  "target_query": "SELECT vp_rowid, c0\nFROM repro_duckdb_db1_interval_source\nORDER BY vp_rowid;",
+  "skip_reason": "ORDER BY is not handled by this batch rewriter"
+}

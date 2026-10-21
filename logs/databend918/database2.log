@@ -1,0 +1,1011 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=EVEN_SPLIT, reconstruction=JOIN, shape=MULTI_COLUMN, prefix=vp_database2_330_
+--Strategy counts: split={EMPTY_SPLIT=1, SINGLE_REPLICATED=8, SINGLE_RIGHT_ROW_ID_ONLY=6, SINGLE_LEFT_ROW_ID_ONLY=6, EVEN_SPLIT=16, OVERLAPPED_SPLIT=20, SKEWED_SPLIT=18, TYPE_DIRECTED_SPLIT=19}, reconstruction={JOIN=442, LEFT_RIGHT_JOIN=445, FULL_OUTER_SIMULATION=440, SCALAR_SUBQUERY=435, EXISTS_FILTER=450, IN_FILTER=440, NOT_EXISTS_ANTI=455, DERIVED_TABLE=438, CTE=436, VIEW=434, TEMP_TABLE=355, AGGREGATE_THEN_MERGE=455, ROW_NUMBER_ALIGNMENT=445, JSON_PACK=435, STRING_PACK=435, NATURAL_OR_USING=440, LATERAL_DERIVED=440}
+--Database: database2
+--Databend version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+--Base table: t1
+--Base table DDL: CREATE TABLE t1 (
+--  c0date DATE NULL DEFAULT '1969-12-23',
+--  c1varchar VARCHAR NOT NULL,
+--  c2tuple TUPLE(1 BIGINT NULL, 2 VARCHAR NULL) NULL
+--) ENGINE=FUSE
+--Base table engine: FUSE
+--VP source engine: MEMORY
+--VP left engine: FUSE
+--VP right engine: FUSE
+--Base row count: 29
+--Base shape: MULTI_COLUMN
+--Stable row order: `c0date`, `c1varchar`
+--Prefix: vp_database2_330_
+--Split strategy: EVEN_SPLIT
+--Left columns: {c1varchar, c0date}
+--Right columns: {c2tuple}
+--Overlap columns: {}
+--Physical foreign key: false
+--Schema profile: NULL_DEFAULT
+--Source schema fidelity: column types, nullability, and defaults; keys/constraints/generated expressions omitted
+--Helper schema fidelity: projection-only; columns are nullable and constraints/defaults are not copied
+--Copied source constraints: []
+--Reconstruction strategy: JOIN
+--Description: shape=MULTI_COLUMN, split=EVEN_SPLIT, reconstruction=JOIN
+--Databend session settings: default_order_by_null=nulls_last, disable_join_reorder=0, enable_bloom_runtime_filter=1, enable_cbo=1, enable_join_runtime_filter=1, enable_query_result_cache=0, max_threads=40, numeric_cast_option=rounding, sql_dialect=PostgreSQL, timezone=UTC
+--Session SET statements:
+--SET default_order_by_null = 'nulls_last';
+--SET disable_join_reorder = 0;
+--SET enable_bloom_runtime_filter = 1;
+--SET enable_cbo = 1;
+--SET enable_join_runtime_filter = 1;
+--SET enable_query_result_cache = 0;
+--SET max_threads = 40;
+--SET numeric_cast_option = 'rounding';
+--SET sql_dialect = 'PostgreSQL';
+--SET timezone = 'UTC';
+--Setup statements:
+---- source schema profile: NULL_DEFAULT;
+---- copied source column nullability and defaults from SHOW CREATE TABLE;
+---- helper columns intentionally remain nullable projections for outer-join reconstruction;
+--CREATE TABLE `vp_database2_330_source` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL DEFAULT '1969-12-23', `c1varchar` VARCHAR NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=MEMORY;
+--INSERT INTO `vp_database2_330_source` (`vp_rowid`, `c0date`, `c1varchar`, `c2tuple`) SELECT ROW_NUMBER() OVER (ORDER BY `c0date`, `c1varchar`), `c0date`, `c1varchar`, `c2tuple` FROM `t1` LIMIT 4096;
+--CREATE TABLE `vp_database2_330_l` (`vp_rowid` BIGINT NOT NULL, `c1varchar` VARCHAR NULL, `c0date` DATE NULL) ENGINE=FUSE;
+--CREATE TABLE `vp_database2_330_r` (`vp_rowid` BIGINT NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=FUSE;
+--INSERT INTO `vp_database2_330_l` (`vp_rowid`, `c1varchar`, `c0date`) SELECT `vp_rowid`, `c1varchar`, `c0date` FROM `vp_database2_330_source`;
+--INSERT INTO `vp_database2_330_r` (`vp_rowid`, `c2tuple`) SELECT `vp_rowid`, `c2tuple` FROM `vp_database2_330_source`;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+---- skipped helper index: Databend 1.2.925 has no CREATE INDEX support;
+--VP source snapshot:
+--SELECT `vp_rowid`, `c0date`, `c1varchar`, `c2tuple` FROM `vp_database2_330_source` ORDER BY `vp_rowid` LIMIT 256;
+--1 | 1969-12-18 | QT | (1,"sqlancer")
+--2 | 1969-12-23 |  | (1,"sqlancer")
+--3 | 1969-12-23 |  | NULL
+--4 | 1969-12-23 |  | (1,"sqlancer")
+--5 | 1969-12-23 | -1626740044 | NULL
+--6 | 1969-12-23 | -1719522892 | (1,"sqlancer")
+--7 | 1969-12-23 | -1731355805 | (1,"sqlancer")
+--8 | 1969-12-23 | -993267118 | (1,"sqlancer")
+--9 | 1969-12-23 | .Eo4䕴 | NULL
+--10 | 1969-12-23 | 0.19874608312064146 | NULL
+--11 | 1969-12-23 | 0.9012871887815705 | NULL
+--12 | 1969-12-23 | 1856704527 | (1,"sqlancer")
+--13 | 1969-12-23 | vp_0 | (0,"vp_0")
+--14 | 1969-12-23 | vp_0 | (0,"vp_0")
+--15 | 1969-12-23 | vp_2 | NULL
+--16 | 1969-12-23 | vp_2 | NULL
+--17 | 1969-12-23 | |e | NULL
+--18 | 1969-12-23 | 䦼[ | NULL
+--19 | 1969-12-26 | /N0E佔 | (1,"sqlancer")
+--20 | 1970-01-02 |  | (1,"sqlancer")
+--21 | 1970-01-03 | T&! | (1,"sqlancer")
+--22 | 1970-01-05 | 0.9880356987584993 | (1,"sqlancer")
+--23 | 1970-01-19 |  | NULL
+--24 | 2000-01-01 | vp_0 | (0,"vp_0")
+--25 | 2000-01-01 | vp_0 | (0,"vp_0")
+--26 | 2000-01-02 | vp_-1 | (-1,"vp_-1")
+--27 | NULL | vp_0 | (0,"vp_0")
+--28 | NULL | vp_0 | (0,"vp_0")
+--29 | NULL | vp_0 | (0,"vp_0")
+--VP left snapshot:
+--SELECT `vp_rowid`, `c1varchar`, `c0date` FROM `vp_database2_330_l` ORDER BY `vp_rowid` LIMIT 256;
+--1 | QT | 1969-12-18
+--2 |  | 1969-12-23
+--3 |  | 1969-12-23
+--4 |  | 1969-12-23
+--5 | -1626740044 | 1969-12-23
+--6 | -1719522892 | 1969-12-23
+--7 | -1731355805 | 1969-12-23
+--8 | -993267118 | 1969-12-23
+--9 | .Eo4䕴 | 1969-12-23
+--10 | 0.19874608312064146 | 1969-12-23
+--11 | 0.9012871887815705 | 1969-12-23
+--12 | 1856704527 | 1969-12-23
+--13 | vp_0 | 1969-12-23
+--14 | vp_0 | 1969-12-23
+--15 | vp_2 | 1969-12-23
+--16 | vp_2 | 1969-12-23
+--17 | |e | 1969-12-23
+--18 | 䦼[ | 1969-12-23
+--19 | /N0E佔 | 1969-12-26
+--20 |  | 1970-01-02
+--21 | T&! | 1970-01-03
+--22 | 0.9880356987584993 | 1970-01-05
+--23 |  | 1970-01-19
+--24 | vp_0 | 2000-01-01
+--25 | vp_0 | 2000-01-01
+--26 | vp_-1 | 2000-01-02
+--27 | vp_0 | NULL
+--28 | vp_0 | NULL
+--29 | vp_0 | NULL
+--VP right snapshot:
+--SELECT `vp_rowid`, `c2tuple` FROM `vp_database2_330_r` ORDER BY `vp_rowid` LIMIT 256;
+--1 | (1,"sqlancer")
+--2 | (1,"sqlancer")
+--3 | NULL
+--4 | (1,"sqlancer")
+--5 | NULL
+--6 | (1,"sqlancer")
+--7 | (1,"sqlancer")
+--8 | (1,"sqlancer")
+--9 | NULL
+--10 | NULL
+--11 | NULL
+--12 | (1,"sqlancer")
+--13 | (0,"vp_0")
+--14 | (0,"vp_0")
+--15 | NULL
+--16 | NULL
+--17 | NULL
+--18 | NULL
+--19 | (1,"sqlancer")
+--20 | (1,"sqlancer")
+--21 | (1,"sqlancer")
+--22 | (1,"sqlancer")
+--23 | NULL
+--24 | (0,"vp_0")
+--25 | (0,"vp_0")
+--26 | (-1,"vp_-1")
+--27 | (0,"vp_0")
+--28 | (0,"vp_0")
+--29 | (0,"vp_0")
+--Single query: SELECT `vp_database2_330_source`.`c2tuple` FROM vp_database2_330_source WHERE ((((`vp_database2_330_source`.`c0date`)=(`vp_database2_330_source`.`c0date`)))OR((((NOT true))AND((DATE '1970-01-20' NOT BETWEEN DATE '1969-12-09' AND DATE '1970-01-02')))))
+--Split query: SELECT `vp_database2_330_source`.`c2tuple` FROM (SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, r.`c2tuple` AS `c2tuple` FROM `vp_database2_330_l` l JOIN `vp_database2_330_r` r ON l.`vp_rowid` = r.`vp_rowid`) `vp_database2_330_source` WHERE ((((`vp_database2_330_source`.`c0date`)=(`vp_database2_330_source`.`c0date`)))or((((NOT true))AND((DATE '1970-01-20' NOT BETWEEN DATE '1969-12-09' AND DATE '1970-01-02')))))
+--Single query plan:
+--EXPLAIN SELECT `vp_database2_330_source`.`c2tuple` FROM vp_database2_330_source WHERE ((((`vp_database2_330_source`.`c0date`)=(`vp_database2_330_source`.`c0date`)))OR((((NOT true))AND((DATE '1970-01-20' NOT BETWEEN DATE '1969-12-09' AND DATE '1970-01-02')))));
+--Filter
+--├── output columns: [vp_database2_330_source.c2tuple (#3)]
+--├── filters: [is_true(vp_database2_330_source.c0date (#1) = vp_database2_330_source.c0date (#1))]
+--├── estimated rows: 5.80
+--└── TableScan
+--    ├── table: default.database2.vp_database2_330_source
+--    ├── scan id: 0
+--    ├── output columns: [c0date (#1), c2tuple (#3)]
+--    ├── read rows: 29
+--    ├── read size: < 1 KiB
+--    ├── partitions total: 0
+--    ├── partitions scanned: 0
+--    ├── push downs: [filters: [is_true(vp_database2_330_source.c0date (#1) = vp_database2_330_source.c0date (#1))], limit: NONE]
+--    └── estimated rows: 29.00
+--Split query plan:
+--EXPLAIN SELECT `vp_database2_330_source`.`c2tuple` FROM (SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, r.`c2tuple` AS `c2tuple` FROM `vp_database2_330_l` l JOIN `vp_database2_330_r` r ON l.`vp_rowid` = r.`vp_rowid`) `vp_database2_330_source` WHERE ((((`vp_database2_330_source`.`c0date`)=(`vp_database2_330_source`.`c0date`)))or((((NOT true))AND((DATE '1970-01-20' NOT BETWEEN DATE '1969-12-09' AND DATE '1970-01-02')))));
+--HashJoin
+--├── output columns: [r.c2tuple (#4)]
+--├── join type: INNER
+--├── build keys: [r.vp_rowid (#3)]
+--├── probe keys: [l.vp_rowid (#0)]
+--├── keys is null equal: [false]
+--├── filters: []
+--├── build join filters:
+--│   └── filter id:0, build key:r.vp_rowid (#3), probe targets:[l.vp_rowid (#0)@scan0], filter type:bloom,inlist,min_max
+--├── estimated rows: 29.00
+--├── TableScan(Build)
+--│   ├── table: default.database2.vp_database2_330_r
+--│   ├── scan id: 1
+--│   ├── output columns: [vp_rowid (#3), c2tuple (#4)]
+--│   ├── read rows: 29
+--│   ├── read size: < 1 KiB
+--│   ├── partitions total: 6
+--│   ├── partitions scanned: 6
+--│   ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 6 to 6 cost: 1 ms>]
+--│   ├── push downs: [filters: [], limit: NONE]
+--│   └── estimated rows: 29.00
+--└── TableScan(Probe)
+--    ├── table: default.database2.vp_database2_330_l
+--    ├── scan id: 0
+--    ├── output columns: [vp_rowid (#0)]
+--    ├── read rows: 29
+--    ├── read size: < 1 KiB
+--    ├── partitions total: 13
+--    ├── partitions scanned: 13
+--    ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 13 to 13 cost: 1 ms>]
+--    ├── push downs: [filters: [], limit: NONE]
+--    ├── apply join filters: [#0]
+--    └── estimated rows: 29.00
+--Single result sample: S:14:(1,"sqlancer"); x11, N; x10, S:10:(0,"vp_0"); x4, S:12:(-1,"vp_-1"); x1
+--Split result sample: S:14:(1,"sqlancer"); x11, N; x10, S:10:(0,"vp_0"); x7, S:12:(-1,"vp_-1"); x1
+--Only in single: 
+--Only in split: S:10:(0,"vp_0"); x3
+--
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.comparePair(DatabendVerticalPartitioningOracle.java:3107)
+--	at sqlancer.databend.oracle.DatabendVerticalPartitioningOracle.check(DatabendVerticalPartitioningOracle.java:566)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:487)
+--	at sqlancer.Main$2.run(Main.java:708)
+--	at sqlancer.Main$2.runThread(Main.java:690)
+--	at sqlancer.Main$2.run(Main.java:681)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/10/10 05:57:23
+-- Database: database2
+-- Database version: 8.0.90-v1.2.925-patch-11-ebcd374c34(rust-1.94.0-nightly-2026-08-26T02:03:26.454981413Z)
+-- seed value: 1791610048341
+DROP DATABASE IF EXISTS database2;
+CREATE DATABASE database2;
+USE database2;
+CREATE TABLE t0(c0GEOMETRY GEOMETRY NOT NULL, c1ARRAY ARRAY(INT64) NULL DEFAULT([1, 2, 3]), c2TUPLE TUPLE(INT64, VARCHAR) NULL DEFAULT((1, 'sqlancer')));
+INSERT INTO t0(c1array, c2tuple) VALUES ([1, 2, 3], (1, 'sqlancer'));
+INSERT INTO t0(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(-2 -2)')), (ST_GEOMETRYFROMWKT('POINT(0 0)'));
+INSERT INTO t0(c0geometry, c1array) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'), [1, 2, 3]);
+INSERT INTO t0(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t0(c2tuple, c0geometry, c1array) VALUES ((-2, 'vp_-2'), ST_GEOMETRYFROMWKT('POINT(-2 -2)'), [-2, -2]), ((2, 'vp_2'), ST_GEOMETRYFROMWKT('POINT(2 2)'), NULL);
+INSERT INTO t0(c0geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)')), (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+CREATE TABLE t72(c0FLOAT DOUBLE NULL, c1GEOMETRY GEOMETRY NULL DEFAULT(ST_GEOMETRYFROMWKT('POINT(1 2)')), c2INT INT NULL, c3VARIANT VARIANT NULL, c4BITMAP BITMAP NULL);
+INSERT INTO t72(c1geometry) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t72(c2int, c0float) VALUES (578456505, 5.78456512E8);
+INSERT INTO t72(c0float) VALUES (0), (NULL);
+INSERT INTO t72(c3variant, c4bitmap, c1geometry, c0float, c2int) VALUES (PARSE_JSON('{"sqlancer":true}'), TO_BITMAP('1,2,3'), ST_GEOMETRYFROMWKT('POINT(1 2)'), 0.7842951416969299, -1146415583);
+INSERT INTO t72(c3variant) VALUES (PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t72(c1geometry, c2int, c4bitmap, c0float, c3variant) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'), -1225018668, TO_BITMAP('1,2,3'), 0.7842951416969299, PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t72(c1geometry, c0float, c4bitmap) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'), 0.837626576423645, TO_BITMAP('1,2,3'));
+INSERT INTO t0(c1array, c0geometry, c2tuple) VALUES ([1, 2, 3], ST_GEOMETRYFROMWKT('POINT(1 2)'), (1, 'sqlancer')), ([1, 2, 3], ST_GEOMETRYFROMWKT('POINT(1 2)'), (1, 'sqlancer'));
+INSERT INTO t0(c2tuple, c1array, c0geometry) VALUES ((0, 'vp_0'), [0, 0], ST_GEOMETRYFROMWKT('POINT(0 0)')), ((2, 'vp_2'), NULL, ST_GEOMETRYFROMWKT('POINT(2 2)'));
+INSERT INTO t72(c2int, c0float) VALUES (-622563833, 0.5506963729858398);
+INSERT INTO t72(c4bitmap, c2int, c3variant) VALUES (NULL, NULL, PARSE_JSON('{"vp":0}')), (TO_BITMAP('0'), 0, PARSE_JSON('{"vp":0}')), (TO_BITMAP('0'), 0, PARSE_JSON('{"vp":0}')), (TO_BITMAP('0'), 0, NULL);
+INSERT INTO t0(c0geometry, c1array, c2tuple) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'), [1, 2, 3], (1, 'sqlancer'));
+INSERT INTO t0(c0geometry, c1array) VALUES (ST_GEOMETRYFROMWKT('POINT(1 2)'), [1, 2, 3]);
+INSERT INTO t72(c0float, c4bitmap, c2int, c3variant, c1geometry) VALUES (-1.146415616E9, TO_BITMAP('1,2,3'), 578456505, PARSE_JSON('{"sqlancer":true}'), ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t0(c1array, c0geometry, c2tuple) VALUES ([1, 2, 3], ST_GEOMETRYFROMWKT('POINT(1 2)'), (1, 'sqlancer')), ([1, 2, 3], ST_GEOMETRYFROMWKT('POINT(1 2)'), (1, 'sqlancer'));
+INSERT INTO t0(c2tuple, c0geometry) VALUES ((1, 'sqlancer'), ST_GEOMETRYFROMWKT('POINT(1 2)'));
+INSERT INTO t72(c1geometry) VALUES (NULL), (ST_GEOMETRYFROMWKT('POINT(0 0)'));
+INSERT INTO t72(c2int, c3variant) VALUES (NULL, PARSE_JSON('{"vp":3}')), (0, PARSE_JSON('{"vp":0}'));
+DROP VIEW IF EXISTS `vp_database2_1_v`;
+DROP TABLE IF EXISTS `vp_database2_1_joined`;
+DROP TABLE IF EXISTS `vp_database2_1_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_1_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_1_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_1_r`;
+DROP TABLE IF EXISTS `vp_database2_1_l`;
+DROP TABLE IF EXISTS `vp_database2_1_source`;
+CREATE TABLE `vp_database2_1_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_1_source` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`, `c2int`), `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap` FROM `t72` LIMIT 4096;
+UPDATE `vp_database2_1_source` SET `c0float` = CAST('-Infinity' AS DOUBLE) WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database2_1_source`);
+UPDATE `vp_database2_1_source` SET `c3variant` = PARSE_JSON('{"sqlancer":[null,[]],"n":1}') WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database2_1_source`);
+UPDATE `vp_database2_1_source` SET `c0float` = NULL WHERE `vp_rowid` = (SELECT MAX(`vp_rowid`) FROM `vp_database2_1_source` WHERE `vp_rowid` <> (SELECT MIN(`vp_rowid`) FROM `vp_database2_1_source`));
+REMOVE @~/vp_database2_1_copy;
+DROP TABLE IF EXISTS `vp_database2_1_copy_reference`;
+CREATE TEMPORARY TABLE `vp_database2_1_copy_reference` AS SELECT * FROM `vp_database2_1_source`;
+COPY INTO @~/vp_database2_1_copy FROM (SELECT * FROM `vp_database2_1_source`) FILE_FORMAT=(TYPE=PARQUET);
+TRUNCATE TABLE `vp_database2_1_source`;
+COPY INTO `vp_database2_1_source` FROM @~/vp_database2_1_copy FILE_FORMAT=(TYPE=PARQUET) FORCE=TRUE;
+DROP VIEW IF EXISTS `vp_database2_9_v`;
+DROP TABLE IF EXISTS `vp_database2_9_joined`;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_9_r`;
+DROP TABLE IF EXISTS `vp_database2_9_l`;
+DROP TABLE IF EXISTS `vp_database2_9_source`;
+CREATE TABLE `vp_database2_9_source` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NOT NULL, `c1array` ARRAY(BIGINT NULL) NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_9_source` (`vp_rowid`, `c0geometry`, `c1array`, `c2tuple`) SELECT ROW_NUMBER() OVER (ORDER BY 1), `c0geometry`, `c1array`, `c2tuple` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database2_9_l` (`vp_rowid` BIGINT NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL, `c1array` ARRAY(BIGINT NULL) NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database2_9_r` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_9_l` (`vp_rowid`, `c2tuple`, `c1array`) SELECT `vp_rowid`, `c2tuple`, `c1array` FROM `vp_database2_9_source`;
+INSERT INTO `vp_database2_9_r` (`vp_rowid`, `c0geometry`) SELECT `vp_rowid`, `c0geometry` FROM `vp_database2_9_source`;
+OPTIMIZE TABLE `vp_database2_9_source` COMPACT;
+OPTIMIZE TABLE `vp_database2_9_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_9_r` COMPACT;
+DROP VIEW IF EXISTS `vp_database2_9_v`;
+CREATE VIEW `vp_database2_9_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0geometry` AS `c0geometry`, l.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_9_l` l JOIN `vp_database2_9_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_source_delta_13`;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_left_delta_13`;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_right_delta_13`;
+DROP VIEW IF EXISTS `vp_database2_9_v`;
+CREATE VIEW `vp_database2_9_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0geometry` AS `c0geometry`, l.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_9_l` l JOIN `vp_database2_9_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_9_v`;
+CREATE VIEW `vp_database2_9_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0geometry` AS `c0geometry`, l.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_9_l` l JOIN `vp_database2_9_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+ALTER TABLE `vp_database2_9_source` ADD COLUMN `vp_database2_9_evolved_17` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_9_l` ADD COLUMN `vp_database2_9_evolved_17` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_9_r` ADD COLUMN `vp_database2_9_evolved_17` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_9_joined`;
+CREATE TEMPORARY TABLE `vp_database2_9_joined` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL, `c1array` ARRAY(BIGINT NULL) NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL, `vp_database2_9_evolved_17` BIGINT NULL);
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_source_delta_25`;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_left_delta_25`;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_right_delta_25`;
+OPTIMIZE TABLE `vp_database2_9_source` COMPACT;
+OPTIMIZE TABLE `vp_database2_9_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_9_r` COMPACT;
+DROP VIEW IF EXISTS `vp_database2_9_v`;
+DROP TABLE IF EXISTS `vp_database2_9_joined`;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_9_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_9_r`;
+DROP TABLE IF EXISTS `vp_database2_9_l`;
+DROP TABLE IF EXISTS `vp_database2_9_source`;
+DROP VIEW IF EXISTS `vp_database2_34_v`;
+DROP TABLE IF EXISTS `vp_database2_34_joined`;
+DROP TABLE IF EXISTS `vp_database2_34_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_34_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_34_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_34_r`;
+DROP TABLE IF EXISTS `vp_database2_34_l`;
+DROP TABLE IF EXISTS `vp_database2_34_source`;
+CREATE TABLE `vp_database2_34_source` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NOT NULL, `c1array` ARRAY(BIGINT NULL) NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database2_34_source` (`vp_rowid`, `c0geometry`, `c1array`, `c2tuple`) SELECT ROW_NUMBER() OVER (ORDER BY 1), `c0geometry`, `c1array`, `c2tuple` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database2_34_l` (`vp_rowid` BIGINT NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL, `c1array` ARRAY(BIGINT NULL) NULL, `c0geometry` GEOMETRY NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database2_34_r` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database2_34_l` (`vp_rowid`, `c2tuple`, `c1array`, `c0geometry`) SELECT `vp_rowid`, `c2tuple`, `c1array`, `c0geometry` FROM `vp_database2_34_source`;
+INSERT INTO `vp_database2_34_r` (`vp_rowid`, `c0geometry`) SELECT `vp_rowid`, `c0geometry` FROM `vp_database2_34_source`;
+DROP VIEW IF EXISTS `vp_database2_34_v`;
+CREATE VIEW `vp_database2_34_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry`, l.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_34_l` l JOIN `vp_database2_34_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP VIEW IF EXISTS `vp_database2_34_v`;
+CREATE VIEW `vp_database2_34_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry`, l.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_34_l` l JOIN `vp_database2_34_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_34_v`;
+CREATE VIEW `vp_database2_34_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry`, l.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_34_l` l JOIN `vp_database2_34_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_34_v`;
+CREATE VIEW `vp_database2_34_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0geometry` AS `c0geometry`, l.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_34_l` l JOIN `vp_database2_34_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_34_v`;
+CREATE VIEW `vp_database2_34_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry`, l.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_34_l` l JOIN `vp_database2_34_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_34_v`;
+DROP TABLE IF EXISTS `vp_database2_34_joined`;
+DROP TABLE IF EXISTS `vp_database2_34_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_34_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_34_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_34_r`;
+DROP TABLE IF EXISTS `vp_database2_34_l`;
+DROP TABLE IF EXISTS `vp_database2_34_source`;
+DROP VIEW IF EXISTS `vp_database2_54_v`;
+DROP TABLE IF EXISTS `vp_database2_54_joined`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_54_r`;
+DROP TABLE IF EXISTS `vp_database2_54_l`;
+DROP TABLE IF EXISTS `vp_database2_54_source`;
+CREATE TABLE `vp_database2_54_source` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NOT NULL, `c1array` ARRAY(BIGINT NULL) NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_54_source` (`vp_rowid`, `c0geometry`, `c1array`, `c2tuple`) SELECT ROW_NUMBER() OVER (ORDER BY 1), `c0geometry`, `c1array`, `c2tuple` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database2_54_l` (`vp_rowid` BIGINT NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database2_54_r` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL, `c1array` ARRAY(BIGINT NULL) NULL) ENGINE=FUSE;
+INSERT OVERWRITE `vp_database2_54_l` (`vp_rowid`, `c2tuple`) SELECT `vp_rowid`, `c2tuple` FROM `vp_database2_54_source`;
+INSERT OVERWRITE `vp_database2_54_r` (`vp_rowid`, `c0geometry`, `c1array`) SELECT `vp_rowid`, `c0geometry`, `c1array` FROM `vp_database2_54_source`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_source_delta_57`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_left_delta_57`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_right_delta_57`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_source_delta_61`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_left_delta_61`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_right_delta_61`;
+DROP VIEW IF EXISTS `vp_database2_54_v`;
+CREATE VIEW `vp_database2_54_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0geometry` AS `c0geometry`, r.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_54_l` l JOIN `vp_database2_54_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP VIEW IF EXISTS `vp_database2_54_v`;
+CREATE VIEW `vp_database2_54_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0geometry` AS `c0geometry`, r.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_54_l` l JOIN `vp_database2_54_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_54_v`;
+CREATE VIEW `vp_database2_54_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0geometry` AS `c0geometry`, r.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_54_l` l JOIN `vp_database2_54_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_54_v`;
+CREATE VIEW `vp_database2_54_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0geometry` AS `c0geometry`, r.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_54_l` l JOIN `vp_database2_54_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_54_v`;
+CREATE VIEW `vp_database2_54_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0geometry` AS `c0geometry`, r.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_54_l` l JOIN `vp_database2_54_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+OPTIMIZE TABLE `vp_database2_54_source` COMPACT;
+OPTIMIZE TABLE `vp_database2_54_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_54_r` COMPACT;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_source_delta_71`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_left_delta_71`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_right_delta_71`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_source_delta_73`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_left_delta_73`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_right_delta_73`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_source_delta_74`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_left_delta_74`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_right_delta_74`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_source_delta_75`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_left_delta_75`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_right_delta_75`;
+ALTER TABLE `vp_database2_54_source` ADD COLUMN `vp_database2_54_evolved_76` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_54_l` ADD COLUMN `vp_database2_54_evolved_76` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_54_r` ADD COLUMN `vp_database2_54_evolved_76` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_54_joined`;
+CREATE TEMPORARY TABLE `vp_database2_54_joined` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL, `c1array` ARRAY(BIGINT NULL) NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL, `vp_database2_54_evolved_76` BIGINT NULL);
+DROP VIEW IF EXISTS `vp_database2_54_v`;
+DROP TABLE IF EXISTS `vp_database2_54_joined`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_54_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_54_r`;
+DROP TABLE IF EXISTS `vp_database2_54_l`;
+DROP TABLE IF EXISTS `vp_database2_54_source`;
+DROP VIEW IF EXISTS `vp_database2_78_v`;
+DROP TABLE IF EXISTS `vp_database2_78_joined`;
+DROP TABLE IF EXISTS `vp_database2_78_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_78_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_78_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_78_r`;
+DROP TABLE IF EXISTS `vp_database2_78_l`;
+DROP TABLE IF EXISTS `vp_database2_78_source`;
+CREATE TABLE `vp_database2_78_source` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NOT NULL, `c1array` ARRAY(BIGINT NULL) NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_78_source` (`vp_rowid`, `c0geometry`, `c1array`, `c2tuple`) SELECT ROW_NUMBER() OVER (ORDER BY 1), `c0geometry`, `c1array`, `c2tuple` FROM `t0` LIMIT 4096;
+CREATE TABLE `vp_database2_78_l` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database2_78_r` (`vp_rowid` BIGINT NOT NULL, `c1array` ARRAY(BIGINT NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_78_l` (`vp_rowid`, `c0geometry`, `c2tuple`) SELECT `vp_rowid`, `c0geometry`, `c2tuple` FROM `vp_database2_78_source`;
+INSERT INTO `vp_database2_78_r` (`vp_rowid`, `c1array`) SELECT `vp_rowid`, `c1array` FROM `vp_database2_78_source`;
+DROP TABLE IF EXISTS `vp_database2_78_mutation_source_delta_82`;
+DROP TABLE IF EXISTS `vp_database2_78_mutation_left_delta_82`;
+DROP TABLE IF EXISTS `vp_database2_78_mutation_right_delta_82`;
+ALTER TABLE `vp_database2_78_source` ADD COLUMN `vp_database2_78_evolved_85` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_78_l` ADD COLUMN `vp_database2_78_evolved_85` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_78_r` ADD COLUMN `vp_database2_78_evolved_85` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_78_joined`;
+CREATE TEMPORARY TABLE `vp_database2_78_joined` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL, `c1array` ARRAY(BIGINT NULL) NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL, `vp_database2_78_evolved_85` BIGINT NULL);
+DROP TABLE IF EXISTS `vp_database2_78_mutation_source_delta_87`;
+DROP TABLE IF EXISTS `vp_database2_78_mutation_left_delta_87`;
+DROP TABLE IF EXISTS `vp_database2_78_mutation_right_delta_87`;
+ALTER TABLE `vp_database2_78_source` ADD COLUMN `vp_database2_78_evolved_89` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_78_l` ADD COLUMN `vp_database2_78_evolved_89` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_78_r` ADD COLUMN `vp_database2_78_evolved_89` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_78_joined`;
+CREATE TEMPORARY TABLE `vp_database2_78_joined` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL, `c1array` ARRAY(BIGINT NULL) NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL, `vp_database2_78_evolved_85` BIGINT NULL, `vp_database2_78_evolved_89` BIGINT NULL);
+OPTIMIZE TABLE `vp_database2_78_source` COMPACT;
+OPTIMIZE TABLE `vp_database2_78_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_78_r` COMPACT;
+ALTER TABLE `vp_database2_78_source` ADD COLUMN `vp_database2_78_evolved_97` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_78_l` ADD COLUMN `vp_database2_78_evolved_97` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_78_r` ADD COLUMN `vp_database2_78_evolved_97` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_78_joined`;
+CREATE TEMPORARY TABLE `vp_database2_78_joined` (`vp_rowid` BIGINT NOT NULL, `c0geometry` GEOMETRY NULL, `c1array` ARRAY(BIGINT NULL) NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL, `vp_database2_78_evolved_85` BIGINT NULL, `vp_database2_78_evolved_89` BIGINT NULL, `vp_database2_78_evolved_97` BIGINT NULL);
+DROP VIEW IF EXISTS `vp_database2_78_v`;
+CREATE VIEW `vp_database2_78_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry`, r.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple`, r.`vp_database2_78_evolved_85` AS `vp_database2_78_evolved_85`, l.`vp_database2_78_evolved_89` AS `vp_database2_78_evolved_89`, l.`vp_database2_78_evolved_97` AS `vp_database2_78_evolved_97` FROM `vp_database2_78_l` l JOIN `vp_database2_78_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_78_v`;
+CREATE VIEW `vp_database2_78_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry`, r.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple`, l.`vp_database2_78_evolved_85` AS `vp_database2_78_evolved_85`, r.`vp_database2_78_evolved_89` AS `vp_database2_78_evolved_89`, r.`vp_database2_78_evolved_97` AS `vp_database2_78_evolved_97` FROM `vp_database2_78_l` l JOIN `vp_database2_78_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_78_v`;
+CREATE VIEW `vp_database2_78_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry`, r.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple`, l.`vp_database2_78_evolved_85` AS `vp_database2_78_evolved_85`, r.`vp_database2_78_evolved_89` AS `vp_database2_78_evolved_89`, r.`vp_database2_78_evolved_97` AS `vp_database2_78_evolved_97` FROM `vp_database2_78_l` l JOIN `vp_database2_78_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_78_v`;
+CREATE VIEW `vp_database2_78_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry`, r.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple`, l.`vp_database2_78_evolved_85` AS `vp_database2_78_evolved_85`, r.`vp_database2_78_evolved_89` AS `vp_database2_78_evolved_89`, l.`vp_database2_78_evolved_97` AS `vp_database2_78_evolved_97` FROM `vp_database2_78_l` l JOIN `vp_database2_78_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_78_v`;
+CREATE VIEW `vp_database2_78_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0geometry` AS `c0geometry`, r.`c1array` AS `c1array`, l.`c2tuple` AS `c2tuple`, r.`vp_database2_78_evolved_85` AS `vp_database2_78_evolved_85`, r.`vp_database2_78_evolved_89` AS `vp_database2_78_evolved_89`, l.`vp_database2_78_evolved_97` AS `vp_database2_78_evolved_97` FROM `vp_database2_78_l` l JOIN `vp_database2_78_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP VIEW IF EXISTS `vp_database2_78_v`;
+DROP TABLE IF EXISTS `vp_database2_78_joined`;
+DROP TABLE IF EXISTS `vp_database2_78_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_78_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_78_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_78_r`;
+DROP TABLE IF EXISTS `vp_database2_78_l`;
+DROP TABLE IF EXISTS `vp_database2_78_source`;
+DROP TABLE IF EXISTS `t0`;
+CREATE TABLE t0(c0VARCHAR VARCHAR NULL);
+INSERT INTO t0(c0varchar) VALUES ('/t⷗Dkx');
+INSERT INTO t0(c0varchar) VALUES ('w02FT賄qD'), ('');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('1[꣄'), ('653079738');
+INSERT INTO t0(c0varchar) VALUES ('*'), ('');
+INSERT INTO t0(c0varchar) VALUES ('fW{8K'), ('zW');
+INSERT INTO t0(c0varchar) VALUES ('e5XeC'), (''), ('');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_-3'), ('vp_-2'), ('vp_2');
+INSERT INTO t0(c0varchar) VALUES ('L');
+INSERT INTO t72(c4bitmap, c0float, c1geometry, c3variant, c2int) VALUES (TO_BITMAP('1,2,3'), -1.480290176E9, ST_GEOMETRYFROMWKT('POINT(1 2)'), PARSE_JSON('{"sqlancer":true}'), -1041026212), (TO_BITMAP('1,2,3'), 0.9880356788635254, ST_GEOMETRYFROMWKT('POINT(1 2)'), PARSE_JSON('{"sqlancer":true}'), -110612313);
+INSERT INTO t72(c1geometry, c4bitmap, c2int) VALUES (NULL, NULL, NULL), (ST_GEOMETRYFROMWKT('POINT(0 0)'), TO_BITMAP('0'), 0), (ST_GEOMETRYFROMWKT('POINT(0 0)'), TO_BITMAP('0'), 0), (ST_GEOMETRYFROMWKT('POINT(0 0)'), TO_BITMAP('0'), 0);
+INSERT INTO t72(c0float, c2int, c3variant) VALUES (1.790618624E9, -2090793843, PARSE_JSON('{"sqlancer":true}')), (1.588815616E9, 955217919, PARSE_JSON('{"sqlancer":true}'));
+INSERT INTO t0(c0varchar) VALUES ('S1u_'), ('}Q<kH螟Cg6'), ('o>');
+INSERT INTO t72(c0float) VALUES (0.9325726628303528);
+INSERT INTO t0(c0varchar) VALUES ('');
+DROP VIEW IF EXISTS `vp_database2_109_v`;
+DROP TABLE IF EXISTS `vp_database2_109_joined`;
+DROP TABLE IF EXISTS `vp_database2_109_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_109_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_109_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_109_r`;
+DROP TABLE IF EXISTS `vp_database2_109_l`;
+DROP TABLE IF EXISTS `vp_database2_109_source`;
+CREATE TABLE `vp_database2_109_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_109_source` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`, `c2int`), `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap` FROM `t72` LIMIT 4096;
+CREATE TABLE `vp_database2_109_l` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database2_109_r` (`vp_rowid` BIGINT NOT NULL, `c2int` BIGINT NULL, `c1geometry` GEOMETRY NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_109_l` (`vp_rowid`, `c0float`) SELECT `vp_rowid`, `c0float` FROM `vp_database2_109_source`;
+INSERT INTO `vp_database2_109_r` (`vp_rowid`, `c2int`, `c1geometry`, `c3variant`, `c4bitmap`) SELECT `vp_rowid`, `c2int`, `c1geometry`, `c3variant`, `c4bitmap` FROM `vp_database2_109_source`;
+DROP TABLE IF EXISTS `vp_database2_109_joined`;
+CREATE TEMPORARY TABLE `vp_database2_109_joined` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL);
+OPTIMIZE TABLE `vp_database2_109_source` COMPACT;
+OPTIMIZE TABLE `vp_database2_109_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_109_r` COMPACT;
+ALTER TABLE `vp_database2_109_source` ADD COLUMN `vp_database2_109_evolved_115` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_109_l` ADD COLUMN `vp_database2_109_evolved_115` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_109_r` ADD COLUMN `vp_database2_109_evolved_115` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_109_joined`;
+CREATE TEMPORARY TABLE `vp_database2_109_joined` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL, `vp_database2_109_evolved_115` BIGINT NULL);
+DROP TABLE IF EXISTS `vp_database2_109_mutation_source_delta_116`;
+DROP TABLE IF EXISTS `vp_database2_109_mutation_left_delta_116`;
+DROP TABLE IF EXISTS `vp_database2_109_mutation_right_delta_116`;
+TRUNCATE TABLE `vp_database2_109_joined`;
+INSERT INTO `vp_database2_109_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`, `vp_database2_109_evolved_115`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap`, l.`vp_database2_109_evolved_115` AS `vp_database2_109_evolved_115` FROM `vp_database2_109_l` l JOIN `vp_database2_109_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_109_joined`;
+INSERT INTO `vp_database2_109_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`, `vp_database2_109_evolved_115`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap`, r.`vp_database2_109_evolved_115` AS `vp_database2_109_evolved_115` FROM `vp_database2_109_l` l JOIN `vp_database2_109_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_109_joined`;
+INSERT INTO `vp_database2_109_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`, `vp_database2_109_evolved_115`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap`, l.`vp_database2_109_evolved_115` AS `vp_database2_109_evolved_115` FROM `vp_database2_109_l` l JOIN `vp_database2_109_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_109_joined`;
+INSERT INTO `vp_database2_109_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`, `vp_database2_109_evolved_115`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap`, r.`vp_database2_109_evolved_115` AS `vp_database2_109_evolved_115` FROM `vp_database2_109_l` l JOIN `vp_database2_109_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TABLE IF EXISTS `vp_database2_109_mutation_source_delta_120`;
+DROP TABLE IF EXISTS `vp_database2_109_mutation_left_delta_120`;
+DROP TABLE IF EXISTS `vp_database2_109_mutation_right_delta_120`;
+ALTER TABLE `vp_database2_109_source` ADD COLUMN `vp_database2_109_evolved_122` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_109_l` ADD COLUMN `vp_database2_109_evolved_122` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_109_r` ADD COLUMN `vp_database2_109_evolved_122` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_109_joined`;
+CREATE TEMPORARY TABLE `vp_database2_109_joined` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL, `vp_database2_109_evolved_115` BIGINT NULL, `vp_database2_109_evolved_122` BIGINT NULL);
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP VIEW IF EXISTS `vp_database2_109_v`;
+CREATE VIEW `vp_database2_109_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap`, r.`vp_database2_109_evolved_115` AS `vp_database2_109_evolved_115`, r.`vp_database2_109_evolved_122` AS `vp_database2_109_evolved_122` FROM `vp_database2_109_l` l JOIN `vp_database2_109_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_109_v`;
+CREATE VIEW `vp_database2_109_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap`, r.`vp_database2_109_evolved_115` AS `vp_database2_109_evolved_115`, r.`vp_database2_109_evolved_122` AS `vp_database2_109_evolved_122` FROM `vp_database2_109_l` l JOIN `vp_database2_109_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_109_v`;
+CREATE VIEW `vp_database2_109_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap`, l.`vp_database2_109_evolved_115` AS `vp_database2_109_evolved_115`, l.`vp_database2_109_evolved_122` AS `vp_database2_109_evolved_122` FROM `vp_database2_109_l` l JOIN `vp_database2_109_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_109_v`;
+CREATE VIEW `vp_database2_109_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap`, l.`vp_database2_109_evolved_115` AS `vp_database2_109_evolved_115`, r.`vp_database2_109_evolved_122` AS `vp_database2_109_evolved_122` FROM `vp_database2_109_l` l JOIN `vp_database2_109_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+OPTIMIZE TABLE `vp_database2_109_source` COMPACT;
+OPTIMIZE TABLE `vp_database2_109_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_109_r` COMPACT;
+DROP VIEW IF EXISTS `vp_database2_109_v`;
+CREATE VIEW `vp_database2_109_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap`, r.`vp_database2_109_evolved_115` AS `vp_database2_109_evolved_115`, r.`vp_database2_109_evolved_122` AS `vp_database2_109_evolved_122` FROM `vp_database2_109_l` l JOIN `vp_database2_109_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_109_v`;
+DROP TABLE IF EXISTS `vp_database2_109_joined`;
+DROP TABLE IF EXISTS `vp_database2_109_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_109_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_109_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_109_r`;
+DROP TABLE IF EXISTS `vp_database2_109_l`;
+DROP TABLE IF EXISTS `vp_database2_109_source`;
+DROP VIEW IF EXISTS `vp_database2_127_v`;
+DROP TABLE IF EXISTS `vp_database2_127_joined`;
+DROP TABLE IF EXISTS `vp_database2_127_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_127_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_127_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_127_r`;
+DROP TABLE IF EXISTS `vp_database2_127_l`;
+DROP TABLE IF EXISTS `vp_database2_127_source`;
+CREATE TABLE `vp_database2_127_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_127_source` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`, `c2int`), `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap` FROM `t72` LIMIT 4096;
+UPDATE `vp_database2_127_source` SET `c0float` = CAST('-Infinity' AS DOUBLE) WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database2_127_source`);
+UPDATE `vp_database2_127_source` SET `c3variant` = PARSE_JSON('{"sqlancer":[null,[]],"n":1}') WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database2_127_source`);
+UPDATE `vp_database2_127_source` SET `c0float` = NULL WHERE `vp_rowid` = (SELECT MAX(`vp_rowid`) FROM `vp_database2_127_source` WHERE `vp_rowid` <> (SELECT MIN(`vp_rowid`) FROM `vp_database2_127_source`));
+REMOVE @~/vp_database2_127_copy;
+DROP TABLE IF EXISTS `vp_database2_127_copy_reference`;
+CREATE TEMPORARY TABLE `vp_database2_127_copy_reference` AS SELECT * FROM `vp_database2_127_source`;
+COPY INTO @~/vp_database2_127_copy FROM (SELECT * FROM `vp_database2_127_source`) FILE_FORMAT=(TYPE=PARQUET);
+TRUNCATE TABLE `vp_database2_127_source`;
+COPY INTO `vp_database2_127_source` FROM @~/vp_database2_127_copy FILE_FORMAT=(TYPE=PARQUET) FORCE=TRUE;
+DROP VIEW IF EXISTS `vp_database2_132_v`;
+DROP TABLE IF EXISTS `vp_database2_132_joined`;
+DROP TABLE IF EXISTS `vp_database2_132_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_132_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_132_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_132_r`;
+DROP TABLE IF EXISTS `vp_database2_132_l`;
+DROP TABLE IF EXISTS `vp_database2_132_source`;
+CREATE TABLE `vp_database2_132_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_132_source` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`, `c2int`), `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap` FROM `t72` LIMIT 4096;
+UPDATE `vp_database2_132_source` SET `c0float` = CAST('NaN' AS DOUBLE) WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database2_132_source`);
+UPDATE `vp_database2_132_source` SET `c3variant` = PARSE_JSON('{"sqlancer":[null,[]],"n":1}') WHERE `vp_rowid` = (SELECT MIN(`vp_rowid`) FROM `vp_database2_132_source`);
+UPDATE `vp_database2_132_source` SET `c0float` = NULL WHERE `vp_rowid` = (SELECT MAX(`vp_rowid`) FROM `vp_database2_132_source` WHERE `vp_rowid` <> (SELECT MIN(`vp_rowid`) FROM `vp_database2_132_source`));
+REMOVE @~/vp_database2_132_copy;
+DROP TABLE IF EXISTS `vp_database2_132_copy_reference`;
+CREATE TEMPORARY TABLE `vp_database2_132_copy_reference` AS SELECT * FROM `vp_database2_132_source`;
+COPY INTO @~/vp_database2_132_copy FROM (SELECT * FROM `vp_database2_132_source`) FILE_FORMAT=(TYPE=PARQUET);
+TRUNCATE TABLE `vp_database2_132_source`;
+COPY INTO `vp_database2_132_source` FROM @~/vp_database2_132_copy FILE_FORMAT=(TYPE=PARQUET) FORCE=TRUE;
+DROP VIEW IF EXISTS `vp_database2_138_v`;
+DROP TABLE IF EXISTS `vp_database2_138_joined`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_138_r`;
+DROP TABLE IF EXISTS `vp_database2_138_l`;
+DROP TABLE IF EXISTS `vp_database2_138_source`;
+CREATE TABLE `vp_database2_138_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_138_source` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`, `c2int`), `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap` FROM `t72` LIMIT 4096;
+CREATE TABLE `vp_database2_138_l` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c2int` BIGINT NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database2_138_r` (`vp_rowid` BIGINT NOT NULL, `c1geometry` GEOMETRY NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_138_l` (`vp_rowid`, `c0float`, `c2int`) SELECT `vp_rowid`, `c0float`, `c2int` FROM `vp_database2_138_source`;
+INSERT INTO `vp_database2_138_r` (`vp_rowid`, `c1geometry`, `c3variant`, `c4bitmap`) SELECT `vp_rowid`, `c1geometry`, `c3variant`, `c4bitmap` FROM `vp_database2_138_source`;
+DROP TABLE IF EXISTS `vp_database2_138_joined`;
+CREATE TEMPORARY TABLE `vp_database2_138_joined` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL);
+TRUNCATE TABLE `vp_database2_138_joined`;
+INSERT INTO `vp_database2_138_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_138_l` l JOIN `vp_database2_138_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_138_joined`;
+INSERT INTO `vp_database2_138_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_138_l` l JOIN `vp_database2_138_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_138_joined`;
+INSERT INTO `vp_database2_138_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_138_l` l JOIN `vp_database2_138_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_138_joined`;
+INSERT INTO `vp_database2_138_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_138_l` l JOIN `vp_database2_138_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_138_joined`;
+INSERT INTO `vp_database2_138_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_138_l` l JOIN `vp_database2_138_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_138_v`;
+CREATE VIEW `vp_database2_138_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_138_l` l JOIN `vp_database2_138_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_138_v`;
+CREATE VIEW `vp_database2_138_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_138_l` l JOIN `vp_database2_138_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_138_v`;
+CREATE VIEW `vp_database2_138_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_138_l` l JOIN `vp_database2_138_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_source_delta_148`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_left_delta_148`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_right_delta_148`;
+DROP VIEW IF EXISTS `vp_database2_138_v`;
+CREATE VIEW `vp_database2_138_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_138_l` l JOIN `vp_database2_138_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_source_delta_151`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_left_delta_151`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_right_delta_151`;
+ALTER TABLE `vp_database2_138_source` ADD COLUMN `vp_database2_138_evolved_153` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_138_l` ADD COLUMN `vp_database2_138_evolved_153` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_138_r` ADD COLUMN `vp_database2_138_evolved_153` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_138_joined`;
+CREATE TEMPORARY TABLE `vp_database2_138_joined` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL, `vp_database2_138_evolved_153` BIGINT NULL);
+DROP TABLE IF EXISTS `vp_database2_138_mutation_source_delta_155`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_left_delta_155`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_right_delta_155`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_source_delta_156`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_left_delta_156`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_right_delta_156`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_source_delta_165`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_left_delta_165`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_right_delta_165`;
+DROP VIEW IF EXISTS `vp_database2_138_v`;
+DROP TABLE IF EXISTS `vp_database2_138_joined`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_138_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_138_r`;
+DROP TABLE IF EXISTS `vp_database2_138_l`;
+DROP TABLE IF EXISTS `vp_database2_138_source`;
+DROP VIEW IF EXISTS `vp_database2_166_v`;
+DROP TABLE IF EXISTS `vp_database2_166_joined`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_166_r`;
+DROP TABLE IF EXISTS `vp_database2_166_l`;
+DROP TABLE IF EXISTS `vp_database2_166_source`;
+CREATE TABLE `vp_database2_166_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_166_source` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`, `c2int`), `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap` FROM `t72` LIMIT 4096;
+CREATE TABLE `vp_database2_166_l` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c2int` BIGINT NULL, `c4bitmap` BITMAP NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database2_166_r` (`vp_rowid` BIGINT NOT NULL, `c1geometry` GEOMETRY NULL, `c3variant` VARIANT NULL, `c0float` DOUBLE NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_166_l` (`vp_rowid`, `c0float`, `c2int`, `c4bitmap`) SELECT `vp_rowid`, `c0float`, `c2int`, `c4bitmap` FROM `vp_database2_166_source`;
+INSERT INTO `vp_database2_166_r` (`vp_rowid`, `c1geometry`, `c3variant`, `c0float`) SELECT `vp_rowid`, `c1geometry`, `c3variant`, `c0float` FROM `vp_database2_166_source`;
+DROP TABLE IF EXISTS `vp_database2_166_joined`;
+CREATE TEMPORARY TABLE `vp_database2_166_joined` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL);
+DROP TABLE IF EXISTS `vp_database2_166_mutation_source_delta_170`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_left_delta_170`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_right_delta_170`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+ALTER TABLE `vp_database2_166_source` ADD COLUMN `vp_database2_166_evolved_179` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_166_l` ADD COLUMN `vp_database2_166_evolved_179` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_166_r` ADD COLUMN `vp_database2_166_evolved_179` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_166_joined`;
+CREATE TEMPORARY TABLE `vp_database2_166_joined` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL, `vp_database2_166_evolved_179` BIGINT NULL);
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_source_delta_185`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_left_delta_185`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_right_delta_185`;
+OPTIMIZE TABLE `vp_database2_166_source` COMPACT;
+OPTIMIZE TABLE `vp_database2_166_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_166_r` COMPACT;
+TRUNCATE TABLE `vp_database2_166_joined`;
+INSERT INTO `vp_database2_166_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`, `vp_database2_166_evolved_179`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap`, l.`vp_database2_166_evolved_179` AS `vp_database2_166_evolved_179` FROM `vp_database2_166_l` l JOIN `vp_database2_166_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_166_joined`;
+INSERT INTO `vp_database2_166_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`, `vp_database2_166_evolved_179`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap`, l.`vp_database2_166_evolved_179` AS `vp_database2_166_evolved_179` FROM `vp_database2_166_l` l JOIN `vp_database2_166_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_166_joined`;
+INSERT INTO `vp_database2_166_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`, `vp_database2_166_evolved_179`) SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap`, r.`vp_database2_166_evolved_179` AS `vp_database2_166_evolved_179` FROM `vp_database2_166_l` l JOIN `vp_database2_166_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_166_joined`;
+INSERT INTO `vp_database2_166_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`, `vp_database2_166_evolved_179`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap`, l.`vp_database2_166_evolved_179` AS `vp_database2_166_evolved_179` FROM `vp_database2_166_l` l JOIN `vp_database2_166_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_166_v`;
+CREATE VIEW `vp_database2_166_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap`, l.`vp_database2_166_evolved_179` AS `vp_database2_166_evolved_179` FROM `vp_database2_166_l` l JOIN `vp_database2_166_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_166_v`;
+CREATE VIEW `vp_database2_166_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap`, r.`vp_database2_166_evolved_179` AS `vp_database2_166_evolved_179` FROM `vp_database2_166_l` l JOIN `vp_database2_166_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_166_v`;
+CREATE VIEW `vp_database2_166_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap`, r.`vp_database2_166_evolved_179` AS `vp_database2_166_evolved_179` FROM `vp_database2_166_l` l JOIN `vp_database2_166_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_166_v`;
+CREATE VIEW `vp_database2_166_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap`, l.`vp_database2_166_evolved_179` AS `vp_database2_166_evolved_179` FROM `vp_database2_166_l` l JOIN `vp_database2_166_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_166_v`;
+CREATE VIEW `vp_database2_166_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, r.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap`, r.`vp_database2_166_evolved_179` AS `vp_database2_166_evolved_179` FROM `vp_database2_166_l` l JOIN `vp_database2_166_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+OPTIMIZE TABLE `vp_database2_166_source` COMPACT;
+OPTIMIZE TABLE `vp_database2_166_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_166_r` COMPACT;
+OPTIMIZE TABLE `vp_database2_166_source` COMPACT;
+OPTIMIZE TABLE `vp_database2_166_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_166_r` COMPACT;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_source_delta_193`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_left_delta_193`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_right_delta_193`;
+DROP VIEW IF EXISTS `vp_database2_166_v`;
+DROP TABLE IF EXISTS `vp_database2_166_joined`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_166_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_166_r`;
+DROP TABLE IF EXISTS `vp_database2_166_l`;
+DROP TABLE IF EXISTS `vp_database2_166_source`;
+DROP VIEW IF EXISTS `vp_database2_195_v`;
+DROP TABLE IF EXISTS `vp_database2_195_joined`;
+DROP TABLE IF EXISTS `vp_database2_195_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_195_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_195_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_195_r`;
+DROP TABLE IF EXISTS `vp_database2_195_l`;
+DROP TABLE IF EXISTS `vp_database2_195_source`;
+CREATE TABLE `vp_database2_195_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_195_source` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`, `c2int`), `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap` FROM `t72` LIMIT 4096;
+CREATE TABLE `vp_database2_195_l` (`vp_rowid` BIGINT NOT NULL, `c2int` BIGINT NULL, `c4bitmap` BITMAP NULL, `c3variant` VARIANT NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database2_195_r` (`vp_rowid` BIGINT NOT NULL, `c1geometry` GEOMETRY NULL, `c0float` DOUBLE NULL) ENGINE=FUSE;
+INSERT OVERWRITE `vp_database2_195_l` (`vp_rowid`, `c2int`, `c4bitmap`, `c3variant`) SELECT `vp_rowid`, `c2int`, `c4bitmap`, `c3variant` FROM `vp_database2_195_source`;
+INSERT OVERWRITE `vp_database2_195_r` (`vp_rowid`, `c1geometry`, `c0float`) SELECT `vp_rowid`, `c1geometry`, `c0float` FROM `vp_database2_195_source`;
+DROP TABLE IF EXISTS `vp_database2_195_joined`;
+CREATE TEMPORARY TABLE `vp_database2_195_joined` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL);
+OPTIMIZE TABLE `vp_database2_195_source` COMPACT;
+OPTIMIZE TABLE `vp_database2_195_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_195_r` COMPACT;
+DROP VIEW IF EXISTS `vp_database2_195_v`;
+CREATE VIEW `vp_database2_195_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap` FROM `vp_database2_195_l` l JOIN `vp_database2_195_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+OPTIMIZE TABLE `vp_database2_195_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_195_r` COMPACT;
+DROP VIEW IF EXISTS `vp_database2_195_v`;
+CREATE VIEW `vp_database2_195_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap` FROM `vp_database2_195_l` l JOIN `vp_database2_195_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_195_v`;
+CREATE VIEW `vp_database2_195_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap` FROM `vp_database2_195_l` l JOIN `vp_database2_195_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_195_joined`;
+INSERT INTO `vp_database2_195_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap` FROM `vp_database2_195_l` l JOIN `vp_database2_195_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_195_joined`;
+INSERT INTO `vp_database2_195_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap` FROM `vp_database2_195_l` l JOIN `vp_database2_195_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_195_joined`;
+INSERT INTO `vp_database2_195_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap` FROM `vp_database2_195_l` l JOIN `vp_database2_195_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_195_joined`;
+INSERT INTO `vp_database2_195_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, l.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, l.`c4bitmap` AS `c4bitmap` FROM `vp_database2_195_l` l JOIN `vp_database2_195_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP VIEW IF EXISTS `vp_database2_195_v`;
+DROP TABLE IF EXISTS `vp_database2_195_joined`;
+DROP TABLE IF EXISTS `vp_database2_195_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_195_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_195_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_195_r`;
+DROP TABLE IF EXISTS `vp_database2_195_l`;
+DROP TABLE IF EXISTS `vp_database2_195_source`;
+DROP VIEW IF EXISTS `vp_database2_214_v`;
+DROP TABLE IF EXISTS `vp_database2_214_joined`;
+DROP TABLE IF EXISTS `vp_database2_214_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_214_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_214_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_214_r`;
+DROP TABLE IF EXISTS `vp_database2_214_l`;
+DROP TABLE IF EXISTS `vp_database2_214_source`;
+CREATE TABLE `vp_database2_214_source` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL) ENGINE=FUSE CLUSTER BY (`vp_rowid`);
+INSERT INTO `vp_database2_214_source` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT ROW_NUMBER() OVER (ORDER BY `c0float`, `c2int`), `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap` FROM `t72` LIMIT 4096;
+CREATE TABLE `vp_database2_214_l` (`vp_rowid` BIGINT NOT NULL, `c3variant` VARIANT NULL) ENGINE=FUSE CLUSTER BY (`vp_rowid`);
+CREATE TABLE `vp_database2_214_r` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c4bitmap` BITMAP NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database2_214_l` (`vp_rowid`, `c3variant`) SELECT `vp_rowid`, `c3variant` FROM `vp_database2_214_source`;
+INSERT INTO `vp_database2_214_r` (`vp_rowid`, `c0float`, `c4bitmap`, `c1geometry`, `c2int`) SELECT `vp_rowid`, `c0float`, `c4bitmap`, `c1geometry`, `c2int` FROM `vp_database2_214_source`;
+DROP TABLE IF EXISTS `vp_database2_214_joined`;
+CREATE TEMPORARY TABLE `vp_database2_214_joined` (`vp_rowid` BIGINT NOT NULL, `c0float` DOUBLE NULL, `c1geometry` GEOMETRY NULL, `c2int` BIGINT NULL, `c3variant` VARIANT NULL, `c4bitmap` BITMAP NULL);
+TRUNCATE TABLE `vp_database2_214_joined`;
+INSERT INTO `vp_database2_214_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_214_l` l JOIN `vp_database2_214_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_214_joined`;
+INSERT INTO `vp_database2_214_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_214_l` l JOIN `vp_database2_214_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_214_joined`;
+INSERT INTO `vp_database2_214_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_214_l` l JOIN `vp_database2_214_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_214_joined`;
+INSERT INTO `vp_database2_214_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_214_l` l JOIN `vp_database2_214_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+TRUNCATE TABLE `vp_database2_214_joined`;
+INSERT INTO `vp_database2_214_joined` (`vp_rowid`, `c0float`, `c1geometry`, `c2int`, `c3variant`, `c4bitmap`) SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_214_l` l JOIN `vp_database2_214_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_214_v`;
+CREATE VIEW `vp_database2_214_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_214_l` l JOIN `vp_database2_214_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_214_v`;
+CREATE VIEW `vp_database2_214_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_214_l` l JOIN `vp_database2_214_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_214_v`;
+CREATE VIEW `vp_database2_214_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_214_l` l JOIN `vp_database2_214_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_214_v`;
+CREATE VIEW `vp_database2_214_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_214_l` l JOIN `vp_database2_214_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_214_v`;
+CREATE VIEW `vp_database2_214_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0float` AS `c0float`, r.`c1geometry` AS `c1geometry`, r.`c2int` AS `c2int`, l.`c3variant` AS `c3variant`, r.`c4bitmap` AS `c4bitmap` FROM `vp_database2_214_l` l JOIN `vp_database2_214_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_214_v`;
+DROP TABLE IF EXISTS `vp_database2_214_joined`;
+DROP TABLE IF EXISTS `vp_database2_214_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_214_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_214_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_214_r`;
+DROP TABLE IF EXISTS `vp_database2_214_l`;
+DROP TABLE IF EXISTS `vp_database2_214_source`;
+DROP TABLE IF EXISTS `t72`;
+CREATE TABLE t1(c0DATE DATE NULL DEFAULT(DATE '1969-12-23'), c1VARCHAR VARCHAR NOT NULL, c2TUPLE TUPLE(INT64, VARCHAR) NULL);
+INSERT INTO t1(c0date, c2tuple) VALUES (DATE '1970-01-09', (1, 'sqlancer'));
+INSERT INTO t1(c0date, c2tuple, c1varchar) VALUES (DATE '1969-12-26', (1, 'sqlancer'), '/N0E佔'), (DATE '1970-01-05', (1, 'sqlancer'), '0.9880356987584993');
+INSERT INTO t1(c1varchar, c2tuple) VALUES ('', (1, 'sqlancer')), ('-1719522892', (1, 'sqlancer')), ('-1731355805', (1, 'sqlancer'));
+INSERT INTO t1(c1varchar, c0date) VALUES ('', DATE '1970-01-19');
+INSERT INTO t1(c0date, c2tuple) VALUES (DATE '2000-01-01', (0, 'vp_0')), (NULL, (3, 'vp_3'));
+INSERT INTO t1(c0date) VALUES (DATE '1969-12-22');
+INSERT INTO t1(c1varchar) VALUES ('vp_2'), ('vp_2');
+INSERT INTO t0(c0varchar) VALUES ('-W7U');
+INSERT INTO t1(c1varchar) VALUES ('0.9012871887815705'), (''), ('䦼[');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t1(c2tuple) VALUES ((1, 'sqlancer'));
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_-3');
+INSERT INTO t1(c2tuple, c0date, c1varchar) VALUES ((-1, 'vp_-1'), DATE '2000-01-02', 'vp_-1'), ((0, 'vp_0'), NULL, 'vp_0');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_-2');
+INSERT INTO t0(c0varchar) VALUES ('-625683176');
+INSERT INTO t0(c0varchar) VALUES ('WQS2.矅'), ('');
+INSERT INTO t1(c1varchar, c2tuple) VALUES ('', (1, 'sqlancer'));
+INSERT INTO t0(c0varchar) VALUES ('0.2998554227342667');
+INSERT INTO t1(c2tuple, c1varchar) VALUES ((0, 'vp_0'), 'vp_0'), ((0, 'vp_0'), 'vp_0');
+INSERT INTO t0(c0varchar) VALUES ('0.17580625863629207'), ('KG_'), ('5/');
+INSERT INTO t0(c0varchar) VALUES ('1133083814'), ('');
+INSERT INTO t1(c1varchar) VALUES ('|e'), ('0.19874608312064146');
+INSERT INTO t1(c1varchar) VALUES ('-1626740044'), ('.Eo4䕴');
+INSERT INTO t1(c1varchar, c0date, c2tuple) VALUES ('vp_0', DATE '2000-01-01', (0, 'vp_0')), ('vp_0', NULL, (0, 'vp_0'));
+INSERT INTO t0(c0varchar) VALUES ('_硕');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t0(c0varchar) VALUES ('_F');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_-3');
+INSERT INTO t1(c2tuple, c1varchar, c0date) VALUES ((0, 'vp_0'), 'vp_0', DATE '2000-01-01'), ((0, 'vp_0'), 'vp_0', NULL);
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('qo'), ('0.44115691427978754');
+INSERT INTO t0(c0varchar) VALUES ('墡푊qU'), ('408557121');
+INSERT INTO t0(c0varchar) VALUES ('?3');
+INSERT INTO t0(c0varchar) VALUES ('<2(^m'), ('469517684');
+INSERT INTO t0(c0varchar) VALUES ('8h'), ('Z䘟c7');
+INSERT INTO t0(c0varchar) VALUES (', 0nK#');
+INSERT INTO t1(c2tuple, c1varchar) VALUES ((1, 'sqlancer'), '-993267118'), ((1, 'sqlancer'), '1856704527');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_-2');
+INSERT INTO t0(c0varchar) VALUES ('*'), ('᩻Fap)''');
+INSERT INTO t1(c0date) VALUES (DATE '1969-12-20'), (DATE '1970-01-24');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_-2');
+INSERT INTO t0(c0varchar) VALUES ('606377805');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t0(c0varchar) VALUES ('S1'), ('ᘡ>DNr');
+INSERT INTO t1(c1varchar, c2tuple, c0date) VALUES ('T&!', (1, 'sqlancer'), DATE '1970-01-03');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_3'), ('vp_0'), ('vp_0');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t0(c0varchar) VALUES ('0.8194736025934187');
+INSERT INTO t1(c2tuple, c0date, c1varchar) VALUES ((1, 'sqlancer'), DATE '1970-01-02', ''), ((1, 'sqlancer'), DATE '1969-12-18', 'QT');
+INSERT INTO t0(c0varchar) VALUES ('');
+INSERT INTO t1(c0date, c2tuple) VALUES (DATE '1970-01-21', (1, 'sqlancer'));
+INSERT INTO t0(c0varchar) VALUES (NULL), ('vp_-3');
+DROP VIEW IF EXISTS `vp_database2_257_v`;
+DROP TABLE IF EXISTS `vp_database2_257_joined`;
+DROP TABLE IF EXISTS `vp_database2_257_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_257_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_257_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_257_r`;
+DROP TABLE IF EXISTS `vp_database2_257_l`;
+DROP TABLE IF EXISTS `vp_database2_257_source`;
+CREATE TABLE `vp_database2_257_source` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL DEFAULT '1969-12-23', `c1varchar` VARCHAR NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database2_257_source` (`vp_rowid`, `c0date`, `c1varchar`, `c2tuple`) SELECT ROW_NUMBER() OVER (ORDER BY `c0date`, `c1varchar`), `c0date`, `c1varchar`, `c2tuple` FROM `t1` LIMIT 4096;
+CREATE TABLE `vp_database2_257_l` (`vp_rowid` BIGINT NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL, `c1varchar` VARCHAR NULL, `c0date` DATE NULL) ENGINE=MEMORY;
+CREATE TABLE `vp_database2_257_r` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_257_l` (`vp_rowid`, `c2tuple`, `c1varchar`, `c0date`) SELECT `vp_rowid`, `c2tuple`, `c1varchar`, `c0date` FROM `vp_database2_257_source`;
+INSERT INTO `vp_database2_257_r` (`vp_rowid`, `c0date`) SELECT `vp_rowid`, `c0date` FROM `vp_database2_257_source`;
+DROP VIEW IF EXISTS `vp_database2_257_v`;
+CREATE VIEW `vp_database2_257_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_257_l` l JOIN `vp_database2_257_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_257_v`;
+CREATE VIEW `vp_database2_257_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_257_l` l JOIN `vp_database2_257_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_257_v`;
+CREATE VIEW `vp_database2_257_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_257_l` l JOIN `vp_database2_257_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_257_v`;
+CREATE VIEW `vp_database2_257_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_257_l` l JOIN `vp_database2_257_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_257_v`;
+CREATE VIEW `vp_database2_257_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, l.`c2tuple` AS `c2tuple` FROM `vp_database2_257_l` l JOIN `vp_database2_257_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP VIEW IF EXISTS `vp_database2_257_v`;
+DROP TABLE IF EXISTS `vp_database2_257_joined`;
+DROP TABLE IF EXISTS `vp_database2_257_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_257_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_257_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_257_r`;
+DROP TABLE IF EXISTS `vp_database2_257_l`;
+DROP TABLE IF EXISTS `vp_database2_257_source`;
+DROP VIEW IF EXISTS `vp_database2_281_v`;
+DROP TABLE IF EXISTS `vp_database2_281_joined`;
+DROP TABLE IF EXISTS `vp_database2_281_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_281_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_281_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_281_r`;
+DROP TABLE IF EXISTS `vp_database2_281_l`;
+DROP TABLE IF EXISTS `vp_database2_281_source`;
+CREATE TABLE `vp_database2_281_source` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL DEFAULT '1969-12-23', `c1varchar` VARCHAR NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database2_281_source` (`vp_rowid`, `c0date`, `c1varchar`, `c2tuple`) SELECT ROW_NUMBER() OVER (ORDER BY `c0date`, `c1varchar`), `c0date`, `c1varchar`, `c2tuple` FROM `t1` LIMIT 4096;
+CREATE TABLE `vp_database2_281_l` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1varchar` VARCHAR NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database2_281_r` (`vp_rowid` BIGINT NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_281_l` (`vp_rowid`, `c0date`, `c1varchar`) SELECT `vp_rowid`, `c0date`, `c1varchar` FROM `vp_database2_281_source`;
+INSERT INTO `vp_database2_281_r` (`vp_rowid`, `c2tuple`) SELECT `vp_rowid`, `c2tuple` FROM `vp_database2_281_source`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+DROP VIEW IF EXISTS `vp_database2_281_v`;
+CREATE VIEW `vp_database2_281_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, r.`c2tuple` AS `c2tuple` FROM `vp_database2_281_l` l JOIN `vp_database2_281_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_281_v`;
+CREATE VIEW `vp_database2_281_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, r.`c2tuple` AS `c2tuple` FROM `vp_database2_281_l` l JOIN `vp_database2_281_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_281_v`;
+CREATE VIEW `vp_database2_281_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, r.`c2tuple` AS `c2tuple` FROM `vp_database2_281_l` l JOIN `vp_database2_281_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_281_v`;
+CREATE VIEW `vp_database2_281_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, r.`c2tuple` AS `c2tuple` FROM `vp_database2_281_l` l JOIN `vp_database2_281_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_281_v`;
+CREATE VIEW `vp_database2_281_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, l.`c0date` AS `c0date`, l.`c1varchar` AS `c1varchar`, r.`c2tuple` AS `c2tuple` FROM `vp_database2_281_l` l JOIN `vp_database2_281_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_281_v`;
+DROP TABLE IF EXISTS `vp_database2_281_joined`;
+DROP TABLE IF EXISTS `vp_database2_281_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_281_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_281_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_281_r`;
+DROP TABLE IF EXISTS `vp_database2_281_l`;
+DROP TABLE IF EXISTS `vp_database2_281_source`;
+DROP VIEW IF EXISTS `vp_database2_300_v`;
+DROP TABLE IF EXISTS `vp_database2_300_joined`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_300_r`;
+DROP TABLE IF EXISTS `vp_database2_300_l`;
+DROP TABLE IF EXISTS `vp_database2_300_source`;
+CREATE TABLE `vp_database2_300_source` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL DEFAULT '1969-12-23', `c1varchar` VARCHAR NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_300_source` (`vp_rowid`, `c0date`, `c1varchar`, `c2tuple`) SELECT ROW_NUMBER() OVER (ORDER BY `c0date`, `c1varchar`), `c0date`, `c1varchar`, `c2tuple` FROM `t1` LIMIT 4096;
+CREATE TABLE `vp_database2_300_l` (`vp_rowid` BIGINT NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database2_300_r` (`vp_rowid` BIGINT NOT NULL, `c1varchar` VARCHAR NULL, `c0date` DATE NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_300_l` (`vp_rowid`, `c2tuple`) SELECT `vp_rowid`, `c2tuple` FROM `vp_database2_300_source`;
+INSERT INTO `vp_database2_300_r` (`vp_rowid`, `c1varchar`, `c0date`) SELECT `vp_rowid`, `c1varchar`, `c0date` FROM `vp_database2_300_source`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_source_delta_307`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_left_delta_307`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_right_delta_307`;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+SET force_aggregate_data_spill = 1;
+SET force_sort_data_spill = 1;
+OPTIMIZE TABLE `vp_database2_300_source` COMPACT;
+OPTIMIZE TABLE `vp_database2_300_l` COMPACT;
+OPTIMIZE TABLE `vp_database2_300_r` COMPACT;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_source_delta_320`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_left_delta_320`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_right_delta_320`;
+ALTER TABLE `vp_database2_300_source` ADD COLUMN `vp_database2_300_evolved_321` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_300_l` ADD COLUMN `vp_database2_300_evolved_321` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_300_r` ADD COLUMN `vp_database2_300_evolved_321` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_300_joined`;
+CREATE TEMPORARY TABLE `vp_database2_300_joined` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1varchar` VARCHAR NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL, `vp_database2_300_evolved_321` BIGINT NULL);
+ALTER TABLE `vp_database2_300_source` ADD COLUMN `vp_database2_300_evolved_322` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_300_l` ADD COLUMN `vp_database2_300_evolved_322` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_300_r` ADD COLUMN `vp_database2_300_evolved_322` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_300_joined`;
+CREATE TEMPORARY TABLE `vp_database2_300_joined` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1varchar` VARCHAR NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL, `vp_database2_300_evolved_321` BIGINT NULL, `vp_database2_300_evolved_322` BIGINT NULL);
+ALTER TABLE `vp_database2_300_source` ADD COLUMN `vp_database2_300_evolved_324` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_300_l` ADD COLUMN `vp_database2_300_evolved_324` BIGINT NULL DEFAULT 7;
+ALTER TABLE `vp_database2_300_r` ADD COLUMN `vp_database2_300_evolved_324` BIGINT NULL DEFAULT 7;
+DROP TABLE IF EXISTS `vp_database2_300_joined`;
+CREATE TEMPORARY TABLE `vp_database2_300_joined` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL, `c1varchar` VARCHAR NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL, `vp_database2_300_evolved_321` BIGINT NULL, `vp_database2_300_evolved_322` BIGINT NULL, `vp_database2_300_evolved_324` BIGINT NULL);
+DROP TABLE IF EXISTS `vp_database2_300_mutation_source_delta_327`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_left_delta_327`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_right_delta_327`;
+DROP VIEW IF EXISTS `vp_database2_300_v`;
+CREATE VIEW `vp_database2_300_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, r.`c1varchar` AS `c1varchar`, l.`c2tuple` AS `c2tuple`, r.`vp_database2_300_evolved_321` AS `vp_database2_300_evolved_321`, r.`vp_database2_300_evolved_322` AS `vp_database2_300_evolved_322`, r.`vp_database2_300_evolved_324` AS `vp_database2_300_evolved_324` FROM `vp_database2_300_l` l JOIN `vp_database2_300_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_300_v`;
+CREATE VIEW `vp_database2_300_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, r.`c1varchar` AS `c1varchar`, l.`c2tuple` AS `c2tuple`, r.`vp_database2_300_evolved_321` AS `vp_database2_300_evolved_321`, l.`vp_database2_300_evolved_322` AS `vp_database2_300_evolved_322`, r.`vp_database2_300_evolved_324` AS `vp_database2_300_evolved_324` FROM `vp_database2_300_l` l JOIN `vp_database2_300_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_300_v`;
+CREATE VIEW `vp_database2_300_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, r.`c1varchar` AS `c1varchar`, l.`c2tuple` AS `c2tuple`, r.`vp_database2_300_evolved_321` AS `vp_database2_300_evolved_321`, l.`vp_database2_300_evolved_322` AS `vp_database2_300_evolved_322`, r.`vp_database2_300_evolved_324` AS `vp_database2_300_evolved_324` FROM `vp_database2_300_l` l JOIN `vp_database2_300_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_300_v`;
+CREATE VIEW `vp_database2_300_v` AS SELECT l.`vp_rowid` AS `vp_rowid`, r.`c0date` AS `c0date`, r.`c1varchar` AS `c1varchar`, l.`c2tuple` AS `c2tuple`, r.`vp_database2_300_evolved_321` AS `vp_database2_300_evolved_321`, l.`vp_database2_300_evolved_322` AS `vp_database2_300_evolved_322`, l.`vp_database2_300_evolved_324` AS `vp_database2_300_evolved_324` FROM `vp_database2_300_l` l JOIN `vp_database2_300_r` r ON l.`vp_rowid` = r.`vp_rowid`;
+DROP VIEW IF EXISTS `vp_database2_300_v`;
+DROP TABLE IF EXISTS `vp_database2_300_joined`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_300_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_300_r`;
+DROP TABLE IF EXISTS `vp_database2_300_l`;
+DROP TABLE IF EXISTS `vp_database2_300_source`;
+DROP VIEW IF EXISTS `vp_database2_330_v`;
+DROP TABLE IF EXISTS `vp_database2_330_joined`;
+DROP TABLE IF EXISTS `vp_database2_330_mutation_source_delta`;
+DROP TABLE IF EXISTS `vp_database2_330_mutation_left_delta`;
+DROP TABLE IF EXISTS `vp_database2_330_mutation_right_delta`;
+DROP TABLE IF EXISTS `vp_database2_330_r`;
+DROP TABLE IF EXISTS `vp_database2_330_l`;
+DROP TABLE IF EXISTS `vp_database2_330_source`;
+CREATE TABLE `vp_database2_330_source` (`vp_rowid` BIGINT NOT NULL, `c0date` DATE NULL DEFAULT '1969-12-23', `c1varchar` VARCHAR NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=MEMORY;
+INSERT INTO `vp_database2_330_source` (`vp_rowid`, `c0date`, `c1varchar`, `c2tuple`) SELECT ROW_NUMBER() OVER (ORDER BY `c0date`, `c1varchar`), `c0date`, `c1varchar`, `c2tuple` FROM `t1` LIMIT 4096;
+CREATE TABLE `vp_database2_330_l` (`vp_rowid` BIGINT NOT NULL, `c1varchar` VARCHAR NULL, `c0date` DATE NULL) ENGINE=FUSE;
+CREATE TABLE `vp_database2_330_r` (`vp_rowid` BIGINT NOT NULL, `c2tuple` TUPLE(BIGINT NULL, VARCHAR NULL) NULL) ENGINE=FUSE;
+INSERT INTO `vp_database2_330_l` (`vp_rowid`, `c1varchar`, `c0date`) SELECT `vp_rowid`, `c1varchar`, `c0date` FROM `vp_database2_330_source`;
+INSERT INTO `vp_database2_330_r` (`vp_rowid`, `c2tuple`) SELECT `vp_rowid`, `c2tuple` FROM `vp_database2_330_source`;

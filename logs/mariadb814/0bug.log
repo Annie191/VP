@@ -1,0 +1,143 @@
+https://jira.mariadb.org/browse/MDEV-41462?filter=-2 confirming
+
+DROP DATABASE IF EXISTS repro_mariadb814_db0_vp123_min;
+CREATE DATABASE repro_mariadb814_db0_vp123_min;
+USE repro_mariadb814_db0_vp123_min;
+
+SET optimizer_switch='derived_merge=on';
+SET join_cache_level=3;
+
+-- 原始单表
+CREATE TABLE s(
+    id BIGINT,
+    c0 BIT(8),
+    c1 DECIMAL(10,2)
+) ENGINE=Aria;
+
+-- 分表重建结构
+CREATE TABLE l(
+    id BIGINT PRIMARY KEY,
+    c0 BIT(8),
+    KEY k(c0,id)
+) ENGINE=Aria;
+
+CREATE TABLE r(
+    id BIGINT PRIMARY KEY,
+    c1 DECIMAL(10,2),
+    KEY k(id,c1)
+) ENGINE=Aria;
+
+INSERT INTO s VALUES
+    (1,NULL,NULL),
+    (2,2,2.01),
+    (3,3,3.01);
+
+INSERT INTO l SELECT id,c0 FROM s;
+INSERT INTO r SELECT id,c1 FROM s;
+
+-- 原始单表查询
+SELECT DISTINCT c1
+FROM s
+WHERE c1 IS NULL;
+
+-- 多表 JOIN 重建后的查询
+SELECT DISTINCT c1
+FROM (
+    SELECT l.id, l.c0, r.c1
+    FROM l JOIN r ON l.id=r.id
+) d
+WHERE c1 IS NULL;
+
+单表查询：
++------+
+| c1   |
++------+
+| NULL |
++------+
+
+JOIN 重写查询：
+Empty set
+
+执行计划：
+EXPLAIN
+SELECT DISTINCT c1
+FROM s
+WHERE c1 IS NULL;
+id  select_type  table  type  rows  Extra
+1   SIMPLE       s      ALL   3     Using where; Using temporary
+EXPLAIN
+SELECT DISTINCT c1
+FROM (
+    SELECT l.id, l.c0, r.c1
+    FROM l JOIN r ON l.id=r.id
+) d
+WHERE c1 IS NULL;
+在 join_cache_level=3 下：
+id  select_type  table  type        key        rows  Extra
+1   SIMPLE       l      index       PRIMARY    3     Using index; Using temporary
+1   SIMPLE       r      hash_index  #hash#k:k  3     Using where; Using index; Using join buffer (flat, BNLH join)
+疑似 MariaDB 优化器/执行器在 derived_merge=on 下将 r.c1 IS NULL 条件下推，并与 r 的覆盖索引 k(id,c1) 的 BNLH 哈希索引构建/探测结合；由于哈希连接按等值语义处理 NULL 键，导致 c1 IS NULL 的行在哈希匹配阶段被忽略或未正确匹配，最终丢失 id=1、c1=NULL 的结果。
+
+
+
+Thanks for checking. I can still reproduce the difference on MariaDB 12.3.2. The key setting appears to be join_cache_level=3. Could you please rerun the following complete case, including the session settings, and share the two EXPLAIN results?
+```sql
+CREATE DATABASE IF NOT EXISTS repro_mdev_41462;
+USE repro_mdev_41462;
+
+DROP TABLE IF EXISTS s, l, r;
+
+CREATE TABLE s (
+  id BIGINT,
+  c0 BIT(8),
+  c1 DECIMAL(10,2)
+) ENGINE=Aria;
+
+CREATE TABLE l (
+  id BIGINT PRIMARY KEY,
+  c0 BIT(8),
+  KEY k (c0, id)
+) ENGINE=Aria;
+
+CREATE TABLE r (
+  id BIGINT PRIMARY KEY,
+  c1 DECIMAL(10,2),
+  KEY k (id, c1)
+) ENGINE=Aria;
+
+INSERT INTO s VALUES
+  (1, NULL, NULL),
+  (2, 2, 2.01),
+  (3, 3, 3.01);
+
+INSERT INTO l SELECT id, c0 FROM s;
+INSERT INTO r SELECT id, c1 FROM s;
+
+SET SESSION optimizer_switch='derived_merge=on';
+SET SESSION join_cache_level=3;
+
+SELECT @@version, @@session.join_cache_level;
+
+SELECT DISTINCT c1
+FROM s
+WHERE c1 IS NULL;
+
+SELECT DISTINCT c1
+FROM (
+  SELECT l.id, l.c0, r.c1
+  FROM l JOIN r ON l.id = r.id
+) AS d
+WHERE c1 IS NULL;
+
+SET SESSION join_cache_level=0;
+
+SELECT DISTINCT c1
+FROM (
+  SELECT l.id, l.c0, r.c1
+  FROM l JOIN r ON l.id = r.id
+) AS d
+WHERE c1 IS NULL;
+
+```
+On my 12.3.2 instance, the direct query returns NULL. With join_cache_level=3, the join query returns an empty set and EXPLAIN shows r using hash_index (#hash#k:k). With join_cache_level=0, the join query returns NULL and r uses ref on index k.
+I also just reproduced the same difference with a direct l JOIN r ... WHERE r.c1 IS NULL query, without the derived table or DISTINCT. With join_cache_level=3, it uses hash_index and returns an empty set; with join_cache_level=0, it uses ref on index k and returns the NULL row. Could you confirm which access path was used in your run?  

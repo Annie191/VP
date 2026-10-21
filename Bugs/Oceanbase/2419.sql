@@ -1,0 +1,47 @@
+DROP DATABASE IF EXISTS repro_ob78_db0_min2;
+CREATE DATABASE repro_ob78_db0_min2;
+USE repro_ob78_db0_min2;
+
+SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_IN_DATE,NO_AUTO_CREATE_USER';
+SET SESSION time_zone = '+00:00';
+SET SESSION optimizer_switch = '';
+SET SESSION group_concat_max_len = 1048576;
+
+CREATE TABLE vp_s (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DOUBLE NULL,
+  KEY i0(c0)
+) ENGINE=InnoDB;
+
+INSERT INTO vp_s(c0) VALUES (1.0), (NULL);
+
+CREATE TABLE vp_l (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 DOUBLE NULL,
+  KEY i0(c0)
+) ENGINE=InnoDB;
+INSERT INTO vp_l SELECT id, c0 FROM vp_s;
+
+CREATE TABLE vp_r (
+  id BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+INSERT INTO vp_r SELECT id FROM vp_s;
+
+-- Single: wrong, returns NULL
+SELECT
+  IFNULL(('') NOT IN (vp_s.c0), TRUE) AS v
+FROM vp_s FORCE INDEX(i0)
+GROUP BY IFNULL(('') NOT IN (vp_s.c0), TRUE)
+HAVING SUM(c0) IS NOT NULL
+ORDER BY IFNULL(('') NOT IN (vp_s.c0), TRUE);
+
+-- Split: correct, returns 1
+SELECT
+  IFNULL(('') NOT IN (vp_s.c0), TRUE) AS v
+FROM (
+  SELECT l.id, l.c0
+  FROM vp_l l STRAIGHT_JOIN vp_r r ON l.id = r.id
+) vp_s
+GROUP BY IFNULL(('') NOT IN (vp_s.c0), TRUE)
+HAVING SUM(c0) IS NOT NULL
+ORDER BY IFNULL(('') NOT IN (vp_s.c0), TRUE);

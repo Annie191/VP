@@ -1,0 +1,115 @@
+https://github.com/databendlabs/databend/issues/20646 20658的同族
+
+DROP DATABASE IF EXISTS repro_databend919_db20_min;
+CREATE DATABASE repro_databend919_db20_min;
+USE repro_databend919_db20_min;
+
+CREATE TABLE s (id BIGINT NOT NULL) ENGINE=MEMORY;
+CREATE TABLE l (id BIGINT NOT NULL) ENGINE=FUSE;
+CREATE TABLE r (id BIGINT NOT NULL) ENGINE=MEMORY;
+
+INSERT INTO s VALUES (1);
+INSERT INTO l SELECT id FROM s;
+INSERT INTO r SELECT id FROM s;
+
+-- 单表查询：1.0
+SELECT AVG(id)
+FROM s
+WHERE NOT (0 BETWEEN id AND 0);
+
+-- 多表重建查询：NULL
+SELECT AVG(x.id)
+FROM (
+    SELECT l.id
+    FROM l RIGHT JOIN r ON l.id = r.id
+) x
+WHERE NOT (0 BETWEEN x.id AND 0);
+
+单表查询
+1.0
+
+多表重建查询
+NULL
+
+单表计划：
+EvalScalar
+├── expressions: [sum(id) / CAST(if(count(id) = 0, 1, count(id)) AS UInt64 NULL)]
+└── AggregateFinal
+    ├── group by: []
+    ├── aggregate functions: [sum(id), count()]
+    └── AggregatePartial
+        ├── group by: []
+        ├── aggregate functions: [sum(id), count()]
+        └── Filter
+            ├── filters: [NOT (0 >= s.id (#0) AND true)]
+            └── TableScan
+                ├── table: default.repro_databend919_db20_min.s
+                ├── read rows: 1
+                └── push downs: [filters: [NOT (0 >= s.id (#0) AND true)], limit: NONE]
+
+
+多表计划：
+
+EvalScalar
+├── expressions: [sum(x.id) / ... count(x.id) ...]
+└── AggregateFinal
+    ├── group by: []
+    ├── aggregate functions: [sum(id), count(id)]
+    └── AggregatePartial
+        ├── group by: []
+        ├── aggregate functions: [sum(id), count(id)]
+        └── HashJoin
+            ├── join type: INNER
+            ├── build keys: [CAST(r.id (#1) AS Int64 NULL)]
+            ├── probe keys: [l.id (#2)]
+            ├── keys is null equal: [false]
+            ├── filters: []
+            ├── Filter(Build)
+            │   ├── filters: [NOT (0 >= r.id (#1) AND true)]
+            │   └── TableScan
+            │       ├── table: default.repro_databend919_db20_min.r
+            │       ├── read rows: 1
+            │       ├── partitions total: 0
+            │       ├── partitions scanned: 0
+            │       └── push downs:
+            │           [filters: [NOT (0 >= r.id (#1) AND true)], limit: NONE]
+            └── EvalScalar(Probe)
+                ├── expressions: [CAST(l.id (#0) AS Int64 NULL)]
+                └── TableScan
+                    ├── table: default.repro_databend919_db20_min.l
+                    ├── read rows: 0
+                    ├── partitions total: 1
+                    ├── partitions scanned: 0
+                    ├── pruning stats:
+                    │   [segments: <read cost: 1 ms,
+                    │    range pruning: 1 to 0 cost: 1 ms>]
+                    └── push downs:
+                        [filters: [NOT (l.id (#0) >= 0 AND true)], limit: NONE]
+
+
+优化器对下面这个条件做谓词下推时：
+
+sql
+NOT (0 BETWEEN x.id AND 0)
+正确语义应该是：
+
+sql
+x.id > 0
+但在多表 RIGHT JOIN 场景下，优化器似乎把它错误地拆分成了类似：
+
+sql
+r.id > 0 OR l.id < 0
+然后在下推到 join 两侧时，错误地变成了：
+
+sql
+Build 侧 r: r.id > 0
+Probe 侧 l: l.id < 0
+这相当于把原本同一个列上的条件，错误地拆到了 join 两侧，并且变成了类似 AND 的关系：
+
+sql
+r.id > 0 AND l.id < 0
+再叠加等值连接：
+
+sql
+l.id = r.id
+就必然导致空结果。

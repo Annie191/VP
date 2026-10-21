@@ -1,0 +1,97 @@
+https://bugs.mysql.com/bug.php?id=120865&thanks=4  a duplicate of Bug#120429 which is fixed in the upcoming MySQL-9.7 LTS release.
+
+DROP DATABASE IF EXISTS repro73_29;
+CREATE DATABASE repro73_29;
+USE repro73_29;
+
+SET SESSION sql_mode =
+  'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+
+SET SESSION optimizer_switch =
+  'index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,engine_condition_pushdown=on,index_condition_pushdown=on,mrr=on,mrr_cost_based=on,block_nested_loop=on,batched_key_access=off,materialization=on,semijoin=on,loosescan=on,firstmatch=on,duplicateweedout=on,subquery_materialization_cost_based=on,use_index_extensions=on,condition_fanout_filter=on,derived_merge=on,use_invisible_indexes=off,skip_scan=on,hash_join=on,subquery_to_derived=off,prefer_ordering_index=on,hypergraph_optimizer=off,derived_condition_pushdown=on,hash_set_operations=on';
+
+SET SESSION big_tables = 0;
+SET SESSION internal_tmp_mem_storage_engine = 'MEMORY';
+
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL,
+  c1 DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+
+INSERT INTO src (c0, c1) VALUES
+  (NULL, NULL),
+  (NULL, NULL),
+  (NULL, -1295921894),
+  (1, NULL);
+
+ALTER TABLE src ADD UNIQUE KEY i0 (c0 DESC, c1);
+ALTER TABLE src ADD KEY i1 (c1, c0);
+
+CREATE TABLE l (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c1 DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+
+INSERT INTO l (vp_rowid, c1) SELECT vp_rowid, c1 FROM src;
+INSERT INTO r (vp_rowid, c0) SELECT vp_rowid, c0 FROM src;
+
+CREATE INDEX l_asym ON l(vp_rowid, c1);
+CREATE INDEX r_idx ON r(vp_rowid, c0);
+
+SELECT 'single' AS qt, MIN(DISTINCT IFNULL(NULL, c0)) AS ref0
+FROM src;
+
+SELECT 'split' AS qt, MIN(DISTINCT IFNULL(NULL, c0)) AS ref0
+FROM (
+  SELECT l.vp_rowid, r.c0, l.c1
+  FROM l
+  JOIN (
+    SELECT vp_rowid, JSON_OBJECT('vp', vp_rowid) AS payload
+    FROM r
+  ) jp ON l.vp_rowid = jp.vp_rowid
+  JOIN r ON r.vp_rowid = jp.vp_rowid
+) AS src;
+
+single: 1       ✓
+split:  NULL    ❌  数据验证有 c0=1，但 MIN 不认
+
+-- Single:
+-> Aggregate: min(ifnull(NULL,src.c0))
+    -> Table scan on src
+
+-- Split: JSON_PACK → NLJ
+-> Aggregate: min(ifnull(NULL,r.c0))
+    -> Nested loop inner join
+        -> Nested loop inner join
+            -> Covering index scan on l using PRIMARY
+            -> Single-row index lookup on r using PRIMARY (vp_rowid = l.vp_rowid)
+        -> Single-row index lookup on r using PRIMARY (vp_rowid = l.vp_rowid)
+
+数据：c0 = NULL, NULL, NULL, 1。MIN(DISTINCT IFNULL(NULL, c0)) = MIN(DISTINCT c0) = MIN({NULL, 1}) 应返回 1。
+
+路径	结果	原因
+Table scan	1 ✓	直接读表，MIN 正确
+JSON_PACK NLJ	NULL ❌	NLJ 结果中 MIN(DISTINCT IFNULL(NULL, r.c0)) 忽略了非 NULL 值
+
+JSON_PACK 重构产生的 NLJ 派生表上，MIN(DISTINCT IFNULL(NULL, col)) 聚合函数错误地返回 NULL，即使数据中确实存在非 NULL 值。
+
+内层派生表 jp 被优化器 合并消除（因为 jp.payload 未被外层引用，且等值连接 l.vp_rowid = jp.vp_rowid 可直接用 l.vp_rowid = r.vp_rowid 替代），实际执行的是 l JOIN r 两次（一次用于原 jp 条件，一次用于回表取 c0）。
+
+最终送入聚合的输入行就是 r 表中的四行，c0 值分别为 NULL, NULL, NULL, 1。
+
+聚合 MIN(DISTINCT IFNULL(NULL, r.c0)) 本应得到 1，然而优化器在处理 DISTINCT 聚合 时，会在内部创建一个临时表进行去重。
+
+题出在 生成 DISTINCT 去重临时表 的过程中：
+
+输入行的 c0 列包含值 1，其内部表示（DECIMAL 类型）和 NULL 标志位均正确。
+
+但在写入去重临时表时，由于优化器错误地继承了某处 可空列的 NULL 语义，导致临时表为该列设置的 NOT NULL 属性或比较函数 出现偏移。
+一种典型表现：DISTINCT 比较时，错误地将非 NULL 的 1 视为 NULL，因此在去重逻辑中 1 被当作 NULL 而丢弃。
+
+最终，所有非 NULL 值都被排除，临时表中仅剩 NULL 行，MIN() 自然返回 NULL。

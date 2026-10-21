@@ -1,0 +1,89 @@
+DROP DATABASE IF EXISTS repro_databend918_db2_min;
+CREATE DATABASE repro_databend918_db2_min;
+USE repro_databend918_db2_min;
+
+SET default_order_by_null = 'nulls_last';
+SET disable_join_reorder = 0;
+SET enable_bloom_runtime_filter = 1;
+SET enable_cbo = 1;
+SET enable_join_runtime_filter = 1;
+SET enable_query_result_cache = 0;
+SET max_threads = 40;
+SET numeric_cast_option = 'rounding';
+SET sql_dialect = 'PostgreSQL';
+SET timezone = 'UTC';
+
+CREATE TABLE source2 (
+  vp_rowid BIGINT NOT NULL,
+  c0date DATE NULL DEFAULT '1969-12-23',
+  c1varchar VARCHAR NOT NULL,
+  c2tuple TUPLE(BIGINT NULL, VARCHAR NULL) NULL
+) ENGINE = MEMORY;
+
+INSERT INTO source2 VALUES
+  (29, NULL, 'vp_0', (0, 'vp_0'));
+
+CREATE TABLE left2 (
+  vp_rowid BIGINT NOT NULL,
+  c1varchar VARCHAR NULL,
+  c0date DATE NULL
+) ENGINE = FUSE;
+
+CREATE TABLE right2 (
+  vp_rowid BIGINT NOT NULL,
+  c2tuple TUPLE(BIGINT NULL, VARCHAR NULL) NULL
+) ENGINE = FUSE;
+
+INSERT INTO left2
+SELECT vp_rowid, c1varchar, c0date
+FROM source2;
+
+INSERT INTO right2
+SELECT vp_rowid, c2tuple
+FROM source2;
+
+SELECT c2tuple
+FROM source2
+WHERE (c0date = c0date)
+   OR (
+        (NOT TRUE)
+        AND (
+          DATE '1970-01-20'
+          NOT BETWEEN DATE '1969-12-09' AND DATE '1970-01-02'
+        )
+      );
+
+SELECT x.c2tuple
+FROM (
+  SELECT l.vp_rowid,
+         l.c0date,
+         l.c1varchar,
+         r.c2tuple
+  FROM left2 l
+  JOIN right2 r
+    ON l.vp_rowid = r.vp_rowid
+) x
+WHERE (x.c0date = x.c0date)
+   OR (
+        (NOT TRUE)
+        AND (
+          DATE '1970-01-20'
+          NOT BETWEEN DATE '1969-12-09' AND DATE '1970-01-02'
+        )
+      );
+
+单表：无行
+JOIN： (0, "vp_0")
+
+单表计划：
+Filter
+└── TableScan
+    filters: is_true(c0date = c0date)
+由于 c0date 为 NULL，c0date = c0date 为 UNKNOWN，行被过滤。
+JOIN 计划：
+HashJoin
+├── join type: INNER
+├── filters: []
+├── TableScan(Build): right2
+└── TableScan(Probe): left2
+JOIN 后没有保留 c0date = c0date 过滤条件，因此 NULL 日期行仍输出其 tuple。

@@ -1,0 +1,90 @@
+下面这个新案例触发了同样的问题
+
+DROP DATABASE IF EXISTS repro_mariadb806_db13_min1;
+CREATE DATABASE repro_mariadb806_db13_min1
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;
+USE repro_mariadb806_db13_min1;
+
+CREATE TABLE t4 (
+  c0 CHAR(100) NOT NULL,
+  c1 CHAR(100)
+) ENGINE=InnoDB
+  DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci;
+
+INSERT INTO t4 VALUES ('东WYFOT<E', NULL);
+
+CREATE TABLE vp_mariadb_database13_99689_source LIKE t4;
+ALTER TABLE vp_mariadb_database13_99689_source
+  ADD COLUMN vp_rowid BIGINT NOT NULL FIRST;
+ALTER TABLE vp_mariadb_database13_99689_source ENGINE=InnoDB;
+
+INSERT INTO vp_mariadb_database13_99689_source (vp_rowid, c0, c1)
+SELECT ROW_NUMBER() OVER (ORDER BY c0), c0, c1
+FROM t4;
+
+CREATE TABLE vp_mariadb_database13_99689_left (
+  vp_rowid BIGINT NOT NULL,
+  c0 CHAR(100)
+) ENGINE=InnoDB;
+
+CREATE TABLE vp_mariadb_database13_99689_right (
+  vp_rowid BIGINT NOT NULL,
+  c1 CHAR(100)
+) ENGINE=InnoDB;
+
+INSERT INTO vp_mariadb_database13_99689_left
+SELECT vp_rowid, c0 FROM vp_mariadb_database13_99689_source;
+
+INSERT INTO vp_mariadb_database13_99689_right
+SELECT vp_rowid, c1 FROM vp_mariadb_database13_99689_source;
+
+SET NAMES utf8mb4 COLLATE utf8mb4_uca1400_ai_ci;
+
+-- 单表查询
+SELECT *
+FROM (
+  SELECT TRIM(ORD(c0)) AS vp_ast_col_0
+  FROM vp_mariadb_database13_99689_source
+) q
+ORDER BY 1;
+
+-- 多表重写查询
+SELECT *
+FROM (
+  SELECT TRIM(ORD(c0)) AS vp_ast_col_0
+  FROM (
+    SELECT l.vp_rowid, l.c0, r.c1
+    FROM (SELECT * FROM vp_mariadb_database13_99689_left) l
+    JOIN (SELECT * FROM vp_mariadb_database13_99689_right) r
+      ON l.vp_rowid = r.vp_rowid
+  ) vp_rel
+) q
+ORDER BY 1;
+
+单表查询: 14989468
+多表查询: 1498946
+
+
+执行计划：
+单表:
+1 | SIMPLE | vp_mariadb_database13_99689_source
+  | ALL | NULL | NULL | NULL | NULL | 1
+  | Using filesort
+
+
+虽然也是全表扫描 + ORDER BY 触发 filesort，但没有 Using temporary。
+filesort 直接对表达式结果排序，表达式的值在排序过程中没有被截断。
+
+多表:
+1 | SIMPLE | vp_mariadb_database13_99689_left
+  | ALL | NULL | NULL | NULL | NULL | 1
+  | Using temporary; Using filesort
+
+1 | SIMPLE | vp_mariadb_database13_99689_right
+  | ALL | NULL | NULL | NULL | NULL | 1
+  | Using where; Using join buffer (flat, BNL join)
+
+左侧表出现 Using temporary; Using filesort，说明连接结果需要物化到临时表后再排序。
+问题就出在这个临时表上：临时表为 TRIM(ORD(c0)) 分配的列宽度小于实际字符串长度，导致数据写入时被截断。
+
+此案例与原始案例共同证明：无论单表是否发生 filesort 或 const 优化，只要TRIM(ORD(...)) 在物化临时表或派生表时路径中产生了 Using temporary 物化中间结果，就可能触发该截断问题。

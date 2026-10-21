@@ -1,0 +1,105 @@
+https://jira.mariadb.org/browse/MDEV-41327 ok
+
+DROP DATABASE IF EXISTS repro_mariadb_database3_tiny;
+CREATE DATABASE repro_mariadb_database3_tiny;
+USE repro_mariadb_database3_tiny;
+
+CREATE TABLE source (
+  vp_rowid BIGINT PRIMARY KEY,
+  c0 SET('a','b','c') NOT NULL,
+  c1 DATE NOT NULL,
+  c2 ENUM('a','b','c') NOT NULL,
+  c3 TIMESTAMP NOT NULL
+) ENGINE=MyISAM;
+
+INSERT INTO source VALUES
+  (1, '', '0000-00-00', 'a', '0000-00-00 00:00:00');
+INSERT INTO source VALUES
+  (2, 'a', '2000-01-03', 'b', '2000-01-01 00:00:02');
+
+CREATE TABLE l (
+  vp_rowid BIGINT PRIMARY KEY,
+  c0 SET('a','b','c') NOT NULL,
+  c2 ENUM('a','b','c') NOT NULL
+) ENGINE=MyISAM;
+
+CREATE TABLE r (
+  vp_rowid BIGINT PRIMARY KEY,
+  c1 DATE NOT NULL,
+  c3 TIMESTAMP NOT NULL
+) ENGINE=MyISAM;
+
+INSERT INTO l SELECT vp_rowid, c0, c2 FROM source;
+INSERT INTO r SELECT vp_rowid, c1, c3 FROM source;
+
+SET SESSION optimizer_switch='derived_merge=off';
+
+-- 单表查询
+SELECT 'direct' AS tag, x
+FROM (
+  SELECT DISTINCT c3 AS x
+  FROM source
+  WHERE c3 IN (c2 << c2)
+) q;
+
+-- 多表重写查询
+SELECT 'rewrite' AS tag, x
+FROM (
+  SELECT DISTINCT c3 AS x
+  FROM (
+    SELECT
+      l.vp_rowid,
+      l.c0,
+      r.c1,
+      l.c2,
+      r.c3
+    FROM l
+    JOIN (
+      SELECT r0.*
+      FROM r r0
+      WHERE r0.vp_rowid IN (
+        SELECT vp_rowid FROM l
+      )
+    ) r ON l.vp_rowid = r.vp_rowid
+  ) source
+  WHERE c3 IN (c2 << c2)
+) q;
+
+单表：1 行，0000-00-00 00:00:00
+重写：0 行
+
+
+差异由两个独立问题叠加造成。
+
+问题一：c3 IN (c2 << c2) 的隐式类型转换链（这是最关键、最反直觉的一点）
+这条表达式实际执行了三层隐式转换：
+
+c2 是 ENUM('a','b','c')，参与 << 位运算时，MariaDB 用索引值转整数：'a' → 1
+
+c2 << c2 得到整数 2
+
+IN 比较时，c3 是 TIMESTAMP，MariaDB 不会把 c3 转成数字，而是把右边的整数 2 转成 DATETIME 再比
+
+2 不是合法的 datetime 字面量，被截断为零日期，并抛出警告：
+
+text
+Warning 1292: Truncated incorrect datetime value: '2'
+即：
+
+sql
+c3 IN (2)  ≡  c3 = CAST(2 AS DATETIME)  ≡  c3 = '0000-00-00 00:00:00'
+row1 的 c3 恰好就是 '0000-00-00 00:00:00'，所以单表查询命中，返回 1 行。
+
+问题二：derived_merge=off 下派生表物化时 c2 列被剪枝
+原始重写查询外层只投影了 c3：
+
+sql
+SELECT DISTINCT c3 AS x
+FROM ( ... ) source
+WHERE c3 IN (c2 << c2)
+source 派生表物化时，优化器只保留外层需要的列。由于 c2 未被外层投影，c2 在物化结果中缺失/变为 NULL：
+
+sql
+c2 << c2  →  NULL << NULL  →  NULL
+c3 IN (NULL)  →  NULL
+WHERE NULL 过滤掉所有行，最终返回 0 行。

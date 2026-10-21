@@ -1,0 +1,72 @@
+{
+  "database": "Databend",
+  "source": "/home/lwm/sqlancer/Bugs/Databend/20645.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "-- 单表：成功，返回 NULL\nSELECT AVG(id)\nFROM s\nWHERE -2 * id NOT IN (id, -id)\n  AND -id = id",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "/* 单表：成功，返回 NULL */ SELECT AVG(id) FROM s",
+      "ok": true,
+      "rows": [
+        "1.0"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "SELECT SUM(agg_sum) / NULLIF(SUM(agg_count), 0) FROM (/* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id UNION ALL /* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT NOT -2 * id IN (id, -id) AND -id = id UNION ALL /* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id IS NULL) AS tlp_parts",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "/* 单表：成功，返回 NULL */ SELECT COUNT(*) FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id",
+      "ok": true,
+      "rows": [
+        "0"
+      ],
+      "stderr": "",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "/* 单表：成功，返回 NULL */ SELECT SUM(CASE WHEN NOT -2 * id IN (id, -id) AND -id = id THEN 1 ELSE NULL END) FROM s",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "-- 单表：成功，返回 NULL\nSELECT AVG(id)\nFROM s\nWHERE -2 * id NOT IN (id, -id)\n  AND -id = id;",
+  "variants": {
+    "tlp_base": "/* 单表：成功，返回 NULL */ SELECT AVG(id) FROM s",
+    "tlp_part_true": "/* 单表：成功，返回 NULL */ SELECT AVG(id) FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id",
+    "tlp_part_false": "/* 单表：成功，返回 NULL */ SELECT AVG(id) FROM s WHERE NOT NOT -2 * id IN (id, -id) AND -id = id",
+    "tlp_part_unknown": "/* 单表：成功，返回 NULL */ SELECT AVG(id) FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id IS NULL",
+    "tlp_union": "SELECT SUM(agg_sum) / NULLIF(SUM(agg_count), 0) FROM (/* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id UNION ALL /* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT NOT -2 * id IN (id, -id) AND -id = id UNION ALL /* 单表：成功，返回 NULL */ SELECT SUM(id) AS agg_sum, COUNT(id) AS agg_count FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id IS NULL) AS tlp_parts",
+    "norec_optimized": "/* 单表：成功，返回 NULL */ SELECT COUNT(*) FROM s WHERE NOT -2 * id IN (id, -id) AND -id = id",
+    "norec_unoptimized": "/* 单表：成功，返回 NULL */ SELECT SUM(CASE WHEN NOT -2 * id IN (id, -id) AND -id = id THEN 1 ELSE NULL END) FROM s",
+    "predicate": "NOT -2 * id IN (id, -id) AND -id = id"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": true,
+  "norec_checked": true,
+  "norec_inconsistent": false,
+  "notes": [
+    "NoREC comparison normalizes empty aggregate NULL to 0."
+  ]
+}

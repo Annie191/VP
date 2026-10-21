@@ -1,0 +1,89 @@
+# mariadb809/12bug.log的同类
+
+DROP DATABASE IF EXISTS repro_mariadb809_db11_min;
+CREATE DATABASE repro_mariadb809_db11_min;
+USE repro_mariadb809_db11_min;
+
+-- 单表查询的数据源
+CREATE TABLE source_data (
+    c0 MEDIUMINT NOT NULL,
+    UNIQUE KEY uq_c0 (c0)
+) ENGINE=MyISAM;
+
+INSERT INTO source_data(c0)
+VALUES (1),(2),(3),(4),(5),(6),(7),(8);
+
+-- VP source
+CREATE TABLE vp_source (
+    vp_rowid BIGINT NOT NULL,
+    c0 MEDIUMINT NOT NULL,
+    PRIMARY KEY (vp_rowid),
+    UNIQUE KEY uq_c0 (c0)
+) ENGINE=MyISAM;
+
+INSERT INTO vp_source(vp_rowid, c0)
+SELECT ROW_NUMBER() OVER (ORDER BY c0), c0
+FROM source_data;
+
+-- 两表重构关系
+CREATE TABLE vp_left (
+    vp_rowid BIGINT NOT NULL PRIMARY KEY
+) ENGINE=MyISAM;
+
+CREATE TABLE vp_right (
+    vp_rowid BIGINT NOT NULL PRIMARY KEY,
+    c0 MEDIUMINT NOT NULL
+) ENGINE=MyISAM;
+
+INSERT INTO vp_left
+SELECT vp_rowid FROM vp_source;
+
+INSERT INTO vp_right
+SELECT vp_rowid, c0 FROM vp_source;
+
+CREATE INDEX idx_right_c0 ON vp_right(c0);
+
+SELECT DISTINCTROW
+    c0 AS a,
+    c0 AS b,
+    c0 AS c,
+    BIT_COUNT(c0 IN (c0)) AS d,
+    c0 AS e
+FROM vp_source
+WHERE c0 IN ('0.5186921352948665');
+
+SELECT DISTINCTROW
+    c0 AS a,
+    c0 AS b,
+    c0 AS c,
+    BIT_COUNT(c0 IN (c0)) AS d,
+    c0 AS e
+FROM (
+    SELECT
+        l.vp_rowid,
+        r.c0 AS c0
+    FROM vp_left l
+    LEFT JOIN vp_right r
+        ON l.vp_rowid = r.vp_rowid
+) AS reconstructed
+WHERE c0 IN ('0.5186921352948665');
+
+单表查询结果：空集。
+
+多表 LEFT JOIN 重构查询结果：
+
+a  b  c  d  e
+1  1  1  1  1
+
+直接查询执行计划：
+id  select_type  table      type    possible_keys  key   rows  Extra
+1   PRIMARY      <derived2> system  NULL           NULL  0     Const row not found
+2   DERIVED      NULL       NULL    NULL           NULL  NULL  Impossible WHERE noticed after reading const tables
+重构查询执行计划：
+id  select_type  table  type  possible_keys       key          key_len  ref                                      rows  Extra
+1   PRIMARY      <derived2> ALL   NULL             NULL         NULL     NULL                                     2     Using filesort
+2   DERIVED      r      ref   PRIMARY,idx_right_c0 idx_right_c0 3        const                                    1     Using temporary
+2   DERIVED      l      eq_ref PRIMARY            PRIMARY      8        repro_mariadb809_db11_min.r.vp_rowid     1     Using index; Distinct
+直接路径在优化早期就判定 c0 = '0.5186921352948665' 不可能成立，直接返回空集。这个判断在 SQL 语义上是正确的。
+
+重构查询索引查找阶段发生了隐式转换，并且转换结果不是 0.518...，而是 1。

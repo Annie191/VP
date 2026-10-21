@@ -1,0 +1,57 @@
+https://bugs.mysql.com/bug.php?id=120864  duplicate of Bug#120429 which is fixed in the upcoming MySQL-9.7 LTS release.
+
+DROP DATABASE IF EXISTS repro8;
+CREATE DATABASE repro8;
+USE repro8;
+
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 FLOAT NULL, c1 DECIMAL(65,30) NULL
+) ENGINE=InnoDB;
+INSERT INTO src (c0, c1) VALUES (0.0, NULL), (1.16575E9, 1);
+ALTER TABLE src ADD KEY i0 (c0 DESC, c1 DESC);
+
+CREATE TABLE l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c1 DECIMAL(65,30) NULL) ENGINE=InnoDB;
+CREATE TABLE r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 FLOAT NULL) ENGINE=InnoDB;
+INSERT INTO l SELECT vp_rowid, c1 FROM src;
+INSERT INTO r SELECT vp_rowid, c0 FROM src;
+
+-- Single: 覆盖索引 → (-2,0), (-1,NULL) ✓
+SELECT (- vp_rowid) AS ref0, ('x') = (IFNULL(NULL, c1) XOR 0) AS ref1
+FROM src GROUP BY (- vp_rowid), ('x') = (IFNULL(NULL, c1) XOR 0);
+
+-- Split: AGGREGATE_THEN_MERGE → ref1 全部 NULL ❌
+SELECT (- vp_rowid) AS ref0, ('x') = (IFNULL(NULL, c1) XOR 0) AS ref1
+FROM (
+  SELECT l.vp_rowid, r.c0, l.c1
+  FROM l
+  JOIN (SELECT vp_rowid, COUNT(*) AS c FROM r GROUP BY vp_rowid) rg ON l.vp_rowid = rg.vp_rowid
+  JOIN r ON r.vp_rowid = rg.vp_rowid
+) AS src GROUP BY (- vp_rowid), ('x') = (IFNULL(NULL, c1) XOR 0);
+
+single: (-2, 0), (-1, NULL) ✓
+split:  (-2, NULL), (-1, NULL) ❌ (ref1=0 变成 NULL)
+
+-- Single: 覆盖索引 → ref1 正确
+-> Table scan on <temporary>
+    -> Temporary table with deduplication
+        -> Covering index scan on src using i0(c0 DESC, c1 DESC)
+
+-- Split: AGGREGATE_THEN_MERGE → ref1 全部 NULL
+-> Table scan on <temporary>
+    -> Temporary table with deduplication
+        -> Nested loop inner join
+            -> Nested loop inner join
+                -> Table scan on rg
+                    -> Materialize
+                        -> Group aggregate: count(0)
+                            -> Covering index scan on r using PRIMARY
+                -> Single-row index lookup on l using PRIMARY (vp_rowid = rg.vp_rowid)
+            -> Single-row covering index lookup on r using PRIMARY (vp_rowid = rg.vp_rowid)
+
+当优化器执行 AGGREGATE_THEN_MERGE 时，它需要重新规划从合并后的数据流到外层 GROUP BY 表达式的列引用。
+在这个过程中，外层表达式引用的 c1 被错误地映射到了内部物化表 rg 的列（或一个不存在的列），而 rg 表只有 vp_rowid 和 COUNT(*)，没有 c1 列，因此读到的值为 NULL。
+
+对于 vp_rowid=2，l.c1=1 已经被正确地从 l 表取出，但传入外层分组求值时，该值被丢弃，表达式获取到的是来自错误映射位置的 NULL。
+
+因此 IFNULL(NULL, NULL) = NULL → NULL XOR 0 = NULL → 最终 ref1 = NULL。

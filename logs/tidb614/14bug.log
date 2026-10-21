@@ -1,0 +1,147 @@
+#69190 https://github.com/pingcap/tidb/issues/69190 confirmed as a bug.
+
+DROP DATABASE IF EXISTS repro_tidb614_db14;
+CREATE DATABASE repro_tidb614_db14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+USE repro_tidb614_db14;
+
+CREATE TABLE src (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 BOOLEAN NULL
+);
+
+INSERT INTO src(c0) VALUES
+  (FALSE),
+  (TRUE);
+
+CREATE TABLE l (
+  id BIGINT NOT NULL PRIMARY KEY
+);
+
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 BOOLEAN NULL
+);
+
+INSERT INTO l SELECT id FROM src;
+INSERT INTO r SELECT id, c0 FROM src;
+
+-- 先看逐行转换结果
+SELECT
+  id,
+  c0,
+  CAST(c0 AS DATE) AS c0_date,
+  CAST(CAST(c0 AS DATE) AS DATETIME) AS c0_dt
+FROM src
+ORDER BY id;
+
+-- 单表 source 查询：返回 0
+SELECT
+  BIT_AND(
+    CAST(
+      CASE 0.964765709243282
+        WHEN id THEN id
+        ELSE CAST(c0 AS DATE)
+      END AS DATETIME
+    )
+  ) AS source_val
+FROM src
+WHERE '2023-05-28';
+
+-- split/join 查询：返回 18446744073709551615
+SELECT
+  BIT_AND(
+    CAST(
+      CASE 0.964765709243282
+        WHEN v.id THEN v.id
+        ELSE CAST(v.c0 AS DATE)
+      END AS DATETIME
+    )
+  ) AS split_val
+FROM (
+  SELECT id, r.c0 AS c0
+  FROM l JOIN r USING(id)
+) v
+WHERE '2023-05-28';
+
+逐行转换结果是：
++----+------+------------+---------------------+
+| id | c0   | c0_date    | c0_dt               |
++----+------+------------+---------------------+
+|  1 |    0 | 0000-00-00 | 0000-00-00 00:00:00 |
+|  2 |    1 | NULL       | NULL                |
++----+------+------------+---------------------+
+按这个语义，参与 BIT_AND 的有效值应该包含 0，所以正确结果应为：
+0
+但实际复现结果是：
+source_val = 0
+split_val  = 18446744073709551615
+其中 18446744073709551615 是 BIT_AND 在全 NULL / 无有效输入时的 identity 值，也就是 UINT64_MAX。
+
+如果把 CASE 去掉，单表和 split 都返回 0，不复现,结果都是：0
+
+单表执行计划
+
+Projection_7
+└─Sort_9
+  └─HashAgg_17 root
+    └─TableReader_18
+      └─HashAgg_11 cop[tikv]
+        └─TableFullScan_16 table:src
+
+关键点是 BIT_AND 被下推到了 TiKV,也就是说单表 source 路径在 TiKV 侧完成了部分/全部 BIT_AND 聚合，返回 0。
+
+HashAgg_11 cop[tikv]
+operator info:
+funcs:bit_and(
+  cast(
+    cast(
+      cast(
+        cast(src.c0, date BINARY),
+        var_string(10)
+      ),
+      datetime BINARY
+    ),
+    bigint BINARY
+  )
+)->Column#6
+
+split/join 执行计划
+
+StreamAgg_15
+└─Projection_60
+  └─IndexJoin_46
+    ├─TableReader_37
+    │ └─TableFullScan_36 table:l
+    └─TableReader_39
+      └─TableRangeScan_38 table:r
+
+关键点是这里没有把 BIT_AND 聚合下推到 TiKV，聚合在 root 层执行：
+
+StreamAgg_15 root
+operator info:
+funcs:bit_and(Column#7)->Column#6
+
+而表达式在 root projection 里算：
+
+Projection_60 root
+operator info:
+cast(
+  cast(
+    cast(
+      cast(r.c0, date BINARY),
+      var_string(10)
+    ),
+    datetime BINARY
+  ),
+  bigint BINARY
+)->Column#7
+
+推测的根因：
+在 root 层（TiDB 执行器），当 CASE 表达式的 ELSE 分支返回 CAST(c0 AS DATE) 时：
+c0 = FALSE (0) → CAST(0 AS DATE) → '0000-00-00' (date 类型)
+外层 CAST(... AS DATETIME) → '0000-00-00 00:00:00' (datetime 类型)
+最外层 CAST(... AS BIGINT) → 在 root 层可能产生 NULL 或特殊值
+对比 TiKV cop 层和 TiDB root 层对 '0000-00-00' 转 BIGINT 的处理：
+TiKV: '0000-00-00' → 作为 datetime 转 bigint 可能得到 0
+TiDB root: 可能因 zero-date 严格模式 或 类型系统差异 产生 NULL
+如果 root 层将 '0000-00-00 00:00:00' 转 bigint 时产生 NULL，则 BIT_AND 的输入变为全 NULL，返回 UINT64_MAX。

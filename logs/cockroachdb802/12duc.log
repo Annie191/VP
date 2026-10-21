@@ -1,0 +1,132 @@
+https://github.com/cockroachdb/cockroach/issues/173063 the same decimal precision loss as #173065.
+
+DROP DATABASE IF EXISTS repro_cockroachdb82_db12_min CASCADE;
+CREATE DATABASE repro_cockroachdb82_db12_min;
+USE repro_cockroachdb82_db12_min;
+
+SET vectorize = 'on';
+SET distsql = 'always';
+
+CREATE TABLE vp_source (
+  vp_rowid INT8 PRIMARY KEY,
+  c0 DECIMAL,
+  c1 INT4
+);
+-- 使单表走与原始案例同类的二级索引扫描。
+CREATE INDEX src_c1_c0 ON vp_source (c1, c0);
+
+CREATE TABLE vp_l (vp_rowid INT8 PRIMARY KEY);
+CREATE TABLE vp_r (
+  vp_rowid INT8 PRIMARY KEY,
+  c0 DECIMAL,
+  c1 INT4
+);
+
+INSERT INTO vp_source VALUES
+  (1, NULL, 1),
+  (2, NULL, 1),
+  (3, 99999999999999999999.9999999999, 1),
+  (4, 99999999999999999999.9999999999, 1),
+  (5, 99999999999999999999.9999999999, 1),
+  (6, 99999999999999999999.9999999999, 1),
+  (7, 99999999999999999999.9999999999, 1),
+  (8, 99999999999999999999.9999999999, 1),
+  (9, 99999999999999999999.9999999999, 1),
+  (10, 99999999999999999999.9999999999, 1),
+  (11, 99999999999999999999.9999999999, 1),
+  (12, 99999999999999999999.9999999999, 1);
+
+INSERT INTO vp_l SELECT vp_rowid FROM vp_source;
+INSERT INTO vp_r SELECT vp_rowid, c0, c1 FROM vp_source;
+
+ALTER TABLE vp_source SPLIT AT VALUES (3), (5), (7), (9), (11);
+ALTER TABLE vp_l SPLIT AT VALUES (3), (5), (7), (9), (11);
+ALTER TABLE vp_r SPLIT AT VALUES (3), (5), (7), (9), (11);
+
+ALTER TABLE vp_source SCATTER;
+ALTER TABLE vp_l SCATTER;
+ALTER TABLE vp_r SCATTER;
+
+SELECT 'single' AS shape, VARIANCE(c0)
+FROM vp_source@src_c1_c0;
+
+SELECT 'string-pack' AS shape, VARIANCE(c0)
+FROM vp_l l
+JOIN (
+  SELECT vp_rowid, concat('vp:', vp_rowid::STRING) AS payload
+  FROM vp_r
+) sp ON concat('vp:', l.vp_rowid::STRING) = sp.payload
+JOIN vp_r r ON r.vp_rowid = sp.vp_rowid;
+
+single       | -1111111111.1111111111
+string-pack  | -3333333333.3333333333
+
+单表执行计划：
+
+distribution: local
+
+group (scalar)
+  scan vp_source@src_c1_c0
+  aggregate: variance(c0)
+
+STRING_PACK 多表重建：
+
+distribution: full
+
+group (scalar)
+  hash join: column14 = payload
+    render
+      scan vp_l@vp_l_pkey
+    merge join: vp_rowid = vp_rowid
+      render
+        scan vp_r@vp_r_pkey
+      scan vp_r@vp_r_pkey
+  aggregate: variance(r.c0)
+
+  1. 单表结果已错误：方差不应为负
+数据中非 NULL 的 c0 全是 99999999999999999999.9999999999（10 行完全相同），NULL 有 2 行。
+
+无论样本方差还是总体方差，所有非 NULL 值完全相等时，方差必定为 0。
+
+实际单表 VARIANCE(c0) 返回 -1111111111.1111111111，这是一个典型的减法消去（catastrophic cancellation）引起的负零漂移。
+这说明方差内部使用的统计算法在极大的 DECIMAL 值上发生了精度截断，，从而计算出负数。
+
+2. 多表查询放大了误差，且结果正好是 3 倍
+多表 string-pack 查询在语义上与单表等价，最终聚合的也是 vp_r.c0，理论上行集完全相同。
+
+结果变成 -3333333333.3333333333（，恰好是单表结果的 3 倍。
+
+倍数 3 不是巧合，而与分布式执行方式直接相关：
+
+单表走 local 分布，聚合在网关节点单机完成，只经历一次错误计算。
+
+多表走 full 分布，且执行计划中 vp_r 表被扫描了两次（一次作为 sp，一次作为 r），并通过 merge join 自连接。虽然最终行数未变，但在全分布模式下，VARIANCE 被分解为多个局部聚合和最终合并。
+
+局部聚合产生的部分统计量各自带有前述精度误差，合并时误差非线性叠加，最终方差负向漂移被放大为原来的 3 倍。三倍关系很可能对应了数据分区数（6 个 range）与合并树结构（例如 3 个并行分支）或 vp_r 重复扫描导致的权重变化。
+
+3. 根本原因总结
+核心根因在于 CockroachDB 的 variance 聚合实现，对 DECIMAL 类型的大数值缺乏足够的数值保护。
+当所有输入值相等且极大时：
+
+求值公式中的 sum_sqr - (sum * sum) / count 本应为 0，但因 DECIMAL 运算的精度限制变成了微小负数。
+
+在分布式两阶段聚合中，局部误差被带入合并公式，造成与计划形态相关的非确定性放大。
+
+单表 local 和多表 full 的差异，以及多表计划中对同一表的多重引用，共同触发了误差的倍数化。
+
+这应被视为一个 bug： 方差函数应对极大 DECIMAL 值时具备更稳定的数值算法（例如使用中心化方式，或内部升级精度），同时分布式合并逻辑需保证对边界输入（全相等）的鲁棒性。
+
+各自带有前述精度误差，合并时误差非线性叠加，最终方差负向漂移被放大为原来的 3 倍。三倍关系很可能对应了数据分区数（6 个 range）与合并树结构（例如 3 个并行分支）或 vp_r 重复扫描导致的权重变化。
+
+3. 根本原因总结
+核心根因在于 CockroachDB 的 variance 聚合实现，对 DECIMAL 类型的大数值缺乏足够的数值保护。
+当所有输入值相等且极大时：
+
+求值公式中的 sum_sqr - (sum * sum) / count 本应为 0，但因 DECIMAL 运算的精度限制变成了微小负数。
+
+在分布式两阶段聚合中，局部误差被带入合并公式，造成与计划形态相关的非确定性放大。
+
+单表 local 和多表 full 的差异，以及多表计划中对同一表的多重引用，共同触发了误差的倍数化。
+
+这应被视为一个 bug： 方差函数应对极大 DECIMAL 值时具备更稳定的数值算法（例如使用中心化方式，或内部升级精度），同时分布式合并逻辑需保证对边界输入（全相等）的鲁棒性。
+

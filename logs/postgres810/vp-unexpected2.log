@@ -1,0 +1,143 @@
+[VERTICAL PARTITIONING UNEXPECTED QUERY ERROR]
+Mode: RANDOM_TABLE_REWRITE
+Stage: split-query
+Error text:
+ERROR: variable not found in subplan target list
+Strategy summary: split=EVEN_SPLIT, reconstruction=FULL_OUTER_SIMULATION, shape=MULTI_COLUMN, prefix=vp_database3_155_
+Strategy counts: split={EMPTY_SPLIT=7, SINGLE_REPLICATED=1, SINGLE_RIGHT_ROW_ID_ONLY=1, SINGLE_LEFT_ROW_ID_ONLY=1, EVEN_SPLIT=38, OVERLAPPED_SPLIT=38, SKEWED_SPLIT=37, TYPE_DIRECTED_SPLIT=37}, reconstruction={JOIN=782, LEFT_RIGHT_JOIN=787, FULL_OUTER_SIMULATION=788, SCALAR_SUBQUERY=780, EXISTS_FILTER=782, IN_FILTER=783, NOT_EXISTS_ANTI=783, DERIVED_TABLE=784, CTE=786, VIEW=778, TEMP_TABLE=555, AGGREGATE_THEN_MERGE=783, ROW_NUMBER_ALIGNMENT=785, JSON_PACK=783, STRING_PACK=776, NATURAL_OR_USING=791, STRAIGHT_JOIN=790, LATERAL_DERIVED=782, DIRECTED_MATERIALIZED_JOIN=795, DIRECTED_PARTITION_JOIN=755}
+Database: database3
+Postgres version: PostgreSQL 18.4 (Debian 18.4-1.pgdg12+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit
+Base table: t6
+Base table DDL: CREATE TABLE "t6" ("vp_key" bigint NOT NULL, "vp_payload" text, "vp_pg_array_int" ARRAY, "vp_pg_range" int4range, "vp_pg_inet" inet, "vp_pg_uuid" uuid, "vp_pg_bytea" bytea, "vp_pg_tsvector" tsvector, "vp_pg_tsquery" tsquery); indexes=[CREATE INDEX vp_idx_312408777 ON public.t6 USING btree (vp_pg_array_int, vp_pg_range, vp_pg_uuid, vp_payload, vp_pg_tsquery, vp_pg_bytea, vp_pg_tsvector); CREATE INDEX vp_idx_141414935 ON public.t6 USING btree (vp_key, vp_pg_tsquery, vp_pg_inet, vp_pg_uuid, vp_pg_array_int)]
+Base table engine: N/A
+VP source engine: N/A
+VP left engine: N/A
+VP right engine: N/A
+Base row count: 9
+Base shape: MULTI_COLUMN
+Stable row order: "vp_key", "vp_payload", "vp_pg_array_int", "vp_pg_range", "vp_pg_inet", "vp_pg_uuid", "vp_pg_bytea", "vp_pg_tsvector", "vp_pg_tsquery"
+Prefix: vp_database3_155_
+Split strategy: EVEN_SPLIT
+Left columns: {vp_pg_inet, vp_pg_tsvector, vp_pg_range, vp_key, vp_pg_uuid}
+Right columns: {vp_payload, vp_pg_bytea, vp_pg_array_int, vp_pg_tsquery}
+Overlap columns: {}
+Physical foreign key: true
+Reconstruction strategy: FULL_OUTER_SIMULATION
+Description: shape=MULTI_COLUMN, split=EVEN_SPLIT, reconstruction=FULL_OUTER_SIMULATION
+Session vars: TimeZone=UTC, statement_timeout=5s, extra_float_digits=0, enable_hashjoin=on, enable_mergejoin=on, enable_nestloop=on, enable_partitionwise_join=on, enable_partition_pruning=on, enable_partitionwise_aggregate=on, enable_parallel_append=on, enable_parallel_hash=on, max_parallel_workers_per_gather=2, min_parallel_table_scan_size=0, parallel_setup_cost=0, parallel_tuple_cost=0, work_mem=4MB, jit=on
+Session SET statements:
+SET TimeZone = 'UTC';
+SET statement_timeout = '5s';
+SET extra_float_digits = 0;
+SET enable_hashjoin = 'on';
+SET enable_mergejoin = 'on';
+SET enable_nestloop = 'on';
+SET enable_partitionwise_join = 'on';
+SET enable_partition_pruning = 'on';
+SET enable_partitionwise_aggregate = 'on';
+SET enable_parallel_append = 'on';
+SET enable_parallel_hash = 'on';
+SET max_parallel_workers_per_gather = 2;
+SET min_parallel_table_scan_size = 0;
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+SET work_mem = '4MB';
+SET jit = 'on';
+Setup statements:
+CREATE TABLE "vp_database3_155_source" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "vp_key" bigint NOT NULL, "vp_payload" text COLLATE pg_catalog."default", "vp_pg_array_int" bigint[], "vp_pg_range" int4range, "vp_pg_inet" inet, "vp_pg_uuid" uuid, "vp_pg_bytea" bytea, "vp_pg_tsvector" tsvector, "vp_pg_tsquery" tsquery);
+INSERT INTO "vp_database3_155_source" ("vp_rowid", "vp_key", "vp_payload", "vp_pg_array_int", "vp_pg_range", "vp_pg_inet", "vp_pg_uuid", "vp_pg_bytea", "vp_pg_tsvector", "vp_pg_tsquery") SELECT ROW_NUMBER() OVER ( ORDER BY "vp_key", "vp_payload", "vp_pg_array_int", "vp_pg_range", "vp_pg_inet", "vp_pg_uuid", "vp_pg_bytea", "vp_pg_tsvector", "vp_pg_tsquery") AS "vp_rowid", "vp_key", "vp_payload", "vp_pg_array_int", "vp_pg_range", "vp_pg_inet", "vp_pg_uuid", "vp_pg_bytea", "vp_pg_tsvector", "vp_pg_tsquery" FROM "t6" LIMIT 10000;
+CREATE INDEX "vp_database3_155_src_idx_0" ON "vp_database3_155_source" USING btree (vp_pg_array_int, vp_pg_range, vp_pg_uuid, vp_payload, vp_pg_tsquery, vp_pg_bytea, vp_pg_tsvector);
+CREATE INDEX "vp_database3_155_src_idx_1" ON "vp_database3_155_source" USING btree (vp_key, vp_pg_tsquery, vp_pg_inet, vp_pg_uuid, vp_pg_array_int);
+CREATE STATISTICS "vp_database3_155_src_stat_0" (ndistinct, dependencies, mcv) ON vp_key, vp_pg_array_int, vp_pg_range, vp_pg_inet, vp_pg_uuid, vp_pg_tsvector FROM "vp_database3_155_source";
+CREATE STATISTICS "vp_database3_155_src_stat_1" (ndistinct, dependencies, mcv) ON vp_pg_range, vp_pg_inet, vp_pg_uuid FROM "vp_database3_155_source";
+ANALYZE "vp_database3_155_source";
+CREATE TABLE "vp_database3_155_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "vp_pg_inet" inet NULL, "vp_pg_tsvector" tsvector NULL, "vp_pg_range" int4range NULL, "vp_key" bigint NULL, "vp_pg_uuid" uuid NULL) PARTITION BY RANGE ("vp_rowid");
+CREATE TABLE "vp_database3_155_l_p1" PARTITION OF "vp_database3_155_l" FOR VALUES FROM (1) TO (5);
+CREATE TABLE "vp_database3_155_l_p2" PARTITION OF "vp_database3_155_l" FOR VALUES FROM (5) TO (10);
+CREATE TABLE "vp_database3_155_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "vp_payload" text COLLATE pg_catalog."default" NULL, "vp_pg_bytea" bytea NULL, "vp_pg_array_int" bigint[] NULL, "vp_pg_tsquery" tsquery NULL) PARTITION BY RANGE ("vp_rowid");
+CREATE TABLE "vp_database3_155_r_p1" PARTITION OF "vp_database3_155_r" FOR VALUES FROM (1) TO (5);
+CREATE TABLE "vp_database3_155_r_p2" PARTITION OF "vp_database3_155_r" FOR VALUES FROM (5) TO (10);
+INSERT INTO "vp_database3_155_l" ("vp_rowid", "vp_pg_inet", "vp_pg_tsvector", "vp_pg_range", "vp_key", "vp_pg_uuid") SELECT "vp_rowid", "vp_pg_inet", "vp_pg_tsvector", "vp_pg_range", "vp_key", "vp_pg_uuid" FROM "vp_database3_155_source";
+INSERT INTO "vp_database3_155_r" ("vp_rowid", "vp_payload", "vp_pg_bytea", "vp_pg_array_int", "vp_pg_tsquery") SELECT "vp_rowid", "vp_payload", "vp_pg_bytea", "vp_pg_array_int", "vp_pg_tsquery" FROM "vp_database3_155_source";
+ALTER TABLE "vp_database3_155_l" ALTER COLUMN "vp_key" SET NOT NULL;
+CREATE STATISTICS "vp_database3_155_left_stat_0" (ndistinct, dependencies, mcv) ON vp_pg_range, vp_pg_inet, vp_pg_uuid FROM "vp_database3_155_l";
+ANALYZE "vp_database3_155_l";
+VP table DDLs:
+vp_database3_155_source: CREATE TABLE "vp_database3_155_source" ("vp_rowid" bigint NOT NULL, "vp_key" bigint NOT NULL, "vp_payload" text, "vp_pg_array_int" ARRAY, "vp_pg_range" int4range, "vp_pg_inet" inet, "vp_pg_uuid" uuid, "vp_pg_bytea" bytea, "vp_pg_tsvector" tsvector, "vp_pg_tsquery" tsquery); indexes=[CREATE UNIQUE INDEX vp_database3_155_source_pkey ON public.vp_database3_155_source USING btree (vp_rowid); CREATE INDEX vp_database3_155_src_idx_0 ON public.vp_database3_155_source USING btree (vp_pg_array_int, vp_pg_range, vp_pg_uuid, vp_payload, vp_pg_tsquery, vp_pg_bytea, vp_pg_tsvector); CREATE INDEX vp_database3_155_src_idx_1 ON public.vp_database3_155_source USING btree (vp_key, vp_pg_tsquery, vp_pg_inet, vp_pg_uuid, vp_pg_array_int)]
+vp_database3_155_l: CREATE TABLE "vp_database3_155_l" ("vp_rowid" bigint NOT NULL, "vp_pg_inet" inet, "vp_pg_tsvector" tsvector, "vp_pg_range" int4range, "vp_key" bigint NOT NULL, "vp_pg_uuid" uuid); indexes=[CREATE UNIQUE INDEX vp_database3_155_l_pkey ON ONLY public.vp_database3_155_l USING btree (vp_rowid)]
+vp_database3_155_r: CREATE TABLE "vp_database3_155_r" ("vp_rowid" bigint NOT NULL, "vp_payload" text, "vp_pg_bytea" bytea, "vp_pg_array_int" ARRAY, "vp_pg_tsquery" tsquery); indexes=[CREATE UNIQUE INDEX vp_database3_155_r_pkey ON ONLY public.vp_database3_155_r USING btree (vp_rowid)]
+vp_database3_155_v: CREATE TABLE "vp_database3_155_v" ()
+vp_database3_155_joined: CREATE TABLE "vp_database3_155_joined" ()
+VP source snapshot:
+SELECT "vp_rowid", "vp_key", "vp_payload", "vp_pg_array_int", "vp_pg_range", "vp_pg_inet", "vp_pg_uuid", "vp_pg_bytea", "vp_pg_tsvector", "vp_pg_tsquery" FROM "vp_database3_155_source" ORDER BY "vp_rowid";
+1 | -148168 |   | {886,231} | NULL | 75.217.26.215/16 | NULL | NULL | 'brown':2 'fox':3 'quick':1 | 'alpha' & 'beta'
+2 | -997 |   | {886,231} | empty | 75.217.26.215/16 | NULL | NULL | 'brown':2 'fox':3 'quick':1 | 'alpha' & 'beta'
+3 | 0 |   | {886,231} | empty | 75.217.26.215/16 | NULL | NULL | 'brown':2 'fox':3 'quick':1 | 'alpha' & 'beta'
+4 | 0 |   | {886,231} | [972905,1794771) | 75.217.26.215/16 | NULL | NULL | 'brown':2 'fox':3 'quick':1 | 'alpha' & 'beta'
+5 | 2 |   | {886,231} | [-332546,523902) | 75.217.26.215/16 | NULL | NULL | 'brown':2 'fox':3 'quick':1 | 'alpha' & 'beta'
+6 | 341776807 |   | {886,231} | [-58975,24286) | 75.217.26.215/16 | NULL | NULL | 'brown':2 'fox':3 'quick':1 | 'alpha' & 'beta'
+7 | 508890755 |   | {886,231} | [17187,759161) | 75.217.26.215/16 | NULL | NULL | 'brown':2 'fox':3 'quick':1 | 'alpha' & 'beta'
+8 | 858449056 |   | {886,231} | [687999,970570) | 75.217.26.215/16 | NULL | NULL | 'brown':2 'fox':3 'quick':1 | 'alpha' & 'beta'
+9 | 1852579925 |   | {886,231} | empty | 75.217.26.215/16 | NULL | NULL | 'brown':2 'fox':3 'quick':1 | 'alpha' & 'beta'
+VP left snapshot:
+SELECT "vp_rowid", "vp_pg_inet", "vp_pg_tsvector", "vp_pg_range", "vp_key", "vp_pg_uuid" FROM "vp_database3_155_l" ORDER BY "vp_rowid";
+1 | 75.217.26.215/16 | 'brown':2 'fox':3 'quick':1 | NULL | -148168 | NULL
+2 | 75.217.26.215/16 | 'brown':2 'fox':3 'quick':1 | empty | -997 | NULL
+3 | 75.217.26.215/16 | 'brown':2 'fox':3 'quick':1 | empty | 0 | NULL
+4 | 75.217.26.215/16 | 'brown':2 'fox':3 'quick':1 | [972905,1794771) | 0 | NULL
+5 | 75.217.26.215/16 | 'brown':2 'fox':3 'quick':1 | [-332546,523902) | 2 | NULL
+6 | 75.217.26.215/16 | 'brown':2 'fox':3 'quick':1 | [-58975,24286) | 341776807 | NULL
+7 | 75.217.26.215/16 | 'brown':2 'fox':3 'quick':1 | [17187,759161) | 508890755 | NULL
+8 | 75.217.26.215/16 | 'brown':2 'fox':3 'quick':1 | [687999,970570) | 858449056 | NULL
+9 | 75.217.26.215/16 | 'brown':2 'fox':3 'quick':1 | empty | 1852579925 | NULL
+VP right snapshot:
+SELECT "vp_rowid", "vp_payload", "vp_pg_bytea", "vp_pg_array_int", "vp_pg_tsquery" FROM "vp_database3_155_r" ORDER BY "vp_rowid";
+1 |   | NULL | {886,231} | 'alpha' & 'beta'
+2 |   | NULL | {886,231} | 'alpha' & 'beta'
+3 |   | NULL | {886,231} | 'alpha' & 'beta'
+4 |   | NULL | {886,231} | 'alpha' & 'beta'
+5 |   | NULL | {886,231} | 'alpha' & 'beta'
+6 |   | NULL | {886,231} | 'alpha' & 'beta'
+7 |   | NULL | {886,231} | 'alpha' & 'beta'
+8 |   | NULL | {886,231} | 'alpha' & 'beta'
+9 |   | NULL | {886,231} | 'alpha' & 'beta'
+Failing SQL: SELECT ALL ARRAY['', '']::TEXT[] FROM (SELECT COALESCE(l."vp_rowid", r."vp_rowid") AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload", r."vp_pg_array_int" AS "vp_pg_array_int", l."vp_pg_range" AS "vp_pg_range", l."vp_pg_inet" AS "vp_pg_inet", l."vp_pg_uuid" AS "vp_pg_uuid", r."vp_pg_bytea" AS "vp_pg_bytea", l."vp_pg_tsvector" AS "vp_pg_tsvector", r."vp_pg_tsquery" AS "vp_pg_tsquery" FROM "vp_database3_155_l" l FULL OUTER JOIN "vp_database3_155_r" r ON l."vp_rowid" = r."vp_rowid") "vp_database3_155_source" WHERE NOT ((vp_database3_155_source.vp_pg_tsvector) @@ (vp_database3_155_source.vp_pg_tsquery)) GROUP BY ROLLUP (ARRAY['', '']::TEXT[])
+Single query: SELECT ARRAY['', '']::TEXT[] FROM "vp_database3_155_source" "vp_database3_155_source" WHERE NOT ((vp_database3_155_source.vp_pg_tsvector) @@ (vp_database3_155_source.vp_pg_tsquery)) GROUP BY ROLLUP (ARRAY['', '']::TEXT[])
+Split query: SELECT ALL ARRAY['', '']::TEXT[] FROM (SELECT COALESCE(l."vp_rowid", r."vp_rowid") AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload", r."vp_pg_array_int" AS "vp_pg_array_int", l."vp_pg_range" AS "vp_pg_range", l."vp_pg_inet" AS "vp_pg_inet", l."vp_pg_uuid" AS "vp_pg_uuid", r."vp_pg_bytea" AS "vp_pg_bytea", l."vp_pg_tsvector" AS "vp_pg_tsvector", r."vp_pg_tsquery" AS "vp_pg_tsquery" FROM "vp_database3_155_l" l FULL OUTER JOIN "vp_database3_155_r" r ON l."vp_rowid" = r."vp_rowid") "vp_database3_155_source" WHERE NOT ((vp_database3_155_source.vp_pg_tsvector) @@ (vp_database3_155_source.vp_pg_tsquery)) GROUP BY ROLLUP (ARRAY['', '']::TEXT[])
+Failing query plan:
+EXPLAIN (FORMAT TEXT) SELECT ALL ARRAY['', '']::TEXT[] FROM (SELECT COALESCE(l."vp_rowid", r."vp_rowid") AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload", r."vp_pg_array_int" AS "vp_pg_array_int", l."vp_pg_range" AS "vp_pg_range", l."vp_pg_inet" AS "vp_pg_inet", l."vp_pg_uuid" AS "vp_pg_uuid", r."vp_pg_bytea" AS "vp_pg_bytea", l."vp_pg_tsvector" AS "vp_pg_tsvector", r."vp_pg_tsquery" AS "vp_pg_tsquery" FROM "vp_database3_155_l" l FULL OUTER JOIN "vp_database3_155_r" r ON l."vp_rowid" = r."vp_rowid") "vp_database3_155_source" WHERE NOT ((vp_database3_155_source.vp_pg_tsvector) @@ (vp_database3_155_source.vp_pg_tsquery)) GROUP BY ROLLUP (ARRAY['', '']::TEXT[]);
+<unavailable: ERROR: variable not found in subplan target list>
+Single query plan:
+EXPLAIN (FORMAT TEXT) SELECT ARRAY['', '']::TEXT[] FROM "vp_database3_155_source" "vp_database3_155_source" WHERE NOT ((vp_database3_155_source.vp_pg_tsvector) @@ (vp_database3_155_source.vp_pg_tsquery)) GROUP BY ROLLUP (ARRAY['', '']::TEXT[]);
+MixedAggregate  (cost=0.00..1.11 rows=2 width=32)
+  Hash Key: ('{"",""}'::text[])
+  Group Key: ()
+  ->  Gather  (cost=0.00..1.07 rows=9 width=32)
+        Workers Planned: 1
+        ->  Parallel Seq Scan on vp_database3_155_source  (cost=0.00..1.07 rows=5 width=32)
+              Filter: (NOT (vp_pg_tsvector @@ vp_pg_tsquery))
+Split query plan:
+EXPLAIN (FORMAT TEXT) SELECT ALL ARRAY['', '']::TEXT[] FROM (SELECT COALESCE(l."vp_rowid", r."vp_rowid") AS "vp_rowid", l."vp_key" AS "vp_key", r."vp_payload" AS "vp_payload", r."vp_pg_array_int" AS "vp_pg_array_int", l."vp_pg_range" AS "vp_pg_range", l."vp_pg_inet" AS "vp_pg_inet", l."vp_pg_uuid" AS "vp_pg_uuid", r."vp_pg_bytea" AS "vp_pg_bytea", l."vp_pg_tsvector" AS "vp_pg_tsvector", r."vp_pg_tsquery" AS "vp_pg_tsquery" FROM "vp_database3_155_l" l FULL OUTER JOIN "vp_database3_155_r" r ON l."vp_rowid" = r."vp_rowid") "vp_database3_155_source" WHERE NOT ((vp_database3_155_source.vp_pg_tsvector) @@ (vp_database3_155_source.vp_pg_tsquery)) GROUP BY ROLLUP (ARRAY['', '']::TEXT[]);
+<unavailable: ERROR: variable not found in subplan target list>
+Java stack trace:
+org.postgresql.util.PSQLException: ERROR: variable not found in subplan target list
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2676)
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2366)
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:356)
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:496)
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:413)
+	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:333)
+	at org.postgresql.jdbc.PgStatement.executeCachedSql(PgStatement.java:319)
+	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:295)
+	at org.postgresql.jdbc.PgStatement.executeQuery(PgStatement.java:244)
+	at sqlancer.postgres.oracle.PostgresVerticalPartitioningOracle.getResultMultiset(PostgresVerticalPartitioningOracle.java:4295)
+	at sqlancer.postgres.oracle.PostgresVerticalPartitioningOracle.comparePair(PostgresVerticalPartitioningOracle.java:3625)
+	at sqlancer.postgres.oracle.PostgresVerticalPartitioningOracle.check(PostgresVerticalPartitioningOracle.java:458)
+	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+	at sqlancer.Main$DBMSExecutor.run(Main.java:486)
+	at sqlancer.Main$2.run(Main.java:703)
+	at sqlancer.Main$2.runThread(Main.java:685)
+	at sqlancer.Main$2.run(Main.java:676)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)

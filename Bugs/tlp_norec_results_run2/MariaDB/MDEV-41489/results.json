@@ -1,0 +1,72 @@
+{
+  "database": "MariaDB",
+  "source": "/home/lwm/sqlancer/Bugs/MariaDB/MDEV-41489.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "-- 查询一：单表结构，实际返回 1 行：0000-00-00\nSELECT d\nFROM source_2152\nWHERE (b IS NOT NULL) IN (d)",
+      "ok": true,
+      "rows": [
+        "0000-00-00"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "/* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT d FROM source_2152",
+      "ok": true,
+      "rows": [
+        "0000-00-00"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "/* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT d FROM source_2152 WHERE (NOT b IS NULL) IN (d) UNION ALL /* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT d FROM source_2152 WHERE NOT (NOT b IS NULL) IN (d) UNION ALL /* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT d FROM source_2152 WHERE (NOT b IS NULL) IN (d) IS NULL",
+      "ok": true,
+      "rows": [
+        "0000-00-00"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "/* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT COUNT(*) FROM source_2152 WHERE (NOT b IS NULL) IN (d)",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "/* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT SUM(CASE WHEN (NOT b IS NULL) IN (d) THEN 1 ELSE NULL END) FROM source_2152",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 10,
+  "target_query": "-- 查询一：单表结构，实际返回 1 行：0000-00-00\nSELECT d\nFROM source_2152\nWHERE (b IS NOT NULL) IN (d);",
+  "variants": {
+    "tlp_base": "/* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT d FROM source_2152",
+    "tlp_part_true": "/* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT d FROM source_2152 WHERE (NOT b IS NULL) IN (d)",
+    "tlp_part_false": "/* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT d FROM source_2152 WHERE NOT (NOT b IS NULL) IN (d)",
+    "tlp_part_unknown": "/* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT d FROM source_2152 WHERE (NOT b IS NULL) IN (d) IS NULL",
+    "tlp_union": "/* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT d FROM source_2152 WHERE (NOT b IS NULL) IN (d) UNION ALL /* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT d FROM source_2152 WHERE NOT (NOT b IS NULL) IN (d) UNION ALL /* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT d FROM source_2152 WHERE (NOT b IS NULL) IN (d) IS NULL",
+    "norec_optimized": "/* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT COUNT(*) FROM source_2152 WHERE (NOT b IS NULL) IN (d)",
+    "norec_unoptimized": "/* 查询一：单表结构，实际返回 1 行：0000-00-00 */ SELECT SUM(CASE WHEN (NOT b IS NULL) IN (d) THEN 1 ELSE NULL END) FROM source_2152",
+    "predicate": "(NOT b IS NULL) IN (d)"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": false,
+  "norec_checked": true,
+  "norec_inconsistent": false,
+  "notes": [
+    "NoREC comparison normalizes empty aggregate NULL to 0."
+  ]
+}

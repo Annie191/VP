@@ -1,0 +1,168 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=OVERLAPPED_SPLIT, reconstruction=NOT_EXISTS_ANTI, shape=MULTI_COLUMN, prefix=vp_database0_33_
+--Strategy counts: split={EMPTY_SPLIT=0, SINGLE_REPLICATED=0, SINGLE_RIGHT_ROW_ID_ONLY=0, SINGLE_LEFT_ROW_ID_ONLY=0, EVEN_SPLIT=1, OVERLAPPED_SPLIT=4, SKEWED_SPLIT=1, TYPE_DIRECTED_SPLIT=2}, reconstruction={JOIN=29, LEFT_RIGHT_JOIN=20, FULL_OUTER_SIMULATION=30, OUTER_NULL_EXTENSION=30, SCALAR_SUBQUERY=25, EXISTS_FILTER=30, IN_FILTER=29, NOT_EXISTS_ANTI=30, DERIVED_TABLE=25, CTE=30, VIEW=25, TEMP_TABLE=25, AGGREGATE_THEN_MERGE=25, ROW_NUMBER_ALIGNMENT=25, JSON_PACK=21, STRING_PACK=30, NATURAL_OR_USING=25, STRAIGHT_JOIN=25, LATERAL_DERIVED=25, ZIGZAG_JOIN=0}
+--Database: database0
+--CockroachDB version: CockroachDB CCL v26.2.3 (x86_64-pc-linux-gnu, built 2026/06/24 12:27:14, go1.25.5)
+--Base table: t61
+--Base table DDL: CREATE TABLE public.t61 (
+--	c0 JSONB NULL,
+--	c1 TIMESTAMP NULL,
+--	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+--	CONSTRAINT t61_pkey PRIMARY KEY (rowid ASC),
+--	UNIQUE INDEX t61_c1_key (c1 ASC),
+--	INDEX i0 (rowid ASC, c1 ASC)
+--) WITH (schema_locked = true);
+--Base table engine: N/A
+--VP source engine: N/A
+--VP left engine: N/A
+--VP right engine: N/A
+--Base row count: 9
+--VP source row count: 9
+--Base shape: MULTI_COLUMN
+--Stable row order: "c1", "rowid"
+--Prefix: vp_database0_33_
+--Split strategy: OVERLAPPED_SPLIT
+--Left columns: {c0, c1, rowid, vp_computed}
+--Right columns: {rowid}
+--Overlap columns: {rowid}
+--Physical foreign key: true
+--Reconstruction strategy: NOT_EXISTS_ANTI
+--Description: shape=MULTI_COLUMN, split=OVERLAPPED_SPLIT, reconstruction=NOT_EXISTS_ANTI
+--Optimizer profile: ZIGZAG_ON
+--Session vars: TimeZone=UTC, vectorize=on, optimizer_use_histograms=on, enable_zigzag_join=on, distsql=auto, opt_split_scan_limit=2048, serial_normalization=rowid
+--Session SET statements:
+--SET TimeZone = 'UTC';
+--SET vectorize = 'on';
+--SET optimizer_use_histograms = 'on';
+--SET enable_zigzag_join = 'on';
+--SET distsql = 'auto';
+--SET opt_split_scan_limit = 2048;
+--SET serial_normalization = 'rowid';
+--Setup statements:
+--CREATE TABLE "vp_database0_33_source" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "c0" JSONB NULL, "c1" TIMESTAMP NULL, "rowid" INT8 NULL, "vp_computed" INT8 AS ("vp_rowid" * 2) STORED);
+--CREATE TABLE "vp_database0_33_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" JSONB NULL, "c1" TIMESTAMP NULL, "rowid" BIGINT NULL, "vp_computed" BIGINT AS ("vp_rowid" * 2) STORED);
+--CREATE TABLE "vp_database0_33_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "rowid" BIGINT NULL);
+--INSERT INTO "vp_database0_33_source" ("vp_rowid", "c0", "c1", "rowid") SELECT ROW_NUMBER() OVER ( ORDER BY "c1", "rowid") AS "vp_rowid", "c0", "c1", "rowid" FROM "t61" LIMIT 256;
+--INSERT INTO "vp_database0_33_l" ("vp_rowid", "c0", "c1", "rowid") SELECT "vp_rowid", "c0", "c1", "rowid" FROM "vp_database0_33_source";
+--INSERT INTO "vp_database0_33_r" ("vp_rowid", "rowid") SELECT "vp_rowid", "rowid" FROM "vp_database0_33_source";
+--CREATE INDEX "vp_database0_33_l_asym_847601453" ON "vp_database0_33_l"("vp_rowid", "vp_computed");
+--CREATE INDEX "vp_database0_33_partial_l" ON "vp_database0_33_l" ("c1") WHERE "c1" IS NOT NULL;
+--CREATE INDEX "vp_database0_33_partial_r" ON "vp_database0_33_r" ("rowid") WHERE "rowid" IS NOT NULL;
+--CREATE INDEX "vp_database0_33_idx_src_1189972660" ON "vp_database0_33_source"("vp_rowid", "c1");
+--CREATE INDEX "vp_database0_33_idx_r_2093522467" ON "vp_database0_33_r"("rowid", "vp_rowid");
+--ALTER TABLE "vp_database0_33_r" ADD CONSTRAINT "vp_database0_33_fk_r_l" FOREIGN KEY ("vp_rowid") REFERENCES "vp_database0_33_l"("vp_rowid");
+--VP source snapshot:
+--SELECT "vp_rowid", "c0", "c1", "rowid", "vp_computed" FROM "vp_database0_33_source" ORDER BY "vp_rowid";
+--1 | [true, false] | NULL | 1207314825998467075 | 2
+--2 | [] | NULL | 1207314832807886851 | 4
+--3 | {"k": 1} | NULL | 1207314835357728771 | 6
+--4 | {"k": null} | NULL | 1207314839727570947 | 8
+--5 | {} | NULL | 1207314839727734787 | 10
+--6 | [] | 1913-02-16 05:27:44 | 1198865393 | 12
+--7 | {"k": null} | 1953-05-02 12:38:04 | -1969819676 | 14
+--8 | {"k": 1} | 2020-03-29 15:23:15 | -1093704999 | 16
+--9 | [true, false] | 2037-03-26 10:12:23 | 1179498406 | 18
+--VP left snapshot:
+--SELECT "vp_rowid", "c0", "c1", "rowid", "vp_computed" FROM "vp_database0_33_l" ORDER BY "vp_rowid";
+--1 | [true, false] | NULL | 1207314825998467075 | 2
+--2 | [] | NULL | 1207314832807886851 | 4
+--3 | {"k": 1} | NULL | 1207314835357728771 | 6
+--4 | {"k": null} | NULL | 1207314839727570947 | 8
+--5 | {} | NULL | 1207314839727734787 | 10
+--6 | [] | 1913-02-16 05:27:44 | 1198865393 | 12
+--7 | {"k": null} | 1953-05-02 12:38:04 | -1969819676 | 14
+--8 | {"k": 1} | 2020-03-29 15:23:15 | -1093704999 | 16
+--9 | [true, false] | 2037-03-26 10:12:23 | 1179498406 | 18
+--VP right snapshot:
+--SELECT "vp_rowid", "rowid" FROM "vp_database0_33_r" ORDER BY "vp_rowid";
+--1 | 1207314825998467075
+--2 | 1207314832807886851
+--3 | 1207314835357728771
+--4 | 1207314839727570947
+--5 | 1207314839727734787
+--6 | 1198865393
+--7 | -1969819676
+--8 | -1093704999
+--9 | 1179498406
+--Single query: SELECT DISTINCT VARIANCE("rowid") FROM (SELECT s.* FROM "vp_database0_33_source" s WHERE NOT EXISTS (SELECT 1 FROM "vp_database0_33_r" rx WHERE rx."vp_rowid" = s."vp_rowid" AND rx."vp_rowid" % 2::INT8 = 0)) AS "vp_database0_33_source" LIMIT 4
+--Split query: SELECT DISTINCT VARIANCE("rowid") FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", l."c1" AS "c1", l."rowid" AS "rowid", l."vp_computed" AS "vp_computed" FROM "vp_database0_33_l" l WHERE NOT EXISTS (SELECT 1 FROM "vp_database0_33_r" rx WHERE rx."vp_rowid" = l."vp_rowid" AND rx."vp_rowid" % 2::INT8 = 0)) AS "vp_database0_33_source" LIMIT 4
+--Single query plan:
+--EXPLAIN (OPT) SELECT DISTINCT VARIANCE("rowid") FROM (SELECT s.* FROM "vp_database0_33_source" s WHERE NOT EXISTS (SELECT 1 FROM "vp_database0_33_r" rx WHERE rx."vp_rowid" = s."vp_rowid" AND rx."vp_rowid" % 2::INT8 = 0)) AS "vp_database0_33_source" LIMIT 4;
+--scalar-group-by
+-- ├── anti-join (merge)
+-- │    ├── scan vp_database0_33_source [as=s]
+-- │    │    └── computed column expressions
+-- │    │         └── vp_computed
+-- │    │              └── s.vp_rowid * 2
+-- │    ├── select
+-- │    │    ├── scan vp_database0_33_r [as=rx]
+-- │    │    │    └── partial index predicates
+-- │    │    │         └── vp_database0_33_partial_r: filters
+-- │    │    │              └── rx.rowid IS NOT NULL
+-- │    │    └── filters
+-- │    │         └── (rx.vp_rowid % 2) = 0
+-- │    └── filters (true)
+-- └── aggregations
+--      └── variance
+--           └── s.rowid
+--Split query plan:
+--EXPLAIN (OPT) SELECT DISTINCT VARIANCE("rowid") FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", l."c1" AS "c1", l."rowid" AS "rowid", l."vp_computed" AS "vp_computed" FROM "vp_database0_33_l" l WHERE NOT EXISTS (SELECT 1 FROM "vp_database0_33_r" rx WHERE rx."vp_rowid" = l."vp_rowid" AND rx."vp_rowid" % 2::INT8 = 0)) AS "vp_database0_33_source" LIMIT 4;
+--scalar-group-by
+-- ├── anti-join (merge)
+-- │    ├── scan vp_database0_33_l [as=l]
+-- │    │    ├── computed column expressions
+-- │    │    │    └── vp_computed
+-- │    │    │         └── l.vp_rowid * 2
+-- │    │    └── partial index predicates
+-- │    │         └── vp_database0_33_partial_l: filters
+-- │    │              └── c1 IS NOT NULL
+-- │    ├── select
+-- │    │    ├── scan vp_database0_33_r [as=rx]
+-- │    │    │    └── partial index predicates
+-- │    │    │         └── vp_database0_33_partial_r: filters
+-- │    │    │              └── rx.rowid IS NOT NULL
+-- │    │    └── filters
+-- │    │         └── (rx.vp_rowid % 2) = 0
+-- │    └── filters (true)
+-- └── aggregations
+--      └── variance
+--           └── l.rowid
+--Single result sample: S:36:437282732583987443350000000000000000; x1
+--Split result sample: S:36:437282732583987443360000000000000000; x1
+--Only in single: S:36:437282732583987443350000000000000000; x1
+--Only in split: S:36:437282732583987443360000000000000000; x1
+--
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.comparePair(CockroachDBVerticalPartitioningOracle.java:3696)
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.checkWithOracleRunPermit(CockroachDBVerticalPartitioningOracle.java:473)
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.check(CockroachDBVerticalPartitioningOracle.java:421)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:486)
+--	at sqlancer.Main$2.run(Main.java:703)
+--	at sqlancer.Main$2.runThread(Main.java:685)
+--	at sqlancer.Main$2.run(Main.java:676)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/09/04 11:03:03
+-- Database: database0
+-- Database version: 13.0.0
+-- seed value: 1788513637481
+USE test;
+DROP DATABASE IF EXISTS database0 CASCADE;
+CREATE DATABASE database0;
+USE database0;
+ALTER DATABASE "database0" CONFIGURE ZONE USING gc.ttlseconds = 1;
+--Don't send automatic bug reports;
+SET CLUSTER SETTING debug.panic_on_failed_assertions = true;
+SET CLUSTER SETTING diagnostics.reporting.enabled = false;
+SET CLUSTER SETTING diagnostics.reporting.send_crash_reports.enabled = false;
+-- Disable the collection of metrics and hope that it helps performance;
+SET CLUSTER SETTING sql.metrics.statement_details.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.dump_to_logs.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.gateway_node.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.index_recommendation_collection.enabled = false;
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+SET CLUSTER SETTING timeseries.storage.enabled = false;
+SET experimental_enable_hash_sharded_indexes = 'on';
+SET experimental_enable_temp_tables = 'on';

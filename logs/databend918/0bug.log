@@ -1,0 +1,84 @@
+https://github.com/databendlabs/databend/issues/20644 20568同族
+
+DROP DATABASE IF EXISTS repro_databend918_db0_min;
+CREATE DATABASE repro_databend918_db0_min;
+USE repro_databend918_db0_min;
+
+SET default_order_by_null = 'nulls_last';
+SET disable_join_reorder = 0;
+SET enable_bloom_runtime_filter = 1;
+SET enable_cbo = 1;
+SET enable_join_runtime_filter = 1;
+SET enable_query_result_cache = 0;
+SET max_threads = 40;
+SET numeric_cast_option = 'rounding';
+SET sql_dialect = 'PostgreSQL';
+SET timezone = 'UTC';
+
+CREATE TABLE source0 (
+  vp_rowid BIGINT NOT NULL,
+  c2boolean BOOLEAN NULL,
+  c3decimal DECIMAL(65,49) NULL,
+  c5timestamp TIMESTAMP NULL
+) ENGINE = FUSE CLUSTER BY (vp_rowid);
+
+INSERT INTO source0 VALUES
+  (2, FALSE,
+   0.0000000000000000000000000000000000000000000000000,
+   NULL),
+  (23, NULL,
+   1.0000000000000000000000000000000000000000000000000,
+   NULL);
+
+CREATE TABLE left0 (
+  vp_rowid BIGINT NOT NULL,
+  c2boolean BOOLEAN NULL,
+  c3decimal DECIMAL(65,49) NULL
+) ENGINE = FUSE CLUSTER BY (vp_rowid);
+
+CREATE TABLE right0 (
+  vp_rowid BIGINT NOT NULL,
+  c5timestamp TIMESTAMP NULL
+) ENGINE = MEMORY;
+
+INSERT INTO left0
+SELECT vp_rowid, c2boolean, c3decimal FROM source0;
+
+INSERT INTO right0
+SELECT vp_rowid, c5timestamp FROM source0;
+
+SELECT AVG(CAST(c3decimal AS DOUBLE))
+FROM source0
+WHERE ((c3decimal IS NULL) <> (c5timestamp IS NULL))
+  AND (NOT ((NOT c2boolean) NOT IN ((NOT c2boolean))))
+LIMIT 13;
+
+SELECT AVG(CAST(x.c3decimal AS DOUBLE))
+FROM (
+  SELECT l.vp_rowid,
+         l.c2boolean,
+         l.c3decimal,
+         r.c5timestamp
+  FROM left0 l
+  JOIN right0 r ON l.vp_rowid = r.vp_rowid
+) x
+WHERE ((x.c3decimal IS NULL) <> (x.c5timestamp IS NULL))
+  AND (NOT ((NOT x.c2boolean) NOT IN ((NOT x.c2boolean))))
+LIMIT 13;
+
+单表 0.0 正确：c2boolean=NULL 的第 23 行应被 WHERE 排除，只剩第 2 行的 0。
+JOIN 0.49999999999999994 错误：第 23 行被错误保留，相当于计算 (0 + 1) / 2。末尾小数
+
+单表计划的 TableScan 下推了完整谓词：
+filters:
+[(NOT is_not_null(c3decimal)) <> (NOT is_not_null(c5timestamp))
+ AND (NOT c2boolean) = (NOT c2boolean)]
+JOIN 计划的 HashJoin 只保留了 NULL 比较：
+filters:
+[(NOT is_not_null(l.c3decimal))
+ <> (NOT is_not_null(r.c5timestamp))]
+JOIN 计划中缺少：
+(NOT l.c2boolean) = (NOT l.c2boolean)
+
+错误原因是 JOIN 优化路径丢失了仅依赖左表的可空布尔谓词：
+(NOT l.c2boolean) = (NOT l.c2boolean)

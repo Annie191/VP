@@ -1,0 +1,75 @@
+{
+  "database": "MariaDB",
+  "source": "/home/lwm/sqlancer/Bugs/MariaDB/MDEV-41328.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "-- 单表查询\nSELECT\n  'direct' AS tag,\n  CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v,\n  c3\nFROM src\nWHERE c1 IN (c2)",
+      "ok": true,
+      "rows": [
+        "direct\t1\tNULL",
+        "direct\t1\t2000-01-03"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "/* 单表查询 */ SELECT 'direct' AS tag, CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v, c3 FROM src",
+      "ok": true,
+      "rows": [
+        "direct\t1\tNULL",
+        "direct\t1\t2000-01-03"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "/* 单表查询 */ SELECT 'direct' AS tag, CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v, c3 FROM src WHERE c1 IN (c2) UNION ALL /* 单表查询 */ SELECT 'direct' AS tag, CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v, c3 FROM src WHERE NOT c1 IN (c2) UNION ALL /* 单表查询 */ SELECT 'direct' AS tag, CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v, c3 FROM src WHERE c1 IN (c2) IS NULL",
+      "ok": true,
+      "rows": [
+        "direct\t1\tNULL",
+        "direct\t1\t2000-01-03"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "/* 单表查询 */ SELECT COUNT(*) FROM src WHERE c1 IN (c2)",
+      "ok": true,
+      "rows": [
+        "2"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "/* 单表查询 */ SELECT SUM(CASE WHEN c1 IN (c2) THEN 1 ELSE NULL END) FROM src",
+      "ok": true,
+      "rows": [
+        "2"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 10,
+  "target_query": "-- 单表查询\nSELECT\n  'direct' AS tag,\n  CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v,\n  c3\nFROM src\nWHERE c1 IN (c2);",
+  "variants": {
+    "tlp_base": "/* 单表查询 */ SELECT 'direct' AS tag, CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v, c3 FROM src",
+    "tlp_part_true": "/* 单表查询 */ SELECT 'direct' AS tag, CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v, c3 FROM src WHERE c1 IN (c2)",
+    "tlp_part_false": "/* 单表查询 */ SELECT 'direct' AS tag, CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v, c3 FROM src WHERE NOT c1 IN (c2)",
+    "tlp_part_unknown": "/* 单表查询 */ SELECT 'direct' AS tag, CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v, c3 FROM src WHERE c1 IN (c2) IS NULL",
+    "tlp_union": "/* 单表查询 */ SELECT 'direct' AS tag, CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v, c3 FROM src WHERE c1 IN (c2) UNION ALL /* 单表查询 */ SELECT 'direct' AS tag, CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v, c3 FROM src WHERE NOT c1 IN (c2) UNION ALL /* 单表查询 */ SELECT 'direct' AS tag, CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v, c3 FROM src WHERE c1 IN (c2) IS NULL",
+    "norec_optimized": "/* 单表查询 */ SELECT COUNT(*) FROM src WHERE c1 IN (c2)",
+    "norec_unoptimized": "/* 单表查询 */ SELECT SUM(CASE WHEN c1 IN (c2) THEN 1 ELSE NULL END) FROM src",
+    "predicate": "c1 IN (c2)"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": false,
+  "norec_checked": true,
+  "norec_inconsistent": false,
+  "notes": [
+    "NoREC comparison normalizes empty aggregate NULL to 0."
+  ]
+}

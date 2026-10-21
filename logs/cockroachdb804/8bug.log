@@ -1,0 +1,101 @@
+https://github.com/cockroachdb/cockroach/issues/175534
+
+DROP DATABASE IF EXISTS repro_cockroach804_db8_min CASCADE;
+CREATE DATABASE repro_cockroach804_db8_min;
+USE repro_cockroach804_db8_min;
+
+CREATE TABLE vp_source (
+    vp_rowid INT8 PRIMARY KEY,
+    c0 BOOL NULL
+);
+
+CREATE TABLE vp_l (
+    vp_rowid INT8 PRIMARY KEY
+);
+
+CREATE TABLE vp_r (
+    vp_rowid INT8 PRIMARY KEY,
+    c0 BOOL NULL
+);
+
+INSERT INTO vp_source
+SELECT i, CASE WHEN i = 13 THEN false ELSE NULL END
+FROM generate_series(1, 13) AS g(i);
+
+INSERT INTO vp_l
+SELECT vp_rowid FROM vp_source;
+
+INSERT INTO vp_r
+SELECT vp_rowid, c0 FROM vp_source;
+
+CREATE INDEX vp_r_partial
+ON vp_r(c0)
+WHERE c0 IS NOT NULL;
+
+-- 单表查询：应返回 7 行 NULL
+SELECT c0
+FROM vp_source
+ORDER BY c0, vp_rowid
+LIMIT 3 OFFSET 4;
+
+-- 多表 join 重建：可能返回 3 行 NULL
+SELECT q.c0
+FROM (
+    SELECT l.vp_rowid, r.c0
+    FROM vp_l AS l
+    JOIN vp_r AS r
+      ON l.vp_rowid = r.vp_rowid
+) AS q
+ORDER BY q.c0, q.vp_rowid
+LIMIT 3 OFFSET 4;
+
+
+single: 7 rows NULL
+split:  3 rows NULL
+
+EXPLAIN (OPT)
+SELECT c0
+FROM vp_source
+ORDER BY c0, vp_rowid
+LIMIT 3 OFFSET 4;
+
+----------------------------------------
+ offset
+  ├── top-k
+  │    ├── k: 7
+  │    └── scan vp_source@vp_source_idx
+  └── 4
+(5 rows)
+
+EXPLAIN (OPT)
+SELECT q.c0
+FROM (
+    SELECT l.vp_rowid, r.c0
+    FROM vp_l AS l
+    JOIN vp_r AS r
+      ON l.vp_rowid = r.vp_rowid
+) AS q
+ORDER BY q.c0, q.vp_rowid
+LIMIT 3 OFFSET 4;
+
+----------------------------------------------------------
+ project
+  └── offset
+       ├── limit
+       │    ├── inner-join (lookup vp_l@vp_l_asym [as=l])
+       │    │    ├── lookup columns are key
+       │    │    ├── sort
+       │    │    │    └── scan vp_r [as=r]
+       │    │    │         └── partial index predicates
+       │    │    │              └── vp_r_partial: filters
+       │    │    │                   └── r.c0 IS NOT NULL
+       │    │    └── filters (true)
+       │    └── 7
+       └── 4
+(13 rows)
+
+CockroachDB 优化器在 join 重写/扫描路径选择时，错误地把 vp_r_partial 的 partial index 谓词 c0 IS NOT NULL 当成了 vp_r 扫描时可以直接应用的过滤条件，从而丢弃了查询需要的 c0 IS NULL 行。
+
+这违反了 partial index 的使用前提：
+只有当查询条件能够蕴含 partial index 的谓词时，才能使用该 partial index。
+这里查询没有 c0 IS NOT NULL 条件，反而需要所有 c0 值，所以不能使用 vp_r_partial 来过滤行。

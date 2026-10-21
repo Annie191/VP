@@ -1,0 +1,20 @@
+{
+  "database": "Databend",
+  "source": "/home/lwm/sqlancer/Bugs/Databend/20615.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT\n    NULL AS k,\n    CAST(7 AS INT) AS tag\nFROM src\nGROUP BY\n    NULL,\n    CAST(7 AS INT)",
+      "ok": true,
+      "rows": [
+        "NULL\t7",
+        "NULL\t7"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 13,
+  "target_query": "SELECT\n    NULL AS k,\n    CAST(7 AS INT) AS tag\nFROM src\nGROUP BY\n    NULL,\n    CAST(7 AS INT);",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

@@ -1,0 +1,19 @@
+{
+  "database": "Oceanbase",
+  "source": "/home/lwm/sqlancer/Bugs/Oceanbase/2435.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 单表\nSELECT /*+ PARALLEL(4) */ STD(c0) AS single_std, VAR_POP(c0) AS single_var\nFROM src",
+      "ok": true,
+      "rows": [
+        "0.000000011547005383792515\t1.3333333333333334e-16"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 13,
+  "target_query": "-- 单表\nSELECT /*+ PARALLEL(4) */ STD(c0) AS single_std, VAR_POP(c0) AS single_var\nFROM src;",
+  "skip_reason": "only one top-level aggregate expression is supported"
+}

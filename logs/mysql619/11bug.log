@@ -1,0 +1,153 @@
+https://bugs.mysql.com/bug.php?id=120734&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro_mysql619_11;
+CREATE DATABASE repro_mysql619_11;
+USE repro_mysql619_11;
+
+CREATE TABLE source (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY
+) ENGINE=InnoDB;
+
+INSERT INTO source VALUES ();
+
+CREATE TABLE l (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+INSERT INTO l SELECT vp_rowid FROM source;
+INSERT INTO r SELECT vp_rowid FROM source;
+
+-- Single query: returns 1
+SELECT MAX(DISTINCT source.vp_rowid) AS ref0
+FROM source
+WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid);
+
+-- Split query with SQLancer VP full outer simulation: returns NULL
+SELECT MAX(DISTINCT vp_source.vp_rowid) AS ref0
+FROM (
+  SELECT l.vp_rowid AS vp_rowid
+  FROM l
+  LEFT JOIN r ON l.vp_rowid = r.vp_rowid
+
+  UNION ALL
+
+  SELECT r.vp_rowid AS vp_rowid
+  FROM l
+  RIGHT JOIN r ON l.vp_rowid = r.vp_rowid
+  WHERE l.vp_rowid IS NULL
+) AS vp_source
+WHERE LEAST('Uk]6T', 0.8087354366787728) IN (vp_source.vp_rowid);
+
+
+预期/实测差异：
+Single query:
+ref0 = 1
+
+Split query:
+ref0 = NULL
+
+关键执行计划差异：
+Single:
+-> Rows fetched before execution
+
+Split:
+-> Aggregate: max(vp_source.vp_rowid)
+    -> Table scan on vp_source
+        -> Union all materialize
+            -> Zero rows (Impossible WHERE noticed after reading const tables)
+            -> Zero rows (Impossible WHERE noticed after reading const tables)
+
+在直接扫基表时触发了 Rows fetched before execution 的 MAX() 优化，错误返回主键值 1；而 SQLancer 的 VP split 重构后，优化器正常把谓词判断为 false/impossible，返回 NULL。
+
+二、Single 查询解析
+sql
+SELECT MAX(DISTINCT source.vp_rowid) AS ref0
+FROM source
+WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid);
+2.1 WHERE 条件分析
+sql
+LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)
+LEAST('Uk]6T', 0.8087354366787728)：
+'Uk]6T' 是字符串
+0.8087354366787728 是浮点数
+LEAST() 在混合类型时进行数值比较
+字符串 'Uk]6T' 转为数值 = 0（非数字开头）
+LEAST(0, 0.8087...) = 0
+所以条件变为：
+sql
+0 IN (source.vp_rowid)
+source.vp_rowid = 1
+0 IN (1) = FALSE（0 不等于 1）
+WHERE 条件应该过滤掉所有行！
+2.2 但执行计划说...
+plain
+Single:
+-> Rows fetched before execution
+这是 MySQL 的常量表优化（constant table optimization）：
+source 表只有一行，且 vp_rowid 是主键
+优化器在执行前就读取了这行数据
+然后对 MAX(DISTINCT source.vp_rowid) 进行优化
+2.3 MAX() 的常量优化陷阱
+MAX(DISTINCT source.vp_rowid) 在优化器看来：
+source 是常量表（只有一行）
+MAX(DISTINCT col) 在单表单行的场景下，可能被优化为直接返回该行的值，而不检查 WHERE 条件是否实际过滤掉了这行
+关键问题： 优化器在 Rows fetched before execution 阶段，先读取了常量表的值，然后对 MAX() 应用了某种预计算优化，但没有正确验证 WHERE 条件。
+具体来说：
+优化器看到 source 只有一行，主键 vp_rowid = 1
+它可能认为 MAX(DISTINCT vp_rowid) 的结果一定是 1
+但它忽略了 WHERE 条件 0 IN (1) = FALSE，这行实际上不应该被包含
+2.4 实际结果
+plain
+ref0 = 1
+❌ 错误！ 因为 WHERE 条件为 FALSE，没有行满足条件，MAX() 应该返回 NULL。
+三、Split 查询解析
+sql
+SELECT MAX(DISTINCT vp_source.vp_rowid) AS ref0
+FROM (
+  SELECT l.vp_rowid AS vp_rowid
+  FROM l
+  LEFT JOIN r ON l.vp_rowid = r.vp_rowid
+
+  UNION ALL
+
+  SELECT r.vp_rowid AS vp_rowid
+  FROM l
+  RIGHT JOIN r ON l.vp_rowid = r.vp_rowid
+  WHERE l.vp_rowid IS NULL
+) AS vp_source
+WHERE LEAST('Uk]6T', 0.8087354366787728) IN (vp_source.vp_rowid);
+3.1 UNION ALL 子查询分析
+这是 SQLancer 的 VP（View Predicate）Full Outer Join 模拟：
+sql
+-- 第一部分：LEFT JOIN
+SELECT l.vp_rowid FROM l LEFT JOIN r ON l.vp_rowid = r.vp_rowid
+-- l=(1), r=(1) → 结果: (1)
+
+-- 第二部分：RIGHT JOIN 的补集
+SELECT r.vp_rowid FROM l RIGHT JOIN r ON ... WHERE l.vp_rowid IS NULL
+-- l=(1), r=(1), 但 l.vp_rowid IS NULL 过滤掉匹配行 → 结果: 空
+所以 vp_source 的结果就是 (1)，逻辑上与 source 表等价。
+3.2 执行计划
+plain
+Split:
+-> Aggregate: max(vp_source.vp_rowid)
+    -> Table scan on vp_source
+        -> Union all materialize
+            -> Zero rows (Impossible WHERE noticed after reading const tables)
+            -> Zero rows (Impossible WHERE noticed after reading const tables)
+关键差异：
+Union all materialize 将派生表物化为临时表
+优化器在物化过程中，对每个分支的 WHERE 条件进行了常量传播和条件评估
+两个分支都识别出 Impossible WHERE（因为 0 IN (1) = FALSE）
+所以物化后的 vp_source 是空表
+MAX() 在空表上返回 NULL
+3.3 实际结果
+plain
+ref0 = NULL
+
+错误行为： 优化器在 Rows fetched before execution 阶段预读取了常量表值，然后对 MAX() 应用了快捷优化，跳过了 WHERE 条件的实际验证
+正确行为（Split）： 派生表物化过程中正常评估 WHERE，返回 NULL

@@ -1,0 +1,33 @@
+DROP DATABASE IF EXISTS repro_ob730_db13_min;
+CREATE DATABASE repro_ob730_db13_min;
+USE repro_ob730_db13_min;
+SET SESSION sql_mode = 'PIPES_AS_CONCAT';
+SET NAMES utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+SET SESSION ob_enable_aggregation_pushdown = 0;
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL(65,30),
+  c1 BIGINT
+) ENGINE=InnoDB
+PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+INSERT INTO src VALUES
+  (1, -338707012, -1),
+  (2, -338707012, -1);
+CREATE TABLE l LIKE src;
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c1 BIGINT
+) ENGINE=InnoDB
+PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+INSERT INTO l SELECT * FROM src;
+INSERT INTO r SELECT vp_rowid, c1 FROM src;
+
+-- ORIGINAL SINGLE-TABLE QUERY
+SELECT /*+ PARALLEL(4) */
+  IFNULL(GREATEST(vp_rowid, c0), (-44622653) && c0) AS g
+FROM src
+GROUP BY IFNULL(GREATEST(vp_rowid, c0), (-44622653) && c0)
+WITH ROLLUP
+ORDER BY g;
+
+-- SKIPPED TLP/NoREC: GROUP BY is not handled by this batch rewriter

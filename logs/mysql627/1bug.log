@@ -1,0 +1,87 @@
+https://bugs.mysql.com/bug.php?id=120803&thanks=4   Verified as described.
+
+DROP DATABASE IF EXISTS codex_db1_min;
+CREATE DATABASE codex_db1_min;
+USE codex_db1_min;
+
+CREATE TABLE s(
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL
+) ENGINE=InnoDB;
+
+INSERT INTO s(c0) VALUES
+  ('0'),
+  ('1521367719'),
+  ('f~O_1');
+
+CREATE TABLE l(
+  vp_rowid BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+CREATE TABLE r(
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 TEXT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO l(vp_rowid)
+SELECT vp_rowid FROM s;
+
+INSERT INTO r(vp_rowid, c0)
+SELECT vp_rowid, c0 FROM s;
+
+SELECT CAST(LEAST('z', '_ejEZpA(1', '2090248689', c0) AS SIGNED) AS ref0
+FROM s
+ORDER BY vp_rowid;
+
+SELECT CAST(LEAST('z', '_ejEZpA(1', '2090248689', d.c0) AS SIGNED) AS ref0
+FROM (
+  WITH lq AS (
+    SELECT ROW_NUMBER() OVER (ORDER BY vp_rowid) AS rn, vp_rowid
+    FROM l
+  ),
+  rq AS (
+    SELECT ROW_NUMBER() OVER (ORDER BY vp_rowid) AS rn, vp_rowid, c0
+    FROM r
+  )
+  SELECT lq.vp_rowid AS vp_rowid, rq.c0 AS c0
+  FROM lq
+  JOIN rq ON lq.rn = rq.rn
+) d
+ORDER BY d.vp_rowid;
+
+原查询结果：
+0
+1521367719
+2090248689
+
+重构查询结果：
+
+0
+0
+0
+
+这就是 wrong-result：原表里第 2、3 行分别应是 1521367719 和 2090248689，但 ROW_NUMBER_ALIGNMENT 重构后全掉成了 0。
+
+关键计划片段是：
+Nested loop inner join
+  -> Sort: vp_rowid
+    -> Materialize CTE lq
+      -> Window aggregate: row_number() OVER (ORDER BY l.vp_rowid)
+  -> Index lookup on rq using <auto_key0> (rn = lq.rn)
+    -> Materialize CTE rq
+      -> Window aggregate: row_number() OVER (ORDER BY r.vp_rowid)
+      这条很像 ROW_NUMBER_ALIGNMENT 路径里，文本列 c0 在经过 CTE/materialize 之后参与 LEAST(..., c0) 的求值语义变了，导致字符串比较/转整数的结果被统一错误折成 0。
+
+核心问题
+LEAST 选择比较模式的依据是参数的类型集合：
+全字符串参数 → 字符串字典序比较
+否则 → 数值（DOUBLE）比较
+在原查询中，优化器明确知道 s.c0 是 TEXT 类型，因此四个参数都是字符串，LEAST 走字符串比较路径。
+在重构查询中，d.c0 经历了：
+plain
+r.c0 (TEXT) → CTE rq materialize → JOIN → 派生表 d.c0
+CTE materialization 到临时表后，列的类型元信息发生退化：
+原表 s.c0 有明确的 TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci 类型标签
+CTE rq materialize 到内部临时表时，c0 列的类型信息可能被简化或丢失（例如仅记录为某种通用 BLOB/TEXT 表示，或临时表的列类型推导与原表不一致）
+优化器在分析外层 LEAST('z', '_ejEZpA(1', '2090248689', d.c0) 时，无法确认 d.c0 是纯粹的字符串类型
+于是 LEAST 退化为默认的数值比较模式

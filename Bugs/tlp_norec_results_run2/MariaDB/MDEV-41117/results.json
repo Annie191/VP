@@ -1,0 +1,19 @@
+{
+  "database": "MariaDB",
+  "source": "/home/lwm/sqlancer/Bugs/MariaDB/MDEV-41117.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT DISTINCT\n    CAST(LENGTHB(c0) AS UNSIGNED) AS result_value\nFROM vp_source\nWHERE c0 IN ('3bf0a4fa-72ff-433c-9a26-eecf4d741c6c')",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 12,
+  "target_query": "SELECT DISTINCT\n    CAST(LENGTHB(c0) AS UNSIGNED) AS result_value\nFROM vp_source\nWHERE c0 IN ('3bf0a4fa-72ff-433c-9a26-eecf4d741c6c');",
+  "skip_reason": "DISTINCT is not handled by this batch rewriter"
+}

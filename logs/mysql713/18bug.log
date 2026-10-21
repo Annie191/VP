@@ -1,0 +1,116 @@
+https://bugs.mysql.com/bug.php?id=120908&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro18_final;
+CREATE DATABASE repro18_final;
+USE repro18_final;
+
+CREATE TABLE src (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    c0 BIGINT NULL,
+    UNIQUE KEY i0(c0)
+) ENGINE=InnoDB;
+
+INSERT INTO src(c0) VALUES (0),(32767);
+
+CREATE TABLE l (
+    id BIGINT NOT NULL PRIMARY KEY,
+    c0 BIGINT NULL,
+    KEY l_i(id,c0)
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+    id BIGINT NOT NULL PRIMARY KEY,
+    c0 BIGINT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO l SELECT id,c0 FROM src;
+INSERT INTO r SELECT id,c0 FROM src;
+
+-- Single: 返回 2 行
+SELECT DISTINCTROW
+    'single' AS q,
+    ('x') OR (CAST((src.c0) XOR (src.id) AS SIGNED)) AS ref0,
+    (((src.id) < (src.id)) >= ((src.c0) NOT IN (3.35077561E8))) IN (NULL) AS ref1,
+    COUNT(DISTINCT (src.c0) IS NOT TRUE) AS ref2
+FROM src
+GROUP BY
+    (((src.id) < (src.id)) >= ((src.c0) NOT IN (3.35077561E8))) IN (NULL),
+    ('x') OR (CAST((src.c0) XOR (src.id) AS SIGNED));
+
+-- Split: 返回 1 行
+SELECT DISTINCTROW
+    'split' AS q,
+    ('x') OR (CAST((s.c0) XOR (s.id) AS SIGNED)) AS ref0,
+    (((s.id) < (s.id)) >= ((s.c0) NOT IN (3.35077561E8))) IN (NULL) AS ref1,
+    COUNT(DISTINCT (s.c0) IS NOT TRUE) AS ref2
+FROM (
+    SELECT id, l.c0 AS c0
+    FROM l JOIN r USING(id)
+) s
+GROUP BY
+    (((s.id) < (s.id)) >= ((s.c0) NOT IN (3.35077561E8))) IN (NULL),
+    ('x') OR (CAST((s.c0) XOR (s.id) AS SIGNED));
+
+
++--------+------+------+------+
+| q      | ref0 | ref1 | ref2 |
++--------+------+------+------+
+| single |    0 | NULL |    1 |
+| single |    1 | NULL |    1 |
++--------+------+------+------+
+
+
++-------+------+------+------+
+| q     | ref0 | ref1 | ref2 |
++-------+------+------+------+
+| split |    0 | NULL |    1 |
++-------+------+------+------+
+
+执行计划对比：
+
+Single（直接查 src）：
+
+-> Group aggregate
+    -> Sort: ref1, ref0
+        -> Covering index scan on src using i0
+
+Split（JOIN 展开后查）:
+
+-> Sort: ref1, ...
+    -> Sort with duplicate removal: ref1, ref2
+        -> Stream results
+            -> Group aggregate
+                -> Nested loop inner join
+                    -> Sort: ref1, ...
+                        -> Covering index scan on l using l_i
+                    -> Single-row covering index lookup on r using PRIMARY
+
+1. 单表为何正确（两行）
+c0 XOR id 是逻辑异或：
+
+id=1, c0=0 → 0 XOR 1 = 1 → ref0 = 'x' OR 1 → 结果为整数 1。
+
+id=2, c0=32767 → 32767 XOR 2 = 0 → ref0 = 'x' OR 0 → 结果为整数 0。
+
+ref1 = (((id)<(id)) >= (c0 NOT IN(3.35077561E8))) IN (NULL) 始终为 NULL。
+
+ref2 = COUNT(DISTINCT (c0 IS NOT TRUE)) 每个分组内只有一行（c0=0 → 1，c0=32767 → 0），均为 1。
+
+分组键 (ref1, ref0) 产生两个不同的组：(NULL, 1) 和 (NULL, 0)，因此输出两行。
+
+执行计划中 Group aggregate 后直接排序输出，DISTINCTROW 被优化器识别为分组键已保证唯一，无需额外去重。
+
+2. 多表为何错误（一行）
+派生表 s 与 src 数据完全相同，理应得到相同的两个分组。
+
+但执行计划显示了一个异常步骤：
+Sort with duplicate removal: ref1, ref2 在 Group aggregate 之后执行。
+
+这个去重仅基于 ref1 和 ref2，没有包含同样是输出列也是分组键的 ref0。
+
+两个分组虽然 ref0 不同（1 和 0），但 ref1 都是 NULL，ref2 都是 1，因此在 (ref1, ref2) 上完全相同。错误的去重操作将这两组合并，只保留了一行（保留哪一行取决于内部排序，这里保留了 ref0=0 的行）。
+
+最终输出只剩一行，即多表查询结果中看到的 ref0=0。
+
+3. 根因总结
+MySQL 优化器在处理包含派生表/多表连接的 GROUP BY ... WITH ROLLUP 或 DISTINCT 的复杂查询时，可能会插入一个基于部分输出列的重复消除步骤。当该步骤使用的列集未能覆盖所有输出列（尤其是同为分组键的表达式）时，会错误地合并本应不同的分组，导致行数丢失和结果错误。

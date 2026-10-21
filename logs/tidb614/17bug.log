@@ -1,0 +1,174 @@
+#69191 https://github.com/pingcap/tidb/issues/69191 confirmed as a bug.
+
+
+DROP DATABASE IF EXISTS repro_tidb_old_17;
+CREATE DATABASE repro_tidb_old_17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+USE repro_tidb_old_17;
+
+CREATE TABLE src(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DECIMAL(65,30) NULL
+);
+
+INSERT INTO src(c0) VALUES
+  (0),
+  (1);
+
+CREATE TABLE l(id BIGINT NOT NULL PRIMARY KEY);
+CREATE TABLE r(id BIGINT NOT NULL PRIMARY KEY, c0 DECIMAL(65,30) NULL);
+INSERT INTO l SELECT id FROM src;
+INSERT INTO r SELECT id, c0 FROM src;
+
+CREATE VIEW v AS
+SELECT l.id AS id, r.c0 AS c0
+FROM l JOIN r ON l.id = r.id;
+
+SELECT
+  id,
+  c0,
+  CASE 'ꉈP/<3|9,-'
+    WHEN c0 THEN '2020-11-24'
+    WHEN c0 THEN id
+    ELSE ']'
+  END AS expr
+FROM src
+ORDER BY id;
+
+SELECT
+  HEX(MIN(BINARY(
+    CASE 'ꉈP/<3|9,-'
+      WHEN c0 THEN '2020-11-24'
+      WHEN c0 THEN id
+      ELSE ']'
+    END
+  ))) AS source_hex,
+  MIN(BINARY(
+    CASE 'ꉈP/<3|9,-'
+      WHEN c0 THEN '2020-11-24'
+      WHEN c0 THEN id
+      ELSE ']'
+    END
+  )) AS source_val
+FROM src
+ORDER BY id;
+
+SELECT
+  HEX(MIN(BINARY(
+    CASE 'ꉈP/<3|9,-'
+      WHEN c0 THEN '2020-11-24'
+      WHEN c0 THEN id
+      ELSE ']'
+    END
+  ))) AS split_hex,
+  MIN(BINARY(
+    CASE 'ꉈP/<3|9,-'
+      WHEN c0 THEN '2020-11-24'
+      WHEN c0 THEN id
+      ELSE ']'
+    END
+  )) AS split_val
+FROM v
+ORDER BY id;
+
+1. 表达式语义：常量折叠
+sql
+CASE 'ꉈP/<3|9,-' WHEN c0 THEN '2020-11-24' WHEN c0 THEN id ELSE ']' END
+TiDB 在优化阶段做了常量折叠：
+字符串 'ꉈP/<3|9,-' 转 DECIMAL：取前缀数字部分 → 无前导数字 → 0
+因此整个 CASE 被重写为：
+sql
+CASE 0 WHEN c0 THEN '2020-11-24' WHEN c0 THEN id ELSE ']' END
+等价于：
+sql
+CASE WHEN 0 = c0 THEN '2020-11-24'
+     WHEN 0 = c0 THEN id
+     ELSE ']'
+END
+CASE 短路语义：第一个 WHEN 匹配成功后立即返回，不会评估第二个 WHEN。
+2. 逐行预期结果（Root 层语义）
+表格
+id	c0 (DECIMAL(65,30))	0 = c0	命中分支	结果
+1	0	TRUE	第一个 WHEN	'2020-11-24'
+2	1	FALSE	ELSE	']'
+MIN(BINARY(...)) 按字典序比较：
+'2020-11-24' → HEX 32 30 32 30 ...（首字节 0x32）
+']' → HEX 5D
+0x32 < 0x5D，所以 正确结果应为 '2020-11-24'。
+3. 实际结果对比
+表格
+路径	执行层	结果	HEX	正误
+source (单表 src)	TiKV cop 下推	]	5D	❌
+split (视图 v = join)	TiDB root	'2020-11-24'	32303230...	✅
+4. 执行计划差异
+Source 路径（错误）
+plain
+HashAgg_10 cop[tikv]
+funcs:min(
+  cast(
+    case(eq(0, src.c0), "2020-11-24",
+         eq(0, src.c0), cast(src.id, var_string(20)),
+         "]"),
+    binary(1)
+  )
+)
+关键：BIT_AND/MIN 等聚合下推到了 TiKV coprocessor，表达式在 TiKV 侧逐行求值后再做聚合。
+Split 路径（正确）
+plain
+HashAgg root
+Projection root:
+cast(
+  case(eq(0, r.c0), 2020-11-24,
+       eq(0, r.c0), cast(l.id, var_string(20)),
+       ]),
+  binary(1)
+)
+关键：Join 后聚合留在 TiDB root 层执行，表达式由 TiDB 执行器求值。
+
+真正根因：常量折叠的精度丢失
+sql
+CASE 'ꉈP/<3|9,-' WHEN c0 THEN '2020-11-24' WHEN c0 THEN id ELSE ']' END
+TiDB 优化器做常量折叠时：
+Step 1: 字符串 'ꉈP/<3|9,-' → DECIMAL
+取前缀数字部分：'ꉈ' 是 Unicode 字符，无前导 ASCII 数字 → 转换结果为 0（或非常小的数）
+Step 2: CASE 常量 WHEN 列 THEN ... 的重写
+TiDB 将 CASE const WHEN col THEN ... 重写为 CASE WHEN col = const THEN ...
+但优化器在常量折叠阶段，可能将 c0 (DECIMAL(65,30)) 与折叠后的常量做预比较或类型统一时出错。
+Step 3: 关键差异——BINARY 的位置
+仔细看执行计划中的表达式：
+plain
+cast(
+  case(eq(0, src.c0), "2020-11-24",
+       eq(0, src.c0), cast(src.id, var_string(20)),
+       "]"),
+  binary(1)
+)
+注意 BINARY 是最外层的 CAST，而非常量折叠的一部分。
+但看 source 路径返回 ]，split 路径返回 '2020-11-24'。
+真正的问题：CASE 的常量折叠在 source 和 split 路径产生了不同的折叠结果。
+核心差异：src.c0 vs r.c0 的元数据
+表格
+路径	列来源	类型信息
+source	src.c0	直接来自基表，DECIMAL(65,30)
+split	r.c0 → 视图 v.c0	经过 JOIN + 视图层
+假设：常量折叠时类型推导不同
+当优化器处理 CASE 'ꉈP/<3|9,-' WHEN c0 THEN ...：
+source 路径（直接基表）：
+'ꉈP/<3|9,-' 被折叠为 DECIMAL 时，可能因 c0 的 DECIMAL(65,30) 精度，导致折叠结果与 c0 的比较在优化期被错误地判定为不匹配
+或者：优化器将 CASE 表达式提前简化为常量 ']'（因为认为两个 WHEN 都不会命中）
+split 路径（经过视图/JOIN）：
+视图层阻止了某些激进的常量折叠
+表达式保留到执行期，此时 0 = c0 正确求值为 TRUE
+
+最终根因：优化器对 CASE 的冗余 WHEN 消除
+sql
+CASE 'ꉈP/<3|9,-' WHEN c0 THEN '2020-11-24' WHEN c0 THEN id ELSE ']' END
+优化器看到两个相同的 WHEN 条件 (WHEN c0)，可能做了冗余消除：
+source 路径（激进优化）
+优化器将两个相同的 WHEN 合并，并尝试预评估：
+0 = c0 对于 DECIMAL(65,30) 的 c0=0，在优化器的常量评估中可能因精度问题返回 FALSE/UNKNOWN
+因此整个 CASE 被折叠为常量 ']'
+MIN(BINARY(']')) = ']'
+split 路径（保守优化）
+经过 JOIN + 视图后，优化器无法确定 c0 的具体值，保留 CASE 结构到执行期：
+执行时 0 = c0 正确求值为 TRUE
+返回 '2020-11-24'

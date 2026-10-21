@@ -1,0 +1,113 @@
+https://bugs.mysql.com/bug.php?id=120785&thanks=4  duplciate of Bug#117945.
+
+DROP DATABASE IF EXISTS codex_db12;
+CREATE DATABASE codex_db12;
+USE codex_db12;
+
+SET SESSION sql_mode =
+'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+
+SET SESSION optimizer_switch =
+'index_merge=on,index_merge_union=on,index_merge_sort_union=on,index_merge_intersection=on,engine_condition_pushdown=on,index_condition_pushdown=on,mrr=on,mrr_cost_based=on,block_nested_loop=on,batched_key_access=off,materialization=on,semijoin=on,loosescan=on,firstmatch=on,duplicateweedout=on,subquery_materialization_cost_based=on,use_index_extensions=on,condition_fanout_filter=on,derived_merge=on,use_invisible_indexes=off,skip_scan=on,hash_join=on,subquery_to_derived=off,prefer_ordering_index=on,hypergraph_optimizer=off,derived_condition_pushdown=on,hash_set_operations=on';
+
+SET SESSION big_tables = 0;
+SET SESSION internal_tmp_mem_storage_engine = 'MEMORY';
+
+CREATE TABLE s(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 FLOAT NULL,
+  KEY idx(c0 DESC)
+) ENGINE=InnoDB;
+
+INSERT INTO s(c0)
+VALUES (1903340000), (1894990000), (-0e0), (-0e0), (0e0), (NULL);
+
+CREATE TABLE l(id BIGINT NOT NULL PRIMARY KEY, c0 FLOAT NULL) ENGINE=InnoDB;
+CREATE TABLE r(id BIGINT NOT NULL PRIMARY KEY, c0 FLOAT NULL) ENGINE=InnoDB;
+
+INSERT INTO l SELECT id, c0 FROM s;
+INSERT INTO r SELECT id, c0 FROM s;
+
+SELECT DISTINCT s.c0 AS ref0
+FROM s
+GROUP BY s.c0;
+
+SELECT DISTINCT d.c0 AS ref0
+FROM (
+  SELECT l.id, r.c0
+  FROM l
+  JOIN r ON l.id = r.id
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM r rx
+    WHERE rx.id = l.id
+      AND rx.id <> l.id
+  )
+) d
+GROUP BY d.c0;
+
+
+SELECT DISTINCT s.c0 AS ref0
+FROM s
+GROUP BY s.c0;
+
+
+结果：4 行（正确）
+plain
+1903340000
+1894990000
+-0
+NULL
+这里 -0 和 0 被合并为一行 -0，因为：
+单表查询时，MySQL 使用索引扫描或文件排序进行 GROUP BY
+在比较时，FLOAT 的 -0 和 +0 被视为相等（符合 SQL 标准）
+
+重构查询行为（错误）
+sql
+SELECT DISTINCT d.c0 AS ref0
+FROM (
+  SELECT l.id, r.c0
+  FROM l
+  JOIN r ON l.id = r.id
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM r rx
+    WHERE rx.id = l.id
+      AND rx.id <> l.id
+  )
+) d
+GROUP BY d.c0;
+结果：5 行（错误，多出一个 0）
+plain
+1903340000
+1894990000
+-0
+0        <-- 错误地多出了这一行
+NULL
+
+执行计划分析
+plain
+-> Table scan on <temporary>  (cost=6.86..9.01 rows=6)
+    -> Temporary table with deduplication  (cost=6.43..6.43 rows=6)
+        -> Nested loop antijoin  (cost=5.05 rows=6)
+            -> Nested loop inner join  (cost=2.95 rows=6)
+                -> Covering index scan on l using PRIMARY  (cost=0.85 rows=6)
+                -> Single-row index lookup on r using PRIMARY (id = l.id)  (cost=0.267 rows=1)
+            -> Filter: (l.id <> l.id)  (cost=0.267 rows=1)
+                -> Single-row covering index lookup on rx using PRIMARY (id = l.id)  (cost=0.267 rows=1)
+关键路径是 Temporary table with deduplication。
+
+Bug 触发机制详解
+步骤 1：NOT EXISTS 反连接产生临时表需求
+NOT EXISTS 子查询被优化器转换为 Nested loop antijoin。由于这个转换，查询结果需要被物化到一个临时表中进行去重。
+步骤 2：临时表去重逻辑缺陷
+临时表去重（Temporary table with deduplication）的实现原理：
+创建一个临时表，带有唯一索引
+将每行数据插入临时表
+如果插入冲突（唯一键重复），则跳过该行
+问题就在这里：临时表的唯一性检查使用了二进制级别的比较，而不是数值比较。
+FLOAT 类型的 -0 在内存中的二进制表示：0x80000000（符号位为 1）
+FLOAT 类型的 +0 在内存中的二进制表示：0x00000000（符号位为 0）
+临时表去重时比较的是原始字节，而不是数值语义，因此 -0 和 +0 被视为不同的值，都被保留下来。
+
+临时表去重（Temporary table with deduplication）在处理 FLOAT 类型的 -0 和 +0 时，使用了错误的比较逻辑，导致本应在 GROUP BY 中被合并的 -0 和 +0 被错误地保留为两个独立值。

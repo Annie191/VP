@@ -1,0 +1,19 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120832.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- Single: 查 src\nSELECT 'single' AS query_type, (((c0) LIKE (NULL)) IS FALSE) IS NULL AS ref0\nFROM src\nWHERE (CAST((vp_rowid) IS NOT NULL AS SIGNED)) IS FALSE\nGROUP BY (((c0) LIKE (NULL)) IS FALSE) IS NULL WITH ROLLUP",
+      "ok": true,
+      "rows": [
+        "single\tNULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "-- Single: 查 src\nSELECT 'single' AS query_type, (((c0) LIKE (NULL)) IS FALSE) IS NULL AS ref0\nFROM src\nWHERE (CAST((vp_rowid) IS NOT NULL AS SIGNED)) IS FALSE\nGROUP BY (((c0) LIKE (NULL)) IS FALSE) IS NULL WITH ROLLUP;",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

@@ -1,0 +1,94 @@
+https://bugs.mysql.com/bug.php?id=120737&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro620_min;
+CREATE DATABASE repro620_min;
+USE repro620_min;
+
+CREATE TABLE s (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 TEXT NULL,
+  c1 TEXT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO s(c0, c1) VALUES
+  ('1e500', NULL),
+  ('1930040183', NULL);
+
+CREATE TABLE l (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 TEXT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c1 TEXT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO l SELECT vp_rowid, c0 FROM s;
+INSERT INTO r SELECT vp_rowid, c1 FROM s;
+
+ALTER TABLE r
+  ADD CONSTRAINT fk FOREIGN KEY (vp_rowid) REFERENCES l(vp_rowid);
+
+CREATE VIEW v AS
+SELECT l.vp_rowid AS vp_rowid, l.c0 AS c0, r.c1 AS c1
+FROM l JOIN r ON l.vp_rowid = r.vp_rowid;
+
+SELECT DISTINCT
+  'single' AS q,
+  COUNT((GREATEST(s.c0, '')) && (0.980680600517849)) AS ref0,
+  (+(((s.c1) IS FALSE) &&
+     ((CASE 0.03346139528957415 WHEN s.c0 THEN s.vp_rowid ELSE 1446123744 END)))) AS ref1,
+  SUM(DISTINCT CAST(s.c0 AS DECIMAL(65,30))) AS ref2
+FROM s
+GROUP BY (+(((s.c1) IS FALSE) &&
+       ((CASE 0.03346139528957415 WHEN s.c0 THEN s.vp_rowid ELSE 1446123744 END))));
+
+SELECT DISTINCT
+  'split' AS q,
+  COUNT((GREATEST(v.c0, '')) && (0.980680600517849)) AS ref0,
+  (+(((v.c1) IS FALSE) &&
+     ((CASE 0.03346139528957415 WHEN v.c0 THEN v.vp_rowid ELSE 1446123744 END)))) AS ref1,
+  SUM(DISTINCT CAST(v.c0 AS DECIMAL(65,30))) AS ref2
+FROM v
+GROUP BY (+(((v.c1) IS FALSE) &&
+       ((CASE 0.03346139528957415 WHEN v.c0 THEN v.vp_rowid ELSE 1446123744 END))));
+
+执行计划分析
+Single 路径
+plain
+-> Group aggregate:
+     count(...),
+     sum(distinct cast(s.c0 as decimal(65,30)))
+    -> Sort: ref1
+        -> Table scan on s
+特点：
+直接在 s 表上做 Group Aggregate
+CAST(s.c0 AS DECIMAL(65,30)) 在聚合前执行
+DISTINCT 在聚合阶段去重
+Split/View 路径
+plain
+-> Sort with duplicate removal: ref0, ref1, ref2
+    -> Stream results
+        -> Group aggregate:
+             count(tmp_field),
+             sum(distinct tmp_field)
+            -> Sort: group expression
+                -> Stream results
+                    -> Inner hash join (r.vp_rowid = l.vp_rowid)
+                        -> Table scan on r
+                        -> Hash
+                            -> Table scan on l
+关键差异：
+Join 引入临时字段： sum(distinct tmp_field) —— tmp_field 是 Join 过程中的中间结果
+Sort with duplicate removal： 在顶层做去重，而不是在聚合内部
+Stream results： 流式处理可能导致精度/溢出行为变化
+
+最可能的根因
+CAST('1e500' AS DECIMAL(65,30)) 在 single 和 split 路径中的溢出处理不一致：
+Single 路径： 表达式直接在基表上求值。'1e500' 转 DECIMAL 溢出时，TiDB 可能返回一个"错误值"或"部分截断值"，但这个值恰好包含了内存中的脏数据（第二行的 1930040182），导致结果异常为 100000...001930040182...
+Split 路径： 通过 Join 和临时字段时，数据经过序列化/反序列化，或者类型系统更严格，溢出时被正确饱和为 DECIMAL(65,30) 的最大值 999...999
+这实际上是一个"未定义行为"（Undefined Behavior）的差异表现：
+对超出范围的值做 CAST，标准行为应该是报错或返回 NULL/最大值
+Single 路径可能由于直接操作原始数据，产生了内存污染或不正确的截断
+Split 路径由于数据流转更复杂，触发了更安全的饱和处理

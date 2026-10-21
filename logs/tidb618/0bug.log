@@ -1,0 +1,182 @@
+#69354: https://github.com/pingcap/tidb/issues/69354 confirmed as a bug.
+
+DROP DATABASE IF EXISTS repro_tidb618_db0_min;
+CREATE DATABASE repro_tidb618_db0_min;
+USE repro_tidb618_db0_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+SET tidb_opt_agg_push_down=1;
+
+CREATE TABLE src(
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 BIGINT NULL
+);
+
+INSERT INTO src(c0) VALUES (-2100312475);
+
+CREATE TABLE l(
+  vp_rowid BIGINT NOT NULL PRIMARY KEY
+);
+
+CREATE TABLE r(
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 BIGINT NULL
+);
+
+INSERT INTO l SELECT vp_rowid FROM src;
+INSERT INTO r SELECT vp_rowid,c0 FROM src;
+
+SELECT
+  vp_rowid,
+  CAST(vp_rowid AS DECIMAL) AS dec_v,
+  BINARY(CAST(vp_rowid AS DECIMAL)) AS bin_v,
+  HEX(BINARY(CAST(vp_rowid AS DECIMAL))) AS hex_bin,
+  (BINARY(CAST(vp_rowid AS DECIMAL)) <= '|') AS cmp_binary,
+  BIN((BINARY(CAST(vp_rowid AS DECIMAL)) <= '|')) AS pred_binary,
+  (FROM_BINARY(BINARY(CAST(vp_rowid AS DECIMAL))) <= '|') AS cmp_from_binary,
+  BIN((FROM_BINARY(BINARY(CAST(vp_rowid AS DECIMAL))) <= '|')) AS pred_from_binary
+FROM src;
+
+SELECT
+  NULL << 'aMI x*' AS a,
+  403837559 AS b,
+  BIN(c0) AS c
+FROM src
+WHERE BIN((BINARY(CAST(vp_rowid AS DECIMAL)) <= '|'))
+ORDER BY 0.9328472781954409;
+
+SELECT
+  NULL << 'aMI x*' AS a,
+  403837559 AS b,
+  BIN(c0) AS c
+FROM (
+  SELECT l.vp_rowid, r.c0
+  FROM l
+  JOIN (
+    SELECT vp_rowid, COUNT(*) AS vp_count
+    FROM r
+    GROUP BY vp_rowid
+  ) rg ON l.vp_rowid = rg.vp_rowid
+  JOIN r ON r.vp_rowid = rg.vp_rowid
+) v
+WHERE BIN((BINARY(CAST(vp_rowid AS DECIMAL)) <= '|'))
+ORDER BY 0.9328472781954409;
+
+
+
+二、核心谓词分析
+sql
+SELECT
+  vp_rowid,
+  CAST(vp_rowid AS DECIMAL) AS dec_v,           -- 1
+  BINARY(CAST(vp_rowid AS DECIMAL)) AS bin_v,  -- 2
+  HEX(BINARY(CAST(vp_rowid AS DECIMAL))) AS hex_bin,  -- 3
+  (BINARY(CAST(vp_rowid AS DECIMAL)) <= '|') AS cmp_binary,  -- 4
+  BIN((BINARY(CAST(vp_rowid AS DECIMAL)) <= '|')) AS pred_binary,  -- 5
+  (FROM_BINARY(BINARY(CAST(vp_rowid AS DECIMAL))) <= '|') AS cmp_from_binary,  -- 6
+  BIN((FROM_BINARY(BINARY(CAST(vp_rowid AS DECIMAL))) <= '|')) AS pred_from_binary  -- 7
+FROM src;
+结果分析（vp_rowid=1）：
+表格
+列	值	含义
+dec_v	1	CAST(1 AS DECIMAL) = 1
+bin_v	1	BINARY(1) → 二进制字符串 "1"
+hex_bin	31	"1" 的 ASCII 码是 0x31
+cmp_binary	1	"1" <= "|" → true（ASCII 0x31 < 0x7C）
+pred_binary	1	BIN(true) = '1'
+cmp_from_binary	0	FROM_BINARY("1") → 数值 1；1 <= '|' → false
+pred_from_binary	0	BIN(false) = '0'
+关键发现：
+sql
+BINARY(CAST(1 AS DECIMAL)) <= '|'        -- true (1)
+FROM_BINARY(BINARY(CAST(1 AS DECIMAL))) <= '|'  -- false (0)
+这揭示了 BINARY() 和 FROM_BINARY() 在比较语义上的不一致：
+BINARY(x) 返回的是二进制字符串，与 '|' 做字符串比较 → "1" < "\|" → true
+FROM_BINARY(BINARY(x)) 将二进制字符串转回原始值 → 数值 1，与 '|' 做数值比较 → 1 < 0（'|' 在数值上下文中为 0）→ false
+三、Single 查询（直接查单表）
+sql
+SELECT
+  NULL << 'aMI x*' AS a,    -- 位运算，NULL 左移字符串 → NULL
+  403837559 AS b,             -- 常量
+  BIN(c0) AS c                -- c0 的二进制字符串表示
+FROM src
+WHERE BIN((BINARY(CAST(vp_rowid AS DECIMAL)) <= '|'))
+ORDER BY 0.9328472781954409;
+WHERE 条件分析：
+BINARY(CAST(1 AS DECIMAL)) <= '|' → true → BIN(true) → '1'（非空字符串）
+在布尔上下文中，'1' 为 truthy，条件成立
+结果： 返回 1 行（符合预期）
+四、Split 查询（Join 场景）
+sql
+SELECT
+  NULL << 'aMI x*' AS a,
+  403837559 AS b,
+  BIN(c0) AS c
+FROM (
+  SELECT l.vp_rowid, r.c0
+  FROM l
+  JOIN (
+    SELECT vp_rowid, COUNT(*) AS vp_count
+    FROM r
+    GROUP BY vp_rowid
+  ) rg ON l.vp_rowid = rg.vp_rowid
+  JOIN r ON r.vp_rowid = rg.vp_rowid
+) v
+WHERE BIN((BINARY(CAST(vp_rowid AS DECIMAL)) <= '|'))
+ORDER BY 0.9328472784409;
+结果： Empty set（0 行）—— 与 single 查询不一致！
+五、执行计划对比
+Single 计划
+plain
+Projection_7
+└─Selection_10
+   bin(le(
+     cast(cast(src.vp_rowid, decimal(10,0) BINARY), binary(1)),  ← 保持 BINARY
+     "|"
+   ))
+   └─TableReader_9
+      └─TableFullScan_8
+谓词保留原语义： BINARY(CAST(vp_rowid AS DECIMAL)) <= '|' → true
+Split 计划
+plain
+Projection_19
+└─MergeJoin_20
+   ├─TableReader_52(Build)  ← 表 r
+   │  └─TableFullScan_51
+   └─MergeJoin_35(Probe)
+      ├─Selection_47(Build)
+      │  bin(le(
+      │    from_binary(cast(cast(r.vp_rowid, decimal(10,0) BINARY), binary(1))),  ← 多了 FROM_BINARY!
+      │    "|"
+      │  ))
+      │  └─TableReader_46
+      └─Selection_44(Probe)
+         bin(le(
+           cast(cast(l.vp_rowid, decimal(10,0) BINARY), binary(1)),  ← 保持原样
+           "|"
+         ))
+关键差异： r 分支的谓词被优化器改写为：
+sql
+FROM_BINARY(BINARY(CAST(vp_rowid AS DECIMAL))) <= '|'
+而 l 分支保持原样：
+sql
+BINARY(CAST(vp_rowid AS DECIMAL)) <= '|'
+六、根因分析
+1. 优化器在分裂（Split）过程中的表达式等价性错误
+TiDB 优化器在处理 Join 时，需要将谓词下推到各个子分支。在这个过程中，优化器错误地认为：
+sql
+BINARY(CAST(x AS DECIMAL))   ≡   FROM_BINARY(BINARY(CAST(x AS DECIMAL)))
+即认为 BINARY() 和 FROM_BINARY(BINARY()) 是等价可互换的。
+2. 实际上两者语义完全不同
+| 表达式 | 类型 | 与 '|' 比较行为 |
+|---|---|---|
+| BINARY(CAST(1 AS DECIMAL)) | binary(1) 字符串 | 字符串比较："1" < "\|" → true |
+| FROM_BINARY(BINARY(CAST(1 AS DECIMAL))) | 原始类型（数值） | 数值比较：1 < 0（'|' 转数值为 0）→ false |
+3. 为什么 FROM_BINARY 会改变比较语义？
+BINARY(x) 强制将结果转为二进制字符串类型
+FROM_BINARY(binary_str) 将二进制字符串还原为原始值
+在比较运算符 <= 中，操作数类型决定了比较规则：
+字符串比较：按字典序（ASCII 码）
+数值比较：按数值大小
+'|' 的 ASCII 码是 0x7C（124），但作为数值时为 0（非数字字符串转数值）。

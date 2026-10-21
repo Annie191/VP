@@ -1,0 +1,175 @@
+--java.lang.AssertionError: [VERTICAL PARTITIONING BUG CANDIDATE]
+--Mode: RANDOM_TABLE_REWRITE
+--Strategy summary: split=TYPE_DIRECTED_SPLIT, reconstruction=JOIN, shape=MULTI_COLUMN, prefix=vp_database8_2954_
+--Strategy counts: split={EMPTY_SPLIT=21, SINGLE_REPLICATED=20, SINGLE_RIGHT_ROW_ID_ONLY=20, SINGLE_LEFT_ROW_ID_ONLY=20, EVEN_SPLIT=103, OVERLAPPED_SPLIT=103, SKEWED_SPLIT=103, TYPE_DIRECTED_SPLIT=104}, reconstruction={JOIN=2467, LEFT_RIGHT_JOIN=2465, FULL_OUTER_SIMULATION=2470, OUTER_NULL_EXTENSION=2470, SCALAR_SUBQUERY=2470, EXISTS_FILTER=2470, IN_FILTER=2465, NOT_EXISTS_ANTI=2470, DERIVED_TABLE=2470, CTE=2460, VIEW=2470, TEMP_TABLE=2438, AGGREGATE_THEN_MERGE=2470, ROW_NUMBER_ALIGNMENT=2470, JSON_PACK=2469, STRING_PACK=2465, NATURAL_OR_USING=2470, STRAIGHT_JOIN=2470, LATERAL_DERIVED=2465, ZIGZAG_JOIN=745}
+--Database: database8
+--CockroachDB version: CockroachDB CCL v26.2.3 (x86_64-pc-linux-gnu, built 2026/06/24 12:27:14, go1.25.5)
+--Base table: t2
+--Base table DDL: CREATE TABLE public.t2 (
+--	c0 BOOL NULL DEFAULT false,
+--	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+--	CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+--	INDEX i0 (c0 ASC, rowid ASC),
+--	UNIQUE INDEX i1 (rowid ASC, c0 ASC)
+--) WITH (schema_locked = true);
+--Base table engine: N/A
+--VP source engine: N/A
+--VP left engine: N/A
+--VP right engine: N/A
+--Base row count: 13
+--VP source row count: 13
+--Base shape: MULTI_COLUMN
+--Stable row order: "c0", "rowid"
+--Prefix: vp_database8_2954_
+--Split strategy: TYPE_DIRECTED_SPLIT
+--Left columns: {rowid, c0, vp_computed}
+--Right columns: {c0}
+--Overlap columns: {c0}
+--Reconstruction key mode: VP_ROWID
+--Reconstruction key columns: {}
+--Physical foreign key: false
+--Reconstruction strategy: JOIN
+--Description: shape=MULTI_COLUMN, split=TYPE_DIRECTED_SPLIT, reconstruction=JOIN
+--Optimizer profile: ROW_EXECUTION
+--Session vars: TimeZone=UTC, vectorize=off, optimizer_use_histograms=on, enable_zigzag_join=off, distsql=auto, opt_split_scan_limit=2048, serial_normalization=rowid
+--Session SET statements:
+--SET TimeZone = 'UTC';
+--SET vectorize = 'off';
+--SET optimizer_use_histograms = 'on';
+--SET enable_zigzag_join = 'off';
+--SET distsql = 'auto';
+--SET opt_split_scan_limit = 2048;
+--SET serial_normalization = 'rowid';
+--Setup statements:
+--CREATE TABLE "vp_database8_2954_source" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "c0" BOOL NULL, "rowid" BIGINT NULL, "vp_computed" INT8 AS ("vp_rowid" * 2) STORED);
+--CREATE TABLE "vp_database8_2954_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "rowid" BIGINT NULL, "c0" BOOL NULL, "vp_computed" INT8 AS ("vp_rowid" * 2) STORED);
+--CREATE TABLE "vp_database8_2954_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" BOOL NULL, FAMILY "primary" ("vp_rowid"), FAMILY "vp_database8_2954_payload" ("c0"));
+--INSERT INTO "vp_database8_2954_source" ("vp_rowid", "c0", "rowid") SELECT ROW_NUMBER() OVER ( ORDER BY "c0", "rowid") AS "vp_rowid", "c0", "rowid" FROM "t2" LIMIT 256;
+--INSERT INTO "vp_database8_2954_l" ("vp_rowid", "rowid", "c0") SELECT "vp_rowid", "rowid", "c0" FROM "vp_database8_2954_source";
+--INSERT INTO "vp_database8_2954_r" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database8_2954_source";
+--CREATE INDEX "vp_database8_2954_l_asym_1364147483" ON "vp_database8_2954_l"("vp_rowid", "rowid");
+--CREATE INDEX "vp_database8_2954_partial_l" ON "vp_database8_2954_l" ("rowid") WHERE "rowid" IS NOT NULL;
+--CREATE INDEX "vp_database8_2954_partial_r" ON "vp_database8_2954_r" ("c0") WHERE "c0" IS NOT NULL;
+--CREATE INDEX "vp_database8_2954_idx_src_263586364" ON "vp_database8_2954_source"("c0", "vp_computed", "vp_rowid");
+---- skipped helper index: CREATE INDEX "vp_database8_2954_idx_l_263586364" ON "vp_database8_2954_l"("rowid", "vp_computed") USING HASH WITH BUCKET_COUNT=11;
+--CREATE INDEX "vp_database8_2954_idx_r_728098789" ON "vp_database8_2954_r"("vp_rowid", "c0");
+--DROP TABLE IF EXISTS "vp_database8_2954_joined";
+--CREATE TEMP TABLE "vp_database8_2954_joined" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "c0" BOOL NULL, "rowid" INT8 NULL, "vp_computed" BIGINT NULL);
+--INSERT INTO "vp_database8_2954_joined" ("vp_rowid", "c0", "rowid", "vp_computed") SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0", l."rowid" AS "rowid", l."vp_computed" AS "vp_computed" FROM "vp_database8_2954_l" l JOIN "vp_database8_2954_r" r ON l."vp_rowid" = r."vp_rowid";
+--DROP VIEW IF EXISTS "vp_database8_2954_v_2960";
+--CREATE VIEW "vp_database8_2954_v_2960" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0", l."rowid" AS "rowid", l."vp_computed" AS "vp_computed" FROM (SELECT * FROM "vp_database8_2954_l") l JOIN (SELECT * FROM "vp_database8_2954_r") r ON l."vp_rowid" = r."vp_rowid";
+--DROP VIEW IF EXISTS "vp_database8_2954_v_2961";
+--CREATE VIEW "vp_database8_2954_v_2961" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", l."rowid" AS "rowid", l."vp_computed" AS "vp_computed" FROM "vp_database8_2954_l" l JOIN LATERAL (SELECT * FROM "vp_database8_2954_r" rr WHERE l."vp_rowid" = rr."vp_rowid") r ON TRUE;
+--DROP VIEW IF EXISTS "vp_database8_2954_v_2963";
+--CREATE VIEW "vp_database8_2954_v_2963" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0", l."rowid" AS "rowid", l."vp_computed" AS "vp_computed" FROM (SELECT * FROM "vp_database8_2954_l") l JOIN (SELECT * FROM "vp_database8_2954_r") r ON l."vp_rowid" = r."vp_rowid";
+--DROP VIEW IF EXISTS "vp_database8_2954_v_2964";
+--CREATE VIEW "vp_database8_2954_v_2964" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0", l."rowid" AS "rowid", l."vp_computed" AS "vp_computed" FROM "vp_database8_2954_l" l JOIN "vp_database8_2954_r" r ON l."vp_rowid" = r."vp_rowid";
+--DROP VIEW IF EXISTS "vp_database8_2954_v_2965";
+--CREATE VIEW "vp_database8_2954_v_2965" AS SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0", l."rowid" AS "rowid", l."vp_computed" AS "vp_computed" FROM "vp_database8_2954_l" l JOIN LATERAL (SELECT * FROM "vp_database8_2954_r" rr WHERE l."vp_rowid" = rr."vp_rowid") r ON TRUE;
+--VP source snapshot:
+--SELECT "vp_rowid", "c0", "rowid", "vp_computed" FROM "vp_database8_2954_source" ORDER BY "vp_rowid";
+--1 | NULL | -2120340386 | 2
+--2 | NULL | -1873936898 | 4
+--3 | NULL | -984734353 | 6
+--4 | NULL | -586356868 | 8
+--5 | NULL | 171077122 | 10
+--6 | NULL | 615991545 | 12
+--7 | NULL | 1984102625 | 14
+--8 | NULL | 2012513240 | 16
+--9 | NULL | 2070438908 | 18
+--10 | NULL | 2130492746 | 20
+--11 | NULL | 1210591609298452482 | 22
+--12 | NULL | 1210591933298475010 | 24
+--13 | f | 2062652262 | 26
+--VP left snapshot:
+--SELECT "vp_rowid", "rowid", "c0", "vp_computed" FROM "vp_database8_2954_l" ORDER BY "vp_rowid";
+--1 | -2120340386 | NULL | 2
+--2 | -1873936898 | NULL | 4
+--3 | -984734353 | NULL | 6
+--4 | -586356868 | NULL | 8
+--5 | 171077122 | NULL | 10
+--6 | 615991545 | NULL | 12
+--7 | 1984102625 | NULL | 14
+--8 | 2012513240 | NULL | 16
+--9 | 2070438908 | NULL | 18
+--10 | 2130492746 | NULL | 20
+--11 | 1210591609298452482 | NULL | 22
+--12 | 1210591933298475010 | NULL | 24
+--13 | 2062652262 | f | 26
+--VP right snapshot:
+--SELECT "vp_rowid", "c0" FROM "vp_database8_2954_r" ORDER BY "vp_rowid";
+--1 | NULL
+--2 | NULL
+--3 | NULL
+--4 | NULL
+--5 | NULL
+--6 | NULL
+--7 | NULL
+--8 | NULL
+--9 | NULL
+--10 | NULL
+--11 | NULL
+--12 | NULL
+--13 | f
+--Single query: SELECT ALL vp_database8_2954_source.c0 FROM "vp_database8_2954_source" AS "vp_database8_2954_source" WHERE true ORDER BY vp_database8_2954_source.c0, vp_database8_2954_source.vp_rowid LIMIT 3 OFFSET 4
+--Split query: SELECT vp_database8_2954_source.c0 FROM (SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0", l."rowid" AS "rowid", l."vp_computed" AS "vp_computed" FROM "vp_database8_2954_l" l JOIN "vp_database8_2954_r" r ON l."vp_rowid" = r."vp_rowid") AS "vp_database8_2954_source" WHERE true ORDER BY vp_database8_2954_source.c0, vp_database8_2954_source.vp_rowid LIMIT 3 OFFSET 4
+--Single query plan:
+--EXPLAIN (OPT) SELECT ALL vp_database8_2954_source.c0 FROM "vp_database8_2954_source" AS "vp_database8_2954_source" WHERE true ORDER BY vp_database8_2954_source.c0, vp_database8_2954_source.vp_rowid LIMIT 3 OFFSET 4;
+--offset
+-- ├── top-k
+-- │    ├── k: 7
+-- │    └── scan vp_database8_2954_source@vp_database8_2954_idx_src_263586364
+-- └── 4
+--Split query plan:
+--EXPLAIN (OPT) SELECT vp_database8_2954_source.c0 FROM (SELECT l."vp_rowid" AS "vp_rowid", r."c0" AS "c0", l."rowid" AS "rowid", l."vp_computed" AS "vp_computed" FROM "vp_database8_2954_l" l JOIN "vp_database8_2954_r" r ON l."vp_rowid" = r."vp_rowid") AS "vp_database8_2954_source" WHERE true ORDER BY vp_database8_2954_source.c0, vp_database8_2954_source.vp_rowid LIMIT 3 OFFSET 4;
+--project
+-- └── offset
+--      ├── limit
+--      │    ├── inner-join (lookup vp_database8_2954_l@vp_database8_2954_l_asym_1364147483 [as=l])
+--      │    │    ├── lookup columns are key
+--      │    │    ├── sort
+--      │    │    │    └── scan vp_database8_2954_r [as=r]
+--      │    │    │         └── partial index predicates
+--      │    │    │              └── vp_database8_2954_partial_r: filters
+--      │    │    │                   └── r.c0 IS NOT NULL
+--      │    │    └── filters (true)
+--      │    └── 7
+--      └── 4
+--Single result sample: N:4:bool; x7
+--Split result sample: N:4:bool; x3
+--Only in single: N:4:bool; x4
+--Only in split: 
+--
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.comparePair(CockroachDBVerticalPartitioningOracle.java:4236)
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.checkWithOracleRunPermit(CockroachDBVerticalPartitioningOracle.java:511)
+--	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.check(CockroachDBVerticalPartitioningOracle.java:459)
+--	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+--	at sqlancer.Main$DBMSExecutor.run(Main.java:487)
+--	at sqlancer.Main$2.run(Main.java:704)
+--	at sqlancer.Main$2.runThread(Main.java:686)
+--	at sqlancer.Main$2.run(Main.java:677)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+--	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+--	at java.base/java.lang.Thread.run(Thread.java:840)
+---- Time: 2026/09/15 23:28:50
+-- Database: database8
+-- Database version: 13.0.0
+-- seed value: 1789370682004
+USE test;
+DROP DATABASE IF EXISTS database8 CASCADE;
+CREATE DATABASE database8;
+USE database8;
+ALTER DATABASE "database8" CONFIGURE ZONE USING gc.ttlseconds = 1;
+--Don't send automatic bug reports;
+SET CLUSTER SETTING debug.panic_on_failed_assertions = true;
+SET CLUSTER SETTING diagnostics.reporting.enabled = false;
+SET CLUSTER SETTING diagnostics.reporting.send_crash_reports.enabled = false;
+-- Disable the collection of metrics and hope that it helps performance;
+SET CLUSTER SETTING sql.metrics.statement_details.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.dump_to_logs.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.gateway_node.enabled = false;
+SET CLUSTER SETTING sql.metrics.statement_details.index_recommendation_collection.enabled = false;
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+SET CLUSTER SETTING timeseries.storage.enabled = false;
+SET experimental_enable_hash_sharded_indexes = 'on';
+SET experimental_enable_temp_tables = 'on';

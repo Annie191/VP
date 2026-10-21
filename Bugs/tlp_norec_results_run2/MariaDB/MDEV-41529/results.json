@@ -1,0 +1,8 @@
+{
+  "database": "MariaDB",
+  "source": "/home/lwm/sqlancer/Bugs/MariaDB/MDEV-41529.sql",
+  "status": "no_single_table_query",
+  "queries": {},
+  "errors": [],
+  "target_statement_index": null
+}

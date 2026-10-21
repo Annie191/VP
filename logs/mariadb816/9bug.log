@@ -1,0 +1,79 @@
+https://jira.mariadb.org/browse/MDEV-41489?filter=-2 ok
+
+DROP DATABASE IF EXISTS repro_mariadb816_db9_2152_min;
+CREATE DATABASE repro_mariadb816_db9_2152_min;
+USE repro_mariadb816_db9_2152_min;
+
+SET SESSION optimizer_switch =
+    'derived_merge=off,condition_pushdown_for_derived=on';
+
+-- 未拆分的单表
+CREATE TABLE source_2152 (
+    rid BIGINT NOT NULL,
+    b   BIT(1) NOT NULL,
+    d   DATE NOT NULL,
+    UNIQUE KEY (rid),
+    KEY idx_source_2152 (rid, b)
+) ENGINE=InnoDB;
+
+-- 纵向拆分后的两个表
+CREATE TABLE left_2152 (
+    rid BIGINT PRIMARY KEY,
+    b   BIT(1) NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE right_2152 (
+    rid BIGINT PRIMARY KEY,
+    d   DATE NOT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO source_2152 VALUES (1, 0, '0000-00-00');
+INSERT INTO left_2152   VALUES (1, 0);
+INSERT INTO right_2152  VALUES (1, '0000-00-00');
+
+-- 查询一：单表结构，实际返回 1 行：0000-00-00
+SELECT d
+FROM source_2152
+WHERE (b IS NOT NULL) IN (d);
+
+-- 查询二：双 CTE + JOIN 的多表结构，实际返回 0 行
+SELECT d
+FROM (
+    WITH
+        l AS (SELECT * FROM left_2152),
+        r AS (SELECT * FROM right_2152)
+    SELECT l.rid, l.b, r.d
+    FROM l
+    JOIN r ON l.rid = r.rid
+) AS split_2152
+WHERE (b IS NOT NULL) IN (d);
+
+-- 单表查询
+id  select_type  table        type  key   rows  Extra
+1   SIMPLE       source_2152  ALL   NULL  1     Using where; Using temporary
+-- 多表查询
+id  select_type  table       type  key   ref          rows  Extra
+1   PRIMARY      <derived4>  ALL   NULL  NULL         2     Using where; Using temporary
+4   DERIVED      <derived2>  ALL   NULL  NULL         2     Using temporary
+4   DERIVED      <derived3>  ref   key0  l.rid,func   1     Using where
+2   DERIVED      left_2152   ALL   NULL  NULL         1     Using temporary
+3   DERIVED      right_2152  ALL   NULL  NULL         1     Using temporary
+问题集中在派生表条件下推。可用下面的对照验证：
+SET SESSION optimizer_switch =
+    'derived_merge=off,condition_pushdown_for_derived=off';
+
+SELECT d
+FROM (
+    WITH
+        l AS (SELECT * FROM left_2152),
+        r AS (SELECT * FROM right_2152)
+    SELECT l.rid, l.b, r.d
+    FROM l
+    JOIN r ON l.rid = r.rid
+) AS split_2152
+WHERE (b IS NOT NULL) IN (d);
+关闭 condition_pushdown_for_derived 后，该查询实测恢复返回：
+0000-00-00
+因此这是 BIT IS NOT NULL 与零日期比较在“双 CTE 物化 + JOIN + 派生表条件下推”路径上的结果错误，不是两套数据不一致。
+
+MariaDB 在 derived_merge=off 且 condition_pushdown_for_derived=on 时，把外部条件 (b IS NOT NULL) IN (d) 下推到双 CTE + JOIN 的物化派生表中，错误处理了 BIT(1) 的 IS NOT NULL 与 DATE '0000-00-00' 的比较，导致结果从 1 行变成 0 行。

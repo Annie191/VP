@@ -1,0 +1,98 @@
+https://bugs.mysql.com/bug.php?id=120833&thanks=4 Verified as described. The second issue is verified.
+
+DROP DATABASE IF EXISTS repro;
+CREATE DATABASE repro;
+USE repro;
+
+-- ===========================================
+-- MySQL 9.6.0 INDEX LOOKUP DOUBLE→BIGINT 截断
+-- ===========================================
+
+-- 源表，带索引
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 BIGINT NULL
+) ENGINE=InnoDB;
+INSERT INTO src (c0) VALUES (0), (0), (1);
+CREATE INDEX i_src ON src(c0, vp_rowid);
+
+-- 垂直分区 l/r（SINGLE_REPLICATED）
+CREATE TABLE l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 BIGINT NULL) ENGINE=InnoDB;
+CREATE TABLE r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 BIGINT NULL) ENGINE=InnoDB;
+INSERT INTO l (vp_rowid, c0) SELECT vp_rowid, c0 FROM src;
+INSERT INTO r (vp_rowid, c0) SELECT vp_rowid, c0 FROM src;
+
+-- Split 路径：temp table 重建（无 c0 索引）
+DROP TEMPORARY TABLE IF EXISTS joined;
+CREATE TEMPORARY TABLE joined AS
+  SELECT l.vp_rowid, l.c0 FROM l JOIN r ON l.vp_rowid = r.vp_rowid;
+
+-- Single query: 查 src（有索引 → INDEX LOOKUP，0.433 截断为 0 → 错误匹配 2 行）
+SELECT 'single' AS query_type, COUNT(*) AS row_count
+FROM src
+WHERE (IF(NULL, 0.3530399531809283, 0.43307147808600643)) IN (c0);
+
+-- Split query: 查 joined（无索引 → TABLE SCAN，正确返回 0 行）
+SELECT 'split' AS query_type, COUNT(*) AS row_count
+FROM joined AS src
+WHERE (IF(NULL, 0.3530399531809283, 0.43307147808600643)) IN (c0);
+
+single:  2 行 (错误)  ← src 有索引 i_src(c0, vp_rowid)
+split:   0 行 (正确)  ← joined temp table 无 c0 索引
+
+-- Single（src 有索引 → INDEX LOOKUP 错误截断）:
+-> Aggregate: count(0)
+    -> Covering index lookup on src using i_src (c0 = if(NULL,0.353,0.433))
+                                                  ↑ 0.433 → BIGINT = 0 → 匹配 c0=0
+
+-- Split（temp table 无该索引 → TABLE SCAN + FILTER 正确比较）:
+-> Aggregate: count(0)
+    -> Filter: (<cache>(if(NULL,0.353,0.433)) = src.c0)  ← DOUBLE vs BIGINT: 0.433 ≠ 0
+        -> Table scan on src
+
+IF(NULL, ...) 包装阻止了 MySQL 的 Impossible WHERE 优化（否则 0.433 IN (0,0,1) 会被常量折叠识别为永假）。建索引后，MySQL 使用 Covering index lookup，将搜索键 IF(NULL, 0.353, 0.433) = 0.433...（DOUBLE）隐式截断为 BIGINT 即 0，匹配到 c=0 的两行。
+
+这是 MySQL 索引查找中 DOUBLE→INT 隐式截断的 bug：IF(NULL,...) 阻止常量折叠 → 索引查找路径做类型窄化截断 → 匹配到不该匹配的行。
+
+DROP DATABASE IF EXISTS repro;
+CREATE DATABASE repro;
+USE repro;
+
+-- 源表：c1 BIGINT，有索引（值 0）
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c1 BIGINT NULL
+) ENGINE=InnoDB;
+INSERT INTO src (c1) VALUES (0);
+ALTER TABLE src ADD UNIQUE KEY i2 (c1);
+
+-- 拆分 r 表（只存 c1）
+CREATE TABLE r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c1 BIGINT NULL) ENGINE=InnoDB;
+INSERT INTO r SELECT vp_rowid, c1 FROM src;
+
+-- Single: 直接查 src — Impossible WHERE → 0 行
+SELECT 'single' AS query_type, COUNT(*) AS row_count
+FROM src
+WHERE (GREATEST("-1112434914", 0.1914106003702002)) IN (c1);
+
+-- Split: IN_FILTER 重建 — INDEX LOOKUP 截断 0.191→0 → 1 行
+SELECT 'split' AS query_type, COUNT(*) AS row_count
+FROM (
+  SELECT vp_rowid,
+    (SELECT r.c1 FROM r WHERE r.vp_rowid = src.vp_rowid) AS c1
+  FROM src
+  WHERE vp_rowid IN (SELECT r.vp_rowid FROM r)
+) AS src
+WHERE (GREATEST("-1112434914", 0.1914106003702002)) IN (c1);
+
+-- Single: 优化器识别到 c1=0 不可能等于 0.191... → Impossible WHERE
+-> Zero input rows (Impossible WHERE noticed after reading const tables)
+
+-- Split: IN_FILTER 用标量子查询隐藏 c1 → 无法常量折叠 → INDEX LOOKUP 截断
+-> Aggregate: count(0)
+    -> Index lookup on src using <auto_key0> (c1 = greatest('-1112434914',0.191...))
+                                              ↑ 0.191→BIGINT=0 → 匹配 c1=0
+        -> Materialize (IN_FILTER 重建结果)
+            -> Nested loop inner join
+                -> Table scan on l
+                -> Single-row index lookup on r using PRIMARY

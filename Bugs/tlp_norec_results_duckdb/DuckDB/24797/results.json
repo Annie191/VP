@@ -1,0 +1,24 @@
+{
+  "database": "DuckDB",
+  "source": "/home/lwm/sqlancer/Bugs/DuckDB/24797.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 单表查询\nSELECT\n    quantile(\n        CASE WHEN vp_rowid % 4 = 0 THEN NULL ELSE c0 END,\n        0.5\n    ) AS median,\n    histogram(\n        CASE WHEN vp_rowid % 4 = 0 THEN NULL ELSE c0 END\n    ) AS hist\nFROM repro_duckdb_db5_hist_min_source",
+      "ok": true,
+      "rows": [
+        "┌────────┬──────────────────────┐",
+        "│ median │         hist         │",
+        "│ double │ map(double, ubigint) │",
+        "├────────┼──────────────────────┤",
+        "│    inf │ {-inf=2, inf=1}      │",
+        "└────────┴──────────────────────┘"
+      ],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 7,
+  "target_query": "-- 单表查询\nSELECT\n    quantile(\n        CASE WHEN vp_rowid % 4 = 0 THEN NULL ELSE c0 END,\n        0.5\n    ) AS median,\n    histogram(\n        CASE WHEN vp_rowid % 4 = 0 THEN NULL ELSE c0 END\n    ) AS hist\nFROM repro_duckdb_db5_hist_min_source;",
+  "skip_reason": "only one top-level aggregate expression is supported"
+}

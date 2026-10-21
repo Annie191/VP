@@ -1,0 +1,19 @@
+{
+  "database": "MariaDB",
+  "source": "/home/lwm/sqlancer/Bugs/MariaDB/MDEV-41462.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 原始单表查询\nSELECT DISTINCT c1\nFROM s\nWHERE c1 IS NULL",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 11,
+  "target_query": "-- 原始单表查询\nSELECT DISTINCT c1\nFROM s\nWHERE c1 IS NULL;",
+  "skip_reason": "DISTINCT is not handled by this batch rewriter"
+}

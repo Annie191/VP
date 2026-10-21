@@ -1,0 +1,50 @@
+https://github.com/databendlabs/databend/issues/20603  fixed
+
+DROP DATABASE IF EXISTS repro_databend914_db56_min;
+CREATE DATABASE repro_databend914_db56_min;
+USE repro_databend914_db56_min;
+
+CREATE TABLE source (
+    id INT,
+    a ARRAY(INT) NULL
+) ENGINE=FUSE;
+
+CREATE TABLE part_l (
+    id INT
+) ENGINE=FUSE;
+
+CREATE TABLE part_r (
+    id INT,
+    a ARRAY(INT) NULL
+) ENGINE=FUSE;
+
+INSERT INTO source VALUES (1, NULL);
+INSERT INTO part_l SELECT id FROM source;
+INSERT INTO part_r SELECT id, a FROM source;
+
+SELECT ARRAY_AGG(a)
+FROM source;
+
+SELECT ARRAY_AGG(r.a)
+FROM part_l AS l
+JOIN part_r AS r ON l.id = r.id;
+
+单表查询实际结果：
+[]
+
+拆分后的多表查询实际结果：
+[[]]
+
+单表：
+AggregatePartial
+└── TableScan(source)
+    output: [a]
+
+多表：
+AggregatePartial
+└── HashJoin
+    output: [r.a]
+    ├── TableScan(part_r)
+    └── TableScan(part_l)
+
+ARRAY_AGG 在 AggregatePartial 中直接消费 HashJoin 输出的 nullable ARRAY 列时，没有正确识别 NULL，而是把 NULL 当成了空数组 []，导致聚合结果从 [] 变成 [[]]。

@@ -1,0 +1,50 @@
+DROP DATABASE IF EXISTS repro_tidb615_db12_min;
+CREATE DATABASE repro_tidb615_db12_min;
+USE repro_tidb615_db12_min;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+SET time_zone='+00:00';
+
+CREATE TABLE src(
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DECIMAL(65,30)
+);
+
+INSERT INTO src(c0) VALUES (0),(1);
+
+CREATE TABLE l(
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 DECIMAL(65,30)
+);
+
+CREATE TABLE r(
+  id BIGINT NOT NULL PRIMARY KEY
+);
+
+INSERT INTO l SELECT id, c0 FROM src;
+INSERT INTO r SELECT id FROM src;
+
+-- 单表：返回 2
+SELECT COUNT(
+  CAST(
+    CASE 'x'
+      WHEN id >= id THEN c0
+      ELSE CAST(FALSE AS DATE)
+    END AS DATETIME
+  )
+) AS single_count
+FROM src;
+
+-- split/rewrite：返回 0
+SELECT COUNT(
+  CAST(
+    CASE 'x'
+      WHEN v.id >= v.id THEN v.c0
+      ELSE CAST(FALSE AS DATE)
+    END AS DATETIME
+  )
+) AS split_count
+FROM (
+  SELECT l.id, l.c0
+  FROM l JOIN r ON l.id = r.id
+) AS v;

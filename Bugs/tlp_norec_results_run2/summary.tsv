@@ -1,0 +1,11 @@
+database	files	done	candidate	tlp_checked	tlp_inconsistent	norec_checked	norec_inconsistent	skipped	no_single_table_query	setup_failed	query_failed	unavailable
+ClickHouse	1	0	0	0	0	0	0	0	0	0	0	1
+CockroachDB	3	0	0	0	0	0	0	2	0	0	1	0
+Databend	14	2	0	2	2	2	0	12	0	0	0	0
+DuckDB	4	0	0	0	0	0	0	4	0	0	0	0
+MariaDB	14	5	0	5	1	5	0	5	4	0	0	0
+MySQL	25	5	0	5	2	5	1	20	0	0	0	0
+Oceanbase	7	2	0	2	0	2	0	4	1	0	0	0
+PostgreSQL	1	0	0	0	0	0	0	1	0	0	0	0
+TIDB	18	0	0	0	0	0	0	0	0	0	0	18
+TOTAL	87	14	0	14	5	14	1	48	5	0	1	19

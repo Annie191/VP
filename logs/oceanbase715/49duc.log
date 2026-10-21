@@ -1,0 +1,76 @@
+https://github.com/oceanbase/oceanbase/issues/2428 duc2411
+
+able to reproduce this issue on OceanBase 4.4.2.1.
+
+After disabling storage pushdown using the following command, the query returned the correct result:
+ALTER SYSTEM SET _pushdown_storage_level = 0;
+We have also confirmed that this issue has already been fixed in OceanBase 4.4.2.3. Thank you again for reporting this issue.
+
+DROP DATABASE IF EXISTS repro_db49;
+CREATE DATABASE repro_db49;
+USE repro_db49;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+-- SKEWED_SPLIT, MULTI_COLUMN, 3 行（c1 含 NULL）
+CREATE TABLE vp_s (vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, c0 FLOAT, c1 BIGINT);
+INSERT INTO vp_s(c0, c1) VALUES (0.0, NULL), (0.002534, 0), (0.607809, -1);
+CREATE INDEX i_c1 ON vp_s(c1, vp_rowid);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 FLOAT);
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c1 BIGINT);
+INSERT INTO vp_l SELECT vp_rowid, c0 FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c1 FROM vp_s;
+
+-- Single: pushdown → COUNT(NULL XOR c1) = 2（错误）
+SELECT COUNT(NULL XOR c1) FROM vp_s;
+
+-- Split: LEFT JOIN → MERGE JOIN 阻止 pushdown → 0（正确）
+SELECT COUNT(NULL XOR c1) FROM (
+  SELECT l.vp_rowid, l.c0, r.c1 FROM vp_l l LEFT JOIN vp_r r ON l.vp_rowid = r.vp_rowid
+) t;
+
+表达式分解：NULL XOR c1 = NULL，COUNT(NULL) 应为 0。
+
+查询	COUNT 结果	正确?	pushdown?
+Single	2	❌	✅ 在 TABLE FULL SCAN 层
+Split	0	✅	❌ 在 SCALAR GROUP BY 层
+执行计划
+
+Single（pushdown_aggregation 在算子 1 TABLE FULL SCAN 层 → 错误）
+
+|ID|OPERATOR         |NAME      |EST.ROWS|
+|0 |SCALAR GROUP BY  |          |1       |
+|1 |└─TABLE FULL SCAN|vp_s(i_c1)|3       |
+
+  0 - output([T_FUN_COUNT_SUM(T_FUN_COUNT(NULL XOR vp_s.c1))])
+      group(nil), agg_func([T_FUN_COUNT_SUM(T_FUN_COUNT(NULL XOR vp_s.c1))])
+
+  1 - output([T_FUN_COUNT(NULL XOR vp_s.c1)])
+      access([vp_s.c1]), partitions(p0)
+      range_key([vp_s.c1], [vp_s.vp_rowid]), range(MIN,MIN ; MAX,MAX)
+      pushdown_aggregation([T_FUN_COUNT(NULL XOR vp_s.c1)])   ← 这里！
+
+Split（无 pushdown，聚合在算子 0 SCALAR GROUP BY 层 → 正确）
+
+|ID|OPERATOR           |NAME|EST.ROWS|
+|0 |SCALAR GROUP BY    |    |1       |
+|1 |└─MERGE JOIN       |    |3       |
+|2 |  ├─TABLE FULL SCAN|l   |3       |
+|3 |  └─TABLE FULL SCAN|r   |3       |
+
+  0 - output([T_FUN_COUNT(NULL XOR r.c1)])                    ← 聚合在这里
+      group(nil), agg_func([T_FUN_COUNT(NULL XOR r.c1)])      ← 无 pushdown
+
+  1 - output([r.c1]), filter(nil)
+      equal_conds([l.vp_rowid = r.vp_rowid]), other_conds(nil)
+
+  2 - output([l.vp_rowid]), filter(nil)
+      access([l.vp_rowid]), range_key([l.vp_rowid]), range(MIN ; MAX)
+
+  3 - output([r.vp_rowid], [r.c1]), filter(nil)
+      access([r.vp_rowid], [r.c1]), range_key([r.vp_rowid]), range(MIN ; MAX)
+
+存储层的 XOR 运算符在处理 NULL 常量时丢失了 NULL 语义，导致本应全为 NULL 的列出现了非 NULL 值，进而使 COUNT 聚合产生错误结果。
+
+TiKV 在执行下推表达式 NULL XOR c1 时，对于非 NULL 的列值，将常量 NULL 错误地隐式转换为 FALSE（0）进行运算，而不是严格遵循“任何操作数为 NULL 则整体为 NULL”的规则。

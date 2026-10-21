@@ -1,0 +1,67 @@
+#69598 https://github.com/pingcap/tidb/issues/69598 confirmed as a bug.
+
+DROP DATABASE IF EXISTS repro_db11;
+CREATE DATABASE repro_db11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+USE repro_db11;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+
+CREATE TABLE s (rowid INT PRIMARY KEY AUTO_INCREMENT, c0 TEXT, c1 TEXT);
+INSERT INTO s (c0, c1) VALUES
+  (NULL,'a'),(NULL,'b'),(NULL,'c'),(NULL,'d'),
+  ('  ',NULL),('',''),('  ','y'),('  ','y'),('  ','y'),(' ','z'),
+  ('101','w'),('}{',''),('abc','v'),('F}','u'),('HI',''),('ZV','t');
+
+-- Single: correlated MIN decorrelated to Cartesian join + HashAgg
+SELECT rowid, HEX(c0) AS c0_h,
+       HEX((SELECT MIN(c0) FROM s s2 WHERE s2.rowid <= s.rowid)) AS rmin_h
+FROM s ORDER BY rowid;
+
+-- Split (CTE rewrite, using VP split to avoid decorrelation)
+CREATE TABLE l (rowid INT PRIMARY KEY, c1 TEXT, c0 TEXT);
+CREATE TABLE r (rowid INT PRIMARY KEY, c0 TEXT);
+INSERT INTO l SELECT rowid, c1, c0 FROM s;
+INSERT INTO r SELECT rowid, c0 FROM s;
+
+SELECT rowid, HEX(c0) AS c0_h,
+       HEX((SELECT MIN(c0) FROM (
+         WITH lc AS (SELECT * FROM l), rc AS (SELECT * FROM r)
+         SELECT lc.rowid, lc.c0, lc.c1 FROM lc JOIN rc ON lc.rowid = rc.rowid
+       ) s2 WHERE s2.rowid <= s.rowid)) AS rmin_h
+FROM (WITH lc AS (SELECT * FROM l), rc AS (SELECT * FROM r)
+      SELECT lc.rowid, lc.c0, lc.c1 FROM lc JOIN rc ON lc.rowid = rc.rowid) s
+ORDER BY rowid;
+
+差异行（Single ≠ Split）
+rowid	c0	c0_hex	Single rmin	Split rmin	正确值
+6	''	—	'  ' (2020) ❌	'' ✓	''
+7	'  '	2020	'  ' (2020) ❌	'' ✓	''
+8	'  '	2020	'  ' (2020) ❌	'' ✓	''
+9	'  '	2020	'  ' (2020) ❌	'' ✓	''
+10	' '	20	' ' (20) ❌	'' ✓	''
+11	101	313031	' ' (20) ❌	'' ✓	''
+13–16	...	...	均错误	'' ✓	''
+row 6 有空串 ''，它应该是全局 MIN，但 Single 查询在 row 6 之后的 running MIN 全部忽略了它。
+
+执行计划
+Single — CARTESIAN join + HashAgg（GROUP BY 歧义）：
+
+HashAgg_13 | group by:repro_db11.s.rowid, funcs:firstrow(rowid), funcs:min(c0)->Column#13
+└─HashJoin_17 | CARTESIAN left outer join, other cond:le(s.rowid, s2.rowid)
+  ├─TableReader_25(Build) | table:s
+  └─TableReader_27(Probe) | table:s2
+
+Split — Apply（保留相关子查询语义）：
+
+Apply_68 | CARTESIAN left outer join
+├─MergeJoin_71(Build) | inner join, left key:l.rowid, right key:r.rowid
+│ ├─TableReader_87 | table:r
+│ └─TableReader_85 | table:l
+└─StreamAgg_100(Probe) | funcs:min(l.c0)
+  └─TopN_103 | l.c0, offset:0, count:1
+    └─MergeJoin_110 | inner join l×r, cond:le(r.rowid, l.rowid)
+
+在 TiDB 的 HashAgg 执行器中，为了在内存中高效存储分组键和聚合中间状态，会对 Chunk 中的值进行编码。当遇到 TEXT 类型的空字符串 ''（长度 0）时，编码逻辑存在边界条件缺陷——它可能误用了 NULL 的存储标记（因为 NULL 也是长度 0）。这导致 MIN 聚合函数在执行 Update 操作时，将该值视为 NULL 而直接忽略（因为 MIN 会忽略 NULL）。
+
+
+Split 计划采用了 TopN（排序取第一条）+ StreamAgg。TopN 在比较排序时，使用的是标准的 Comparator，该比较器对 '' 处理正确，不会将其转换为 NULL。因此 StreamAgg 接收到的数据流中 '' 是完好的，MIN 自然计算正确。

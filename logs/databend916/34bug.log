@@ -1,0 +1,136 @@
+https://github.com/databendlabs/databend/issues/20615  confirmed
+
+DROP DATABASE IF EXISTS repro_databend_db34_tiny;
+CREATE DATABASE repro_databend_db34_tiny;
+USE repro_databend_db34_tiny;
+
+CREATE TABLE src (
+    id INT NOT NULL
+) ENGINE = MEMORY;
+
+CREATE TABLE l (
+    id INT NOT NULL
+) ENGINE = MEMORY;
+
+CREATE TABLE r (
+    id INT NOT NULL
+) ENGINE = MEMORY;
+
+-- src 分两次写入，形成两个 block
+INSERT INTO src VALUES (1);
+INSERT INTO src VALUES (2);
+
+-- 分区表各自一次写入
+INSERT INTO l VALUES (1), (2);
+INSERT INTO r VALUES (1), (2);
+
+SET max_threads = 1;
+SET force_aggregate_data_spill = 0;
+SET force_sort_data_spill = 0;
+
+SELECT
+    NULL AS k,
+    CAST(7 AS INT) AS tag
+FROM src
+GROUP BY
+    NULL,
+    CAST(7 AS INT);
+
+SELECT
+    NULL AS k,
+    CAST(7 AS INT) AS tag
+FROM (
+    SELECT l.id
+    FROM l
+    JOIN (
+        SELECT
+            id,
+            JSON_OBJECT('vp', id) AS payload
+        FROM r
+    ) j
+        ON l.id = j.id
+    JOIN r
+        ON r.id = j.id
+) reconstructed
+GROUP BY
+    NULL,
+    CAST(7 AS INT);
+
+Single实际错误结果：
+k     tag
+NULL  7
+NULL  7
+
+JSON_PACK 多表重建实际结果：
+k     tag
+NULL  7
+
+Single
+EvalScalar
+├── output rows: 2
+├── expressions: [NULL, group_item]
+└── AggregateFinal
+    ├── output rows: 2                 ← final 仍未合并
+    ├── group by: [NULL, CAST(7 AS Int32)]
+    ├── aggregate functions: []
+    └── AggregatePartial
+        ├── output rows: 2             ← 错误首先出现在 partial
+        ├── group by: [NULL, CAST(7 AS Int32)]
+        ├── aggregate functions: []
+        └── EvalScalar
+            ├── output rows: 2
+            ├── expressions: [NULL, 7]
+            └── TableScan
+                ├── table: repro_databend_db34_tiny.src
+                ├── output rows: 2
+                └── read rows: 2
+完整的关键行数流：
+TableScan(2)
+  → EvalScalar [NULL, 7](2)
+  → AggregatePartial(2)
+  → AggregateFinal(2)
+  → EvalScalar(2)
+src 的两行来自两次独立 INSERT，即两个 MEMORY block。AggregatePartial 对两个 block 分别保留了 (NULL, 7)，没有合并。
+JSON_PACK 多表重建
+EvalScalar
+├── output rows: 1
+├── expressions: [NULL, group_item]
+└── AggregateFinal
+    ├── output rows: 1
+    ├── group by: [NULL, CAST(7 AS Int32)]
+    ├── aggregate functions: []
+    └── AggregatePartial
+        ├── output rows: 1             ← partial 已正确合并
+        ├── group by: [NULL, CAST(7 AS Int32)]
+        ├── aggregate functions: []
+        └── EvalScalar
+            ├── output rows: 2
+            ├── expressions: [NULL, 7]
+            └── HashJoin
+                ├── output rows: 2
+                ├── join type: INNER
+                ├── build keys: [l.id]
+                ├── probe keys: [r.id]
+                ├── TableScan(Build): l
+                │   └── output rows: 2
+                └── HashJoin(Probe)
+                    ├── output rows: 2
+                    ├── join type: INNER
+                    ├── build keys: [r.id]
+                    ├── probe keys: [j.id]
+                    ├── TableScan(Build): r
+                    │   └── output rows: 2
+                    └── TableScan(Probe): r
+                        └── output rows: 2
+关键行数流：
+r scan(2) ─┐
+            ├→ inner HashJoin(2) ─┐
+r scan(2) ─┘                       │
+                                    ├→ outer HashJoin(2)
+l scan(2) ─────────────────────────┘
+  → EvalScalar [NULL, 7](2)
+  → AggregatePartial(1)
+  → AggregateFinal(1)
+  → EvalScalar(1)
+
+复合 GROUP BY key 中，首列为 DataType::Null 且后续还有非 NULL 列时，跨 block 的聚合 key 编码/比较不正确，NULL 分组的相等性在 partial 内部丢失。

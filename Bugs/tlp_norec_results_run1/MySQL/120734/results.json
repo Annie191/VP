@@ -1,0 +1,69 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120734.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "-- Single query: returns 1\nSELECT MAX(DISTINCT source.vp_rowid) AS ref0\nFROM source\nWHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS ref0 FROM source",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "SELECT MAX(agg0) FROM (/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) UNION ALL /* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE NOT LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) UNION ALL /* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) IS NULL) AS tlp_parts",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "/* Single query: returns 1 */ SELECT COUNT(*) FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)",
+      "ok": true,
+      "rows": [
+        "0"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "/* Single query: returns 1 */ SELECT SUM(CASE WHEN LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) THEN 1 ELSE NULL END) FROM source",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "-- Single query: returns 1\nSELECT MAX(DISTINCT source.vp_rowid) AS ref0\nFROM source\nWHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid);",
+  "variants": {
+    "tlp_base": "/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS ref0 FROM source",
+    "tlp_part_true": "/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS ref0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)",
+    "tlp_part_false": "/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS ref0 FROM source WHERE NOT LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)",
+    "tlp_part_unknown": "/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS ref0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) IS NULL",
+    "tlp_union": "SELECT MAX(agg0) FROM (/* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) UNION ALL /* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE NOT LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) UNION ALL /* Single query: returns 1 */ SELECT MAX(DISTINCT source.vp_rowid) AS agg0 FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) IS NULL) AS tlp_parts",
+    "norec_optimized": "/* Single query: returns 1 */ SELECT COUNT(*) FROM source WHERE LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)",
+    "norec_unoptimized": "/* Single query: returns 1 */ SELECT SUM(CASE WHEN LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid) THEN 1 ELSE NULL END) FROM source",
+    "predicate": "LEAST('Uk]6T', 0.8087354366787728) IN (source.vp_rowid)"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": false,
+  "norec_checked": true,
+  "norec_inconsistent": true
+}

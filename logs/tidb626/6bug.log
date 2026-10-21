@@ -1,0 +1,83 @@
+#69484: https://github.com/pingcap/tidb/issues/69484 confirmed as a bug.
+
+DROP DATABASE IF EXISTS repro_tidb626_db6;
+CREATE DATABASE repro_tidb626_db6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+USE repro_tidb626_db6;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION';
+
+CREATE TABLE src (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 DOUBLE NULL,
+  c1 DATETIME NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+INSERT INTO src(c0,c1) VALUES
+  (0.5586655139923096, '2018-03-25 15:15:44'),
+  (0.17665702104568481, '2020-05-09 18:17:26'),
+  (0.3596702814102173, '2020-10-15 12:02:25');
+
+CREATE TABLE l (id BIGINT NOT NULL PRIMARY KEY, c0 DOUBLE NULL) ENGINE=InnoDB;
+CREATE TABLE r (id BIGINT NOT NULL PRIMARY KEY, c1 DATETIME NULL) ENGINE=InnoDB;
+
+INSERT INTO l SELECT id, c0 FROM src;
+INSERT INTO r SELECT id, c1 FROM src;
+
+-- Single‑table query: incorrectly returns 3 rows
+SELECT id, c1
+FROM src
+WHERE c1 != (
+  CASE (id LIKE c0)
+    WHEN '0.5556779972246342' THEN -361629223
+    ELSE INET_NTOA(0.1529189515040421)
+  END
+);
+
+-- Split/join query (via correlated subquery): correctly returns empty set
+SELECT v.id, v.c1
+FROM (
+  SELECT l.id, l.c0,
+         (SELECT r.c1 FROM r WHERE r.id = l.id) AS c1
+  FROM l
+  WHERE l.id IN (SELECT r.id FROM r)
+) v
+WHERE v.c1 != (
+  CASE (v.id LIKE v.c0)
+    WHEN '0.5556779972246342' THEN -361629223
+    ELSE INET_NTOA(0.1529189515040421)
+  END
+);
+
+Supplementary diagnostic (confirms root semantics):
+
+SELECT id,
+       INET_NTOA(0.1529189515040421) AS rhs,
+       CAST(INET_NTOA(0.1529189515040421) AS DATETIME) AS rhs_dt,
+       c1 != INET_NTOA(0.1529189515040421) AS pred
+FROM src;
+-- Shows rhs='0.0.0.0', rhs_dt=NULL, pred=NULL → all rows should be filtered
+2. What Did You Expect to See? (Required)
+Under NO_ZERO_DATE mode, the string '0.0.0.0' cannot be converted to a valid DATETIME. The implicit cast in the comparison c1 != '0.0.0.0' therefore yields NULL. In SQL's three‑valued logic, NULL != anything evaluates to NULL (unknown), which is not TRUE, so the row is filtered out. Consequently, the WHERE clause should reject all rows, and the result should be an empty set for both queries.
+
+3. What Did You See Instead? (Required)
+Single‑table query: returns 3 rows (wrong).
+Join/rewrite query: returns Empty set (correct).
+4. What Is Your TiDB Version? (Required)
+Version: TiDB‑v9.0.0
+
+5. Execution Plan Differences
+Single‑table (wrong) — predicate pushed down to TiKV coprocessor:
+
+Selection [cop[tikv]]  ne(src.c1, cast(case(..., "0.0.0.0"), datetime(6) BINARY))
+The comparison c1 != CAST('0.0.0.0' AS DATETIME) is evaluated inside TiKV.
+
+Join query (correct) — predicate remains at TiDB root as other cond:
+
+MergeJoin [root]  other cond: ne(r.c1, cast(case(..., "0.0.0.0"), datetime(6) BINARY))
+The same expression is evaluated at the TiDB root layer after the join.
+
+6. Root Cause
+The CASE expression evaluates to INET_NTOA(0.1529189515040421), which returns the string '0.0.0.0'. The WHERE clause then performs c1 != '0.0.0.0'. Since c1 is DATETIME, the string must be implicitly cast to DATETIME for the comparison.
+
+In TiDB root evaluation (used when the predicate cannot be pushed down, e.g. after a join), CAST('0.0.0.0' AS DATETIME) respects the NO_ZERO_DATE SQL mode and returns NULL. Therefore c1 != NULL evaluates to NULL (unknown), and the row is discarded.
+In TiKV coprocessor evaluation (used when the predicate is pushed down for single‑table scan), CAST('0.0.0.0' AS DATETIME) does not respect NO_ZERO_DATE; it incorrectly converts the string to the zero date '0000-00-00 00:00:00'. The comparison then becomes c1 != '0000-00-00 00:00:00', which is TRUE for all rows, and they are incorrectly returned.

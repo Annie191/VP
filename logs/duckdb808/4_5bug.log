@@ -1,0 +1,78 @@
+DROP TABLE IF EXISTS repro_duckdb_db4_interval_source;
+DROP TABLE IF EXISTS repro_duckdb_db4_interval_l;
+DROP TABLE IF EXISTS repro_duckdb_db4_interval_r;
+
+CREATE TABLE repro_duckdb_db4_interval_source (
+    vp_rowid BIGINT PRIMARY KEY,
+    c0 INTERVAL
+);
+
+INSERT INTO repro_duckdb_db4_interval_source VALUES
+    (0, NULL),
+    (1, INTERVAL '12 months 3 days 400 microseconds'),
+    (2, INTERVAL '1 day'),
+    (3, INTERVAL '0 days'),
+    (4, INTERVAL '2 years');
+
+CREATE TABLE repro_duckdb_db4_interval_l AS
+SELECT * FROM repro_duckdb_db4_interval_source;
+
+CREATE TABLE repro_duckdb_db4_interval_r AS
+SELECT * FROM repro_duckdb_db4_interval_source;
+
+COPY repro_duckdb_db4_interval_source
+TO 'repro_duckdb_db4_interval.parquet'
+(FORMAT PARQUET, COMPRESSION ZSTD);
+
+SELECT vp_rowid, c0
+FROM repro_duckdb_db4_interval_source
+ORDER BY vp_rowid;
+
+SELECT l.vp_rowid, l.c0
+FROM repro_duckdb_db4_interval_l l
+JOIN repro_duckdb_db4_interval_r r
+  ON l.vp_rowid = r.vp_rowid
+ORDER BY l.vp_rowid;
+
+SELECT
+    COUNT(s.vp_rowid) AS source_rows,
+    COUNT(p.vp_rowid) AS parquet_rows,
+    COUNT(*) FILTER (
+        WHERE s.vp_rowid IS NOT DISTINCT FROM p.vp_rowid
+          AND s.c0 IS NOT DISTINCT FROM p.c0
+    ) AS equal_rows
+FROM repro_duckdb_db4_interval_source s
+FULL OUTER JOIN read_parquet('repro_duckdb_db4_interval.parquet') p
+  ON s.vp_rowid = p.vp_rowid;
+
+单表查询真实结果包含：
+1 | 1 year 3 days 00:00:00.0004
+
+多表 VP 重构查询结果包含：
+1 | 1 year 3 days 00:00:00.0004
+
+Parquet 差分查询：
+
+source_rows | parquet_rows | equal_rows
+5           | 5            | 4
+
+执行计划核心结构：
+单表：
+ORDER_BY
+└── SEQ_SCAN repro_duckdb_db4_interval_source
+多表：
+ORDER_BY
+└── HASH_JOIN
+    ├── SEQ_SCAN ..._l
+    └── SEQ_SCAN ..._r
+Parquet 差分：
+UNGROUPED_AGGREGATE
+└── PROJECTION
+    └── FULL HASH_JOIN
+        ├── SEQ_SCAN ..._source
+        └── READ_PARQUET
+EXPLAIN 中 DuckDB 将 interval 比较显示为：
+normalized_interval(c0) IS NOT DISTINCT FROM normalized_interval(c0)
+真实差异是 Parquet 读取后：
+source:  1 year 3 days 00:00:00.0004
+parquet: 1 year 3 days

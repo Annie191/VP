@@ -1,0 +1,301 @@
+[VERTICAL PARTITIONING UNEXPECTED QUERY ERROR]
+Mode: RANDOM_TABLE_REWRITE
+Stage: single-query
+Error text:
+ERROR: internal error: unexpected error from the vectorized runtime: unexpected replacement: original vector is varbit[] whereas the replacement is varbit[]
+  Detail: stack trace:
+pkg/sql/colexecerror/error.go:143: func1()
+GOROOT/src/runtime/panic.go:783: gopanic()
+pkg/col/coldata/batch.go:402: ReplaceCol()
+pkg/sql/colexec/serial_unordered_synchronizer.go:122: Next()
+pkg/sql/colflow/stats.go:122: next()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/stats.go:130: Next()
+pkg/sql/colexecop/operator.go:476: Next()
+pkg/sql/colflow/stats.go:122: next()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/stats.go:130: Next()
+pkg/sql/colflow/flow_coordinator.go:244: nextAdapter()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/flow_coordinator.go:248: next()
+pkg/sql/colflow/flow_coordinator.go:302: Run()
+pkg/sql/colflow/vectorized_flow.go:317: Run()
+pkg/sql/distsql_running.go:1087: Run()
+pkg/sql/distsql_running.go:2397: PlanAndRun()
+pkg/sql/distsql_running.go:2096: func3()
+pkg/sql/distsql_running.go:2099: PlanAndRunAll()
+pkg/sql/conn_executor_exec.go:3653: execWithDistSQLEngine()
+pkg/sql/conn_executor_exec.go:3137: dispatchToExecutionEngine()
+pkg/sql/conn_executor_exec.go:1122: execStmtInOpenState()
+pkg/sql/conn_executor_exec.go:183: func2()
+pkg/sql/conn_executor_exec.go:4720: func1()
+pkg/util/pprofutil/labels.go:38: Do()
+pkg/sql/conn_executor_exec.go:4717: execWithProfiling()
+pkg/sql/conn_executor_exec.go:182: execStmt()
+pkg/sql/conn_executor_exec.go:333: execPortal()
+pkg/sql/conn_executor.go:2593: func2()
+pkg/sql/conn_executor.go:2595: execCmd()
+pkg/sql/conn_executor.go:2394: run()
+
+  Hint: You have encountered an unexpected error.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+
+Strategy summary: split=SKEWED_SPLIT, reconstruction=SCALAR_SUBQUERY, shape=MULTI_COLUMN, prefix=vp_database0_2546_
+Strategy counts: split={EMPTY_SPLIT=137, SINGLE_REPLICATED=104, SINGLE_RIGHT_ROW_ID_ONLY=103, SINGLE_LEFT_ROW_ID_ONLY=103, EVEN_SPLIT=524, OVERLAPPED_SPLIT=526, SKEWED_SPLIT=523, TYPE_DIRECTED_SPLIT=526}, reconstruction={JOIN=12730, LEFT_RIGHT_JOIN=12725, FULL_OUTER_SIMULATION=12730, SCALAR_SUBQUERY=12721, EXISTS_FILTER=12730, IN_FILTER=12730, NOT_EXISTS_ANTI=12730, DERIVED_TABLE=12725, CTE=12730, VIEW=12725, TEMP_TABLE=12625, AGGREGATE_THEN_MERGE=12730, ROW_NUMBER_ALIGNMENT=12730, JSON_PACK=12730, STRING_PACK=12730, NATURAL_OR_USING=12730, STRAIGHT_JOIN=12730, LATERAL_DERIVED=12725}
+Database: database0
+CockroachDB version: CockroachDB CCL v26.2.3 (x86_64-pc-linux-gnu, built 2026/06/24 12:27:14, go1.25.5)
+Base table: t0
+Base table DDL: CREATE TABLE public.t0 (
+	c0 TIMESTAMP[] NOT NULL DEFAULT ARRAY['1970-01-16 03:18:54':::TIMESTAMP, NULL]:::TIMESTAMP[],
+	c1 BIT(4) NOT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (c1 ASC, c0 DESC),
+	INDEX i1 (c1 DESC),
+	INDEX i3 (c1 DESC)
+) WITH (schema_locked = true);
+Base table engine: N/A
+VP source engine: N/A
+VP left engine: N/A
+VP right engine: N/A
+Base row count: 8
+VP source row count: 8
+Base shape: MULTI_COLUMN
+Stable row order: "c0", "c1"
+Prefix: vp_database0_2546_
+Split strategy: SKEWED_SPLIT
+Left columns: {c0}
+Right columns: {c1}
+Overlap columns: {}
+Physical foreign key: false
+Reconstruction strategy: SCALAR_SUBQUERY
+Description: shape=MULTI_COLUMN, split=SKEWED_SPLIT, reconstruction=SCALAR_SUBQUERY
+Session vars: TimeZone=UTC, vectorize=on, optimizer_use_histograms=on, enable_zigzag_join=off, serial_normalization=virtual_sequence
+Session SET statements:
+SET TimeZone = 'UTC';
+SET vectorize = 'on';
+SET optimizer_use_histograms = 'on';
+SET enable_zigzag_join = 'off';
+SET serial_normalization = 'virtual_sequence';
+Setup statements:
+CREATE TABLE "vp_database0_2546_source" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "c0" TIMESTAMP[] NULL, "c1" BIT(4) NULL);
+INSERT INTO "vp_database0_2546_source" ("vp_rowid", "c0", "c1") SELECT ROW_NUMBER() OVER ( ORDER BY "c0", "c1") AS "vp_rowid", "c0", "c1" FROM "t0" LIMIT 256;
+CREATE UNIQUE INDEX "vp_database0_2546_src_idx_0" ON "vp_database0_2546_source" (c1 ASC, c0 DESC);
+CREATE INDEX "vp_database0_2546_src_idx_1" ON "vp_database0_2546_source" (c1 DESC);
+CREATE INDEX "vp_database0_2546_src_idx_2" ON "vp_database0_2546_source" (c1 DESC);
+CREATE TABLE "vp_database0_2546_l" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c0" TIMESTAMP[] NULL);
+CREATE TABLE "vp_database0_2546_r" ("vp_rowid" BIGINT NOT NULL PRIMARY KEY, "c1" BIT(4) NULL);
+INSERT INTO "vp_database0_2546_l" ("vp_rowid", "c0") SELECT "vp_rowid", "c0" FROM "vp_database0_2546_source";
+INSERT INTO "vp_database0_2546_r" ("vp_rowid", "c1") SELECT "vp_rowid", "c1" FROM "vp_database0_2546_source";
+CREATE INDEX "vp_database0_2546_src_asym_360453721" ON "vp_database0_2546_source"("c1", "vp_rowid");
+CREATE INDEX "vp_database0_2546_r_asym_1085287737" ON "vp_database0_2546_r"("c1", "vp_rowid");
+CREATE INDEX "vp_database0_2546_idx_src_934089189" ON "vp_database0_2546_source"("c1", "vp_rowid");
+DROP VIEW IF EXISTS "vp_database0_2546_v";
+CREATE VIEW "vp_database0_2546_v" AS SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", r."c1" AS "c1" FROM "vp_database0_2546_l" l JOIN "vp_database0_2546_r" r ON l."vp_rowid" = r."vp_rowid";
+DROP TABLE IF EXISTS "vp_database0_2546_joined";
+CREATE TEMP TABLE "vp_database0_2546_joined" ("vp_rowid" INT8 NOT NULL PRIMARY KEY, "c0" TIMESTAMP[] NULL, "c1" BIT(4) NULL);
+INSERT INTO "vp_database0_2546_joined" ("vp_rowid", "c0", "c1") SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", r."c1" AS "c1" FROM "vp_database0_2546_l" l JOIN "vp_database0_2546_r" r ON l."vp_rowid" = r."vp_rowid";
+VP table DDLs:
+vp_database0_2546_source: CREATE TABLE public.vp_database0_2546_source (
+	vp_rowid INT8 NOT NULL,
+	c0 TIMESTAMP[] NULL,
+	c1 BIT(4) NULL,
+	CONSTRAINT vp_database0_2546_source_pkey PRIMARY KEY (vp_rowid ASC),
+	UNIQUE INDEX vp_database0_2546_src_idx_0 (c1 ASC, c0 DESC),
+	INDEX vp_database0_2546_src_idx_1 (c1 DESC),
+	INDEX vp_database0_2546_src_idx_2 (c1 DESC),
+	INDEX vp_database0_2546_src_asym_360453721 (c1 ASC, vp_rowid ASC),
+	INDEX vp_database0_2546_idx_src_934089189 (c1 ASC, vp_rowid ASC)
+) WITH (schema_locked = true);
+vp_database0_2546_l: CREATE TABLE public.vp_database0_2546_l (
+	vp_rowid INT8 NOT NULL,
+	c0 TIMESTAMP[] NULL,
+	CONSTRAINT vp_database0_2546_l_pkey PRIMARY KEY (vp_rowid ASC)
+) WITH (schema_locked = true);
+vp_database0_2546_r: CREATE TABLE public.vp_database0_2546_r (
+	vp_rowid INT8 NOT NULL,
+	c1 BIT(4) NULL,
+	CONSTRAINT vp_database0_2546_r_pkey PRIMARY KEY (vp_rowid ASC),
+	INDEX vp_database0_2546_r_asym_1085287737 (c1 ASC, vp_rowid ASC)
+) WITH (schema_locked = true);
+vp_database0_2546_v: CREATE VIEW public.vp_database0_2546_v (
+	vp_rowid,
+	c0,
+	c1
+) AS SELECT
+		l.vp_rowid AS vp_rowid, l.c0 AS c0, r.c1 AS c1
+	FROM
+		database0.public.vp_database0_2546_l AS l
+		JOIN database0.public.vp_database0_2546_r AS r ON l.vp_rowid = r.vp_rowid;
+vp_database0_2546_joined: CREATE TEMP TABLE pg_temp_1784950059821339680_1.vp_database0_2546_joined (
+	vp_rowid INT8 NOT NULL,
+	c0 TIMESTAMP[] NULL,
+	c1 BIT(4) NULL,
+	CONSTRAINT vp_database0_2546_joined_pkey PRIMARY KEY (vp_rowid ASC)
+);
+VP source snapshot:
+SELECT "vp_rowid", "c0", "c1" FROM "vp_database0_2546_source" ORDER BY "vp_rowid";
+1 | {} | 0000
+2 | {} | 0100
+3 | {} | 0110
+4 | {} | 0111
+5 | {} | 1000
+6 | {} | 1010
+7 | {"1969-12-21 00:33:52"} | 1000
+8 | {"1970-01-16 03:18:54",NULL} | 0000
+VP left snapshot:
+SELECT "vp_rowid", "c0" FROM "vp_database0_2546_l" ORDER BY "vp_rowid";
+1 | {}
+2 | {}
+3 | {}
+4 | {}
+5 | {}
+6 | {}
+7 | {"1969-12-21 00:33:52"}
+8 | {"1970-01-16 03:18:54",NULL}
+VP right snapshot:
+SELECT "vp_rowid", "c1" FROM "vp_database0_2546_r" ORDER BY "vp_rowid";
+1 | 0000
+2 | 0100
+3 | 0110
+4 | 0111
+5 | 1000
+6 | 1010
+7 | 1000
+8 | 0000
+Failing SQL: (SELECT ALL CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END FROM "vp_database0_2546_source" "vp_database0_2546_source" GROUP BY CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END HAVING COUNT(*) > 0) UNION ALL ((SELECT NULL FROM "vp_database0_2546_source" "vp_database0_2546_source"))
+Single query: (SELECT ALL CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END FROM "vp_database0_2546_source" "vp_database0_2546_source" GROUP BY CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END HAVING COUNT(*) > 0) UNION ALL ((SELECT NULL FROM "vp_database0_2546_source" "vp_database0_2546_source"))
+Split query: (SELECT ALL CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", (SELECT r."c1" FROM "vp_database0_2546_r" r WHERE r."vp_rowid" = l."vp_rowid") AS "c1" FROM "vp_database0_2546_l" l) "vp_database0_2546_source" GROUP BY CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END HAVING COUNT(*) > 0) UNION ALL ((SELECT NULL FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", (SELECT r."c1" FROM "vp_database0_2546_r" r WHERE r."vp_rowid" = l."vp_rowid") AS "c1" FROM "vp_database0_2546_l" l) "vp_database0_2546_source"))
+Failing query plan:
+EXPLAIN (OPT) (SELECT ALL CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END FROM "vp_database0_2546_source" "vp_database0_2546_source" GROUP BY CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END HAVING COUNT(*) > 0) UNION ALL ((SELECT NULL FROM "vp_database0_2546_source" "vp_database0_2546_source"));
+union-all
+ ├── project
+ │    └── select
+ │         ├── group-by (streaming)
+ │         │    ├── project
+ │         │    │    ├── scan vp_database0_2546_source@vp_database0_2546_src_idx_1
+ │         │    │    └── projections
+ │         │    │         └── ARRAY[B'1111111111111111111111111']
+ │         │    └── aggregations
+ │         │         ├── count-rows
+ │         │         └── const-agg
+ │         │              └── column9
+ │         └── filters
+ │              └── count_rows > 0
+ └── project
+      ├── scan vp_database0_2546_source@vp_database0_2546_src_idx_1
+      └── projections
+           └── CAST(NULL AS VARBIT(25)[])
+Single query plan:
+EXPLAIN (OPT) (SELECT ALL CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END FROM "vp_database0_2546_source" "vp_database0_2546_source" GROUP BY CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END HAVING COUNT(*) > 0) UNION ALL ((SELECT NULL FROM "vp_database0_2546_source" "vp_database0_2546_source"));
+union-all
+ ├── project
+ │    └── select
+ │         ├── group-by (streaming)
+ │         │    ├── project
+ │         │    │    ├── scan vp_database0_2546_source@vp_database0_2546_src_idx_1
+ │         │    │    └── projections
+ │         │    │         └── ARRAY[B'1111111111111111111111111']
+ │         │    └── aggregations
+ │         │         ├── count-rows
+ │         │         └── const-agg
+ │         │              └── column9
+ │         └── filters
+ │              └── count_rows > 0
+ └── project
+      ├── scan vp_database0_2546_source@vp_database0_2546_src_idx_1
+      └── projections
+           └── CAST(NULL AS VARBIT(25)[])
+Split query plan:
+EXPLAIN (OPT) (SELECT ALL CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", (SELECT r."c1" FROM "vp_database0_2546_r" r WHERE r."vp_rowid" = l."vp_rowid") AS "c1" FROM "vp_database0_2546_l" l) "vp_database0_2546_source" GROUP BY CASE  WHEN ((((((true)OR(((0.2168780155057155) IS NOT NAN))))OR((('Vm')~*('Z<kqYq04I')))))AND(((7.93047237E8) IS NOT NAN))) THEN ARRAY[B'1111111111111111111111111111111111100001001001000010010100101111']::VARBIT(25)[] ELSE ARRAY[B'1111111111111111111111111111111111001111111101000100101111001011']::VARBIT(25)[] END HAVING COUNT(*) > 0) UNION ALL ((SELECT NULL FROM (SELECT l."vp_rowid" AS "vp_rowid", l."c0" AS "c0", (SELECT r."c1" FROM "vp_database0_2546_r" r WHERE r."vp_rowid" = l."vp_rowid") AS "c1" FROM "vp_database0_2546_l" l) "vp_database0_2546_source"));
+union-all
+ ├── project
+ │    └── select
+ │         ├── group-by (streaming)
+ │         │    ├── project
+ │         │    │    ├── scan vp_database0_2546_l [as=l]
+ │         │    │    └── projections
+ │         │    │         └── ARRAY[B'1111111111111111111111111']
+ │         │    └── aggregations
+ │         │         ├── count-rows
+ │         │         └── const-agg
+ │         │              └── column15
+ │         └── filters
+ │              └── count_rows > 0
+ └── project
+      ├── scan vp_database0_2546_l [as=l]
+      └── projections
+           └── CAST(NULL AS VARBIT(25)[])
+Java stack trace:
+org.postgresql.util.PSQLException: ERROR: internal error: unexpected error from the vectorized runtime: unexpected replacement: original vector is varbit[] whereas the replacement is varbit[]
+  Detail: stack trace:
+pkg/sql/colexecerror/error.go:143: func1()
+GOROOT/src/runtime/panic.go:783: gopanic()
+pkg/col/coldata/batch.go:402: ReplaceCol()
+pkg/sql/colexec/serial_unordered_synchronizer.go:122: Next()
+pkg/sql/colflow/stats.go:122: next()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/stats.go:130: Next()
+pkg/sql/colexecop/operator.go:476: Next()
+pkg/sql/colflow/stats.go:122: next()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/stats.go:130: Next()
+pkg/sql/colflow/flow_coordinator.go:244: nextAdapter()
+pkg/sql/colexecerror/error.go:162: CatchVectorizedRuntimeError()
+pkg/sql/colflow/flow_coordinator.go:248: next()
+pkg/sql/colflow/flow_coordinator.go:302: Run()
+pkg/sql/colflow/vectorized_flow.go:317: Run()
+pkg/sql/distsql_running.go:1087: Run()
+pkg/sql/distsql_running.go:2397: PlanAndRun()
+pkg/sql/distsql_running.go:2096: func3()
+pkg/sql/distsql_running.go:2099: PlanAndRunAll()
+pkg/sql/conn_executor_exec.go:3653: execWithDistSQLEngine()
+pkg/sql/conn_executor_exec.go:3137: dispatchToExecutionEngine()
+pkg/sql/conn_executor_exec.go:1122: execStmtInOpenState()
+pkg/sql/conn_executor_exec.go:183: func2()
+pkg/sql/conn_executor_exec.go:4720: func1()
+pkg/util/pprofutil/labels.go:38: Do()
+pkg/sql/conn_executor_exec.go:4717: execWithProfiling()
+pkg/sql/conn_executor_exec.go:182: execStmt()
+pkg/sql/conn_executor_exec.go:333: execPortal()
+pkg/sql/conn_executor.go:2593: func2()
+pkg/sql/conn_executor.go:2595: execCmd()
+pkg/sql/conn_executor.go:2394: run()
+
+  Hint: You have encountered an unexpected error.
+
+Please check the public issue tracker to check whether this problem is
+already tracked. If you cannot find it there, please report the error
+with details by creating a new issue.
+
+If you would rather not post publicly, please contact us directly
+using the support form.
+
+We appreciate your feedback.
+
+	at org.postgresql.core.v3.QueryExecutorImpl.receiveErrorResponse(QueryExecutorImpl.java:2676)
+	at org.postgresql.core.v3.QueryExecutorImpl.processResults(QueryExecutorImpl.java:2366)
+	at org.postgresql.core.v3.QueryExecutorImpl.execute(QueryExecutorImpl.java:356)
+	at org.postgresql.jdbc.PgStatement.executeInternal(PgStatement.java:496)
+	at org.postgresql.jdbc.PgStatement.execute(PgStatement.java:413)
+	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:333)
+	at org.postgresql.jdbc.PgStatement.executeCachedSql(PgStatement.java:319)
+	at org.postgresql.jdbc.PgStatement.executeWithFlags(PgStatement.java:295)
+	at org.postgresql.jdbc.PgStatement.executeQuery(PgStatement.java:244)
+	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.getResultMultiset(CockroachDBVerticalPartitioningOracle.java:2510)
+	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.comparePair(CockroachDBVerticalPartitioningOracle.java:2239)
+	at sqlancer.cockroachdb.oracle.CockroachDBVerticalPartitioningOracle.check(CockroachDBVerticalPartitioningOracle.java:352)
+	at sqlancer.ProviderAdapter.generateAndTestDatabase(ProviderAdapter.java:61)
+	at sqlancer.Main$DBMSExecutor.run(Main.java:479)
+	at sqlancer.Main$2.run(Main.java:696)
+	at sqlancer.Main$2.runThread(Main.java:678)
+	at sqlancer.Main$2.run(Main.java:669)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)

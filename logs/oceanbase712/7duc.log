@@ -1,0 +1,79 @@
+https://github.com/oceanbase/oceanbase/issues/2422 duc2411
+able to reproduce this issue on OceanBase 4.4.2.1. 
+
+After disabling storage pushdown using the following command, the query returned the correct result:
+
+ALTER SYSTEM SET _pushdown_storage_level = 0;
+We have also confirmed that this issue has already been fixed in OceanBase 4.4.2.3. Thank you again for reporting this issue.
+
+#### COUNT_NULL_IN_NOT_IN_PUSHDOWN
+
+DROP DATABASE IF EXISTS repro_db7;
+CREATE DATABASE repro_db7;
+USE repro_db7;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+CREATE TABLE vp_s (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY);
+INSERT INTO vp_s VALUES (), (), (), (), (), (), (), ();
+
+CREATE TABLE vp_l (id BIGINT NOT NULL PRIMARY KEY);
+INSERT INTO vp_l SELECT id FROM vp_s;
+CREATE TABLE vp_r (id BIGINT NOT NULL PRIMARY KEY);
+INSERT INTO vp_r SELECT id FROM vp_s;
+
+-- Single: 返回 8（错误，正确应为 7）
+SELECT COUNT((NOT (CAST(id AS SIGNED))) NOT IN ((NULL) > (id) OR (id) > ('1.E'))) FROM vp_s;
+
+-- Split: IN_FILTER → 返回 7（正确）
+SELECT COUNT((NOT (CAST(id AS SIGNED))) NOT IN ((NULL) > (id) OR (id) > ('1.E'))) FROM (
+  SELECT l.id FROM vp_l l WHERE l.id IN (SELECT r.id FROM vp_r r)
+) vp_s;
+
+id	NOT(id)	NULL>id OR id>"1.E"	0 NOT IN(...)
+1	0	NULL	NULL
+2-8	0	TRUE	1
+查询	结果	正确?
+Single	8	❌
+Split	7	✅
+
+执行计划
+Single（pushdown_aggregation → 错误 = 8）
+
+|ID|OPERATOR         |NAME|EST.ROWS|
+|0 |SCALAR GROUP BY  |    |1       |
+|1 |└─TABLE FULL SCAN|vp_s|8       |
+
+  1 - pushdown_aggregation([T_FUN_COUNT(
+        (T_OP_NOT, cast(id, BIGINT)) != NULL > id OR cast(id, DECIMAL) > cast('1.E', DECIMAL)
+      )])   ← 存储层 id=1 的 NULL 被错误计数
+
+      表达式拆解
+
+sql
+COUNT(
+  (NOT (CAST(id AS SIGNED))) 
+  NOT IN ( (NULL) > (id) OR (id) > ('1.E') )
+)
+部分	含义
+NOT(CAST(id AS SIGNED))	id=1~8，都是非零整数，NOT 后结果为 0（常量）
+(NULL) > (id)	与 NULL 比较永远返回 NULL
+(id) > ('1.E')	'1.E' 被转为数值 1。id=1 ⇒ FALSE；id≥2 ⇒ TRUE
+NULL OR (id > '1.E')	NULL OR FALSE = NULL；NULL OR TRUE = TRUE
+因此按行结果：
+
+id	NOT(id) (expr)	右边列表值 expr2	expr NOT IN (expr2) 等价于 expr <> expr2	结果
+1	0	NULL	0 <> NULL → NULL	NULL
+2~8	0	1 (TRUE)	0 <> 1 → TRUE (1)	1
+COUNT 忽略 NULL，因此正确结果应该是 7。
+
+为何 Single 查询返回 8？
+执行计划显示聚合被 下推到 TiKV（pushdown_aggregation）：
+
+text
+SCALAR GROUP BY
+└─TABLE FULL SCAN (pushdown_aggregation)
+TiKV 在扫描时直接计算 COUNT(...)，结果返回给 TiDB 不再二次聚合。
+
+问题出在 TiKV 的表达式求值 上：
+对于 id=1 的行，右边列表值 expr2 = NULL，0 NOT IN (NULL) 即 0 <> NULL 本应返回 NULL，从而被 COUNT 忽略。但 TiKV 的下推计算中，这一行很可能被错误地求值为 TRUE（1），导致 COUNT 将 8 行全部计入。
+

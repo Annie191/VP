@@ -1,0 +1,74 @@
+{
+  "database": "MariaDB",
+  "source": "/home/lwm/sqlancer/Bugs/MariaDB/MDEV-41081.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "-- 原始单表查询：实际返回 0 行\nSELECT vp_rowid, c0\nFROM source_rows\nWHERE '0.45' IN (c0)",
+      "ok": true,
+      "rows": [],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "/* 原始单表查询：实际返回 0 行 */ SELECT vp_rowid, c0 FROM source_rows",
+      "ok": true,
+      "rows": [
+        "1\t0",
+        "2\t0",
+        "3\t1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "/* 原始单表查询：实际返回 0 行 */ SELECT vp_rowid, c0 FROM source_rows WHERE '0.45' IN (c0) UNION ALL /* 原始单表查询：实际返回 0 行 */ SELECT vp_rowid, c0 FROM source_rows WHERE NOT '0.45' IN (c0) UNION ALL /* 原始单表查询：实际返回 0 行 */ SELECT vp_rowid, c0 FROM source_rows WHERE '0.45' IN (c0) IS NULL",
+      "ok": true,
+      "rows": [
+        "1\t0",
+        "2\t0",
+        "3\t1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "/* 原始单表查询：实际返回 0 行 */ SELECT COUNT(*) FROM source_rows WHERE '0.45' IN (c0)",
+      "ok": true,
+      "rows": [
+        "0"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "/* 原始单表查询：实际返回 0 行 */ SELECT SUM(CASE WHEN '0.45' IN (c0) THEN 1 ELSE NULL END) FROM source_rows",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "-- 原始单表查询：实际返回 0 行\nSELECT vp_rowid, c0\nFROM source_rows\nWHERE '0.45' IN (c0);",
+  "variants": {
+    "tlp_base": "/* 原始单表查询：实际返回 0 行 */ SELECT vp_rowid, c0 FROM source_rows",
+    "tlp_part_true": "/* 原始单表查询：实际返回 0 行 */ SELECT vp_rowid, c0 FROM source_rows WHERE '0.45' IN (c0)",
+    "tlp_part_false": "/* 原始单表查询：实际返回 0 行 */ SELECT vp_rowid, c0 FROM source_rows WHERE NOT '0.45' IN (c0)",
+    "tlp_part_unknown": "/* 原始单表查询：实际返回 0 行 */ SELECT vp_rowid, c0 FROM source_rows WHERE '0.45' IN (c0) IS NULL",
+    "tlp_union": "/* 原始单表查询：实际返回 0 行 */ SELECT vp_rowid, c0 FROM source_rows WHERE '0.45' IN (c0) UNION ALL /* 原始单表查询：实际返回 0 行 */ SELECT vp_rowid, c0 FROM source_rows WHERE NOT '0.45' IN (c0) UNION ALL /* 原始单表查询：实际返回 0 行 */ SELECT vp_rowid, c0 FROM source_rows WHERE '0.45' IN (c0) IS NULL",
+    "norec_optimized": "/* 原始单表查询：实际返回 0 行 */ SELECT COUNT(*) FROM source_rows WHERE '0.45' IN (c0)",
+    "norec_unoptimized": "/* 原始单表查询：实际返回 0 行 */ SELECT SUM(CASE WHEN '0.45' IN (c0) THEN 1 ELSE NULL END) FROM source_rows",
+    "predicate": "'0.45' IN (c0)"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": false,
+  "norec_checked": true,
+  "norec_inconsistent": false,
+  "notes": [
+    "NoREC comparison normalizes empty aggregate NULL to 0."
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120905.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- Single: 返回 1043103758\nSELECT 'single' AS q,\n    SUM(DISTINCT CASE 0.5 WHEN id THEN c1 ELSE 1043103758 END) AS ref0\nFROM src\nGROUP BY id",
+      "ok": true,
+      "rows": [
+        "single\t1043103758"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 9,
+  "target_query": "-- Single: 返回 1043103758\nSELECT 'single' AS q,\n    SUM(DISTINCT CASE 0.5 WHEN id THEN c1 ELSE 1043103758 END) AS ref0\nFROM src\nGROUP BY id;",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

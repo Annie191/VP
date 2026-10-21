@@ -1,0 +1,73 @@
+https://github.com/oceanbase/oceanbase/issues/2435  has been reproduced .
+
+DROP DATABASE IF EXISTS repro_ob730_db13_min;
+CREATE DATABASE repro_ob730_db13_min;
+USE repro_ob730_db13_min;
+
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 DOUBLE NULL
+) PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+
+CREATE TABLE l (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 DOUBLE NULL
+) PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY
+) PARTITION BY HASH(vp_rowid) PARTITIONS 8;
+
+INSERT INTO src VALUES (1,-0.999),(2,-0.999);
+INSERT INTO src VALUES (3,-0.999),(4,-0.999);
+INSERT INTO src VALUES
+  (5,-0.999),(6,-0.999),(7,-0.999),(8,-0.999);
+INSERT INTO src VALUES
+  (9,-0.999),(10,-0.999),(11,-0.999),(12,-0.999),
+  (13,-0.999),(14,-0.999),(15,-0.999);
+
+INSERT INTO l SELECT * FROM src;
+INSERT INTO r SELECT vp_rowid FROM src;
+
+SET SESSION ob_enable_aggregation_pushdown = OFF;
+
+-- 单表
+SELECT /*+ PARALLEL(4) */ STD(c0) AS single_std, VAR_POP(c0) AS single_var
+FROM src;
+
+-- 多表重建，保留原日志的 JSON 派生表 JOIN 结构
+SELECT /*+ PARALLEL(4) */ STD(c0) AS split_std, VAR_POP(c0) AS split_var
+FROM (
+  SELECT l.vp_rowid, l.c0
+  FROM l
+  JOIN (
+    SELECT vp_rowid, JSON_OBJECT('vp', vp_rowid) AS payload
+    FROM r
+  ) jp ON l.vp_rowid = jp.vp_rowid
+  JOIN r ON r.vp_rowid = jp.vp_rowid
+) AS src;
+
+single_std = 0.000000011547005383792515
+single_var = 1.3333333333333334e-16
+
+split_std  = NULL
+split_var  = -1.3293333333333337e-16
+
+单表：
+SCALAR GROUP BY
+└─ PX COORDINATOR
+   └─ EXCHANGE OUT DISTR
+      └─ PX BLOCK ITERATOR
+         └─ TABLE FULL SCAN src, partitions(p[0-7])
+            pushdown_aggregation(SUM(c0), SUM(c0*c0), COUNT(c0))
+
+拆分：
+SCALAR GROUP BY
+└─ PX COORDINATOR
+   └─ EXCHANGE OUT DISTR
+      └─ PX PARTITION ITERATOR
+         └─ MERGE JOIN
+            ├─ TABLE FULL SCAN r, partitions(p[0-7])
+            └─ TABLE FULL SCAN l, partitions(p[0-7])
+
+在并行执行且聚合下推被关闭的情况下，OceanBase 对 VAR_POP/STD 的多分区部分聚合合并逻辑存在缺陷，导致合并后的方差值为极小负数，进而导致 STD 计算结果为 NULL。单表查询因启用了存储层下推算聚合，绕过了该并行合并路径，因此结果正确。

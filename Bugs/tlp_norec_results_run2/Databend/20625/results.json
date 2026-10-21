@@ -1,0 +1,17 @@
+{
+  "database": "Databend",
+  "source": "/home/lwm/sqlancer/Bugs/Databend/20625.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT MIN(s.c1date), s.vp_rowid, s.vp_rowid\nFROM source s\nWHERE ((s.c2map IS NULL) <> (s.c4array IS NULL))\nGROUP BY s.vp_rowid, s.vp_rowid\nORDER BY s.vp_rowid, s.vp_rowid",
+      "ok": false,
+      "rows": [],
+      "stderr": "ERROR 1105 (HY000) at line 3: UnwindError. Code: 1104, Text = called `Result::unwrap()` on an `Err` value: Null.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 10,
+  "target_query": "SELECT MIN(s.c1date), s.vp_rowid, s.vp_rowid\nFROM source s\nWHERE ((s.c2map IS NULL) <> (s.c4array IS NULL))\nGROUP BY s.vp_rowid, s.vp_rowid\nORDER BY s.vp_rowid, s.vp_rowid;",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}

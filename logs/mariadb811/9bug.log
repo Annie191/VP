@@ -1,0 +1,101 @@
+https://jira.mariadb.org/browse/MDEV-41328 ok
+
+DROP DATABASE IF EXISTS repro_mariadb_database9_tiny;
+CREATE DATABASE repro_mariadb_database9_tiny;
+USE repro_mariadb_database9_tiny;
+
+CREATE TABLE src (
+  id INT PRIMARY KEY,
+  c0 DATETIME NOT NULL,
+  c1 BIT(1) NOT NULL,
+  c2 JSON NOT NULL,
+  c3 DATE NULL
+) ENGINE=Aria;
+
+INSERT INTO src VALUES
+  (1, '0000-00-00 00:00:00', b'0', 'null', NULL),
+  (2, '2000-01-01 00:00:02', b'0', '{"vp":null}', '2000-01-03');
+
+CREATE TABLE l (
+  id INT PRIMARY KEY,
+  c0 DATETIME NOT NULL,
+  c2 JSON NOT NULL
+) ENGINE=Aria;
+
+CREATE TABLE r (
+  id INT PRIMARY KEY,
+  c1 BIT(1) NOT NULL,
+  c3 DATE NULL,
+  c2 JSON NOT NULL
+) ENGINE=Aria;
+
+INSERT INTO l SELECT id, c0, c2 FROM src;
+INSERT INTO r SELECT id, c1, c3, c2 FROM src;
+
+SET SESSION optimizer_switch='derived_merge=off';
+
+-- 单表查询
+SELECT
+  'direct' AS tag,
+  CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v,
+  c3
+FROM src
+WHERE c1 IN (c2);
+
+-- CTE/derived 重写查询
+WITH lq AS (
+  SELECT * FROM l
+),
+rq AS (
+  SELECT * FROM r
+)
+SELECT
+  'rewrite' AS tag,
+  CAST((c0 IN (c0, (c0 < c1), c1)) AS UNSIGNED) AS v,
+  c3
+FROM (
+  SELECT
+    lq.id,
+    lq.c0,
+    rq.c1,
+    lq.c2,
+    rq.c3
+  FROM lq
+  JOIN rq ON lq.id = rq.id
+) q
+WHERE c1 IN (c2);
+
+单表：
+tag     v  c3
+direct  1  NULL
+direct  1  2000-01-03
+CTE/derived 重写：
+tag      v  c3
+rewrite  1  NULL
+
+执行计划
+单表：
+SIMPLE  src  ALL  rows=2
+        Using where; Using temporary
+重写：
+PRIMARY  <derived4>  ALL  rows=2
+         Using where; Using temporary
+
+DERIVED  <derived2>  ALL  rows=2
+         Using temporary
+
+DERIVED  <derived3>  ref  key=key0  rows=1
+         Using index condition
+
+DERIVED  l          ALL  rows=2
+         Using temporary
+
+DERIVED  r          ALL  rows=2
+         Using temporary
+这里 BIT(1) 与 JSON 的比较在单表路径和 CTE 物化后的 derived 路径中采用了不同的隐式转换/条件推导方式，导致第二行：
+c1 = b'0'
+c2 = '{"vp":null}'
+c3 = '2000-01-03'
+
+ q.c2 经过 CTE/派生表物化后，丢失了原始 JSON 列的类型标记，变成普通临时列/LONGTEXT，导致 c1 IN (c2) 的类型聚合规则改变。
+单表路径把 JSON 文本转数字，两行都变成 0；物化路径按 BIT/二进制字符串语义比较，'{"vp":null}' 不再等于 b'0'。

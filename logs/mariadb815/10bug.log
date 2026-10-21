@@ -1,0 +1,63 @@
+https://jira.mariadb.org/browse/MDEV-41471 已在最新版本fixed
+
+DROP DATABASE IF EXISTS repro_mariadb815_db10_min;
+CREATE DATABASE repro_mariadb815_db10_min;
+USE repro_mariadb815_db10_min;
+
+SET SESSION sql_buffer_result = OFF;
+
+CREATE TABLE src (
+    rid INT,
+    id INT PRIMARY KEY,
+    j LONGTEXT
+) ENGINE=InnoDB;
+
+INSERT INTO src VALUES (1, 1, '{}');
+
+CREATE TABLE l (
+    rid INT PRIMARY KEY,
+    id INT
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+    rid INT PRIMARY KEY,
+    j LONGTEXT
+) ENGINE=InnoDB;
+
+INSERT INTO l SELECT rid, id FROM src;
+INSERT INTO r SELECT rid, j FROM src;
+
+DROP TEMPORARY TABLE IF EXISTS rebuilt;
+CREATE TEMPORARY TABLE rebuilt (
+    rid INT PRIMARY KEY,
+    id INT,
+    j LONGTEXT
+) ENGINE=InnoDB;
+
+INSERT INTO rebuilt
+SELECT l.rid, l.id, r.j
+FROM l JOIN r USING (rid);
+
+-- Q1：单表查询
+SELECT DISTINCT id, CONCAT(CAST(-j AS CHAR), 'a') AS v
+FROM src;
+
+-- Q2：两表 JOIN 重建临时表后的查询
+SELECT DISTINCT id, CONCAT(CAST(-j AS CHAR), 'a') AS v
+FROM rebuilt;
+
+Q1:
++----+------+
+| id | v    |
++----+------+
+|  1 | 0a   |
++----+------+
+
+Q2:
++------+------+
+| id   | v    |
++------+------+
+|    1 | 0    |
++------+------+
+
+Q1：因为 src.id 是主键，每个 id 只有一行，所以 DISTINCT id, v 里的 DISTINCT 实际上是冗余的。MariaDB 优化器可以直接去掉 DISTINCT，不创建内部去重临时表，直接计算表达式并输出，所以得到正确的 '0a'。Q2：rebuilt.id 不是主键，rebuilt.rid 才是主键，所以 DISTINCT id, v 不能简单去掉，MariaDB 需要创建内部临时表做去重，怀疑可能对 CONCAT(CAST(-j AS CHAR), 'a') 这种未显式指定 CAST 长度的表达式，结果列长度推导错误，导致 '0a' 被截断为 '0'。

@@ -1,0 +1,17 @@
+{
+  "database": "Databend",
+  "source": "/home/lwm/sqlancer/Bugs/Databend/20568.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "-- 单表查询\nSELECT\n  (- source.vp_rowid),\n  ROW_NUMBER() OVER (ORDER BY `vp_rowid`, `vp_rowid`),\n  (((((source.vp_rowid) * (source.vp_rowid)) - ((+ source.vp_rowid)))\n    * (((source.vp_rowid) / (-1401453600)) % (source.vp_rowid))))\nFROM source\nWHERE (((+ source.vp_rowid)) - ((source.vp_rowid) % (((1208992282) / (41992119)))))\nORDER BY source.c0varchar, source.vp_rowid",
+      "ok": true,
+      "rows": [],
+      "stderr": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 10,
+  "target_query": "-- 单表查询\nSELECT\n  (- source.vp_rowid),\n  ROW_NUMBER() OVER (ORDER BY `vp_rowid`, `vp_rowid`),\n  (((((source.vp_rowid) * (source.vp_rowid)) - ((+ source.vp_rowid)))\n    * (((source.vp_rowid) / (-1401453600)) % (source.vp_rowid))))\nFROM source\nWHERE (((+ source.vp_rowid)) - ((source.vp_rowid) % (((1208992282) / (41992119)))))\nORDER BY source.c0varchar, source.vp_rowid;",
+  "skip_reason": "ORDER BY is not handled by this batch rewriter"
+}

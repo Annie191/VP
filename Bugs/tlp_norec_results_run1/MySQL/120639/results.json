@@ -1,0 +1,69 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120639.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "SELECT COUNT(*) AS cnt\nFROM vp_source\nWHERE NOT (IFNULL(0.5, 0) NOT IN (id))",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "SELECT COUNT(*) AS cnt FROM vp_source",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "SELECT SUM(agg0) FROM (SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id)) UNION ALL SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT NOT (NOT COALESCE(0.5, 0) IN (id)) UNION ALL SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id)) IS NULL) AS tlp_parts",
+      "ok": true,
+      "rows": [
+        "3"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "SELECT COUNT(*) FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id))",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "SELECT SUM(CASE WHEN NOT (NOT COALESCE(0.5, 0) IN (id)) THEN 1 ELSE NULL END) FROM vp_source",
+      "ok": true,
+      "rows": [
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 11,
+  "target_query": "SELECT COUNT(*) AS cnt\nFROM vp_source\nWHERE NOT (IFNULL(0.5, 0) NOT IN (id));",
+  "variants": {
+    "tlp_base": "SELECT COUNT(*) AS cnt FROM vp_source",
+    "tlp_part_true": "SELECT COUNT(*) AS cnt FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id))",
+    "tlp_part_false": "SELECT COUNT(*) AS cnt FROM vp_source WHERE NOT NOT (NOT COALESCE(0.5, 0) IN (id))",
+    "tlp_part_unknown": "SELECT COUNT(*) AS cnt FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id)) IS NULL",
+    "tlp_union": "SELECT SUM(agg0) FROM (SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id)) UNION ALL SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT NOT (NOT COALESCE(0.5, 0) IN (id)) UNION ALL SELECT COUNT(*) AS agg0 FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id)) IS NULL) AS tlp_parts",
+    "norec_optimized": "SELECT COUNT(*) FROM vp_source WHERE NOT (NOT COALESCE(0.5, 0) IN (id))",
+    "norec_unoptimized": "SELECT SUM(CASE WHEN NOT (NOT COALESCE(0.5, 0) IN (id)) THEN 1 ELSE NULL END) FROM vp_source",
+    "predicate": "NOT (NOT COALESCE(0.5, 0) IN (id))"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": true,
+  "norec_checked": true,
+  "norec_inconsistent": true
+}

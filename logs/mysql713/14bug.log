@@ -1,0 +1,102 @@
+https://bugs.mysql.com/bug.php?id=120907&thanks=4 Verified as described.
+
+DROP DATABASE IF EXISTS repro_vp14;
+CREATE DATABASE repro_vp14;
+USE repro_vp14;
+
+CREATE TABLE src (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 BIGINT NULL,
+  UNIQUE KEY (c0)
+);
+INSERT INTO src VALUES (1, 0), (2, 1);
+
+CREATE TABLE l (vp_rowid BIGINT NOT NULL PRIMARY KEY);
+CREATE TABLE r (
+  vp_rowid BIGINT NOT NULL PRIMARY KEY,
+  c0 BIGINT NULL,
+  KEY (c0, vp_rowid)
+);
+INSERT INTO l SELECT vp_rowid FROM src;
+INSERT INTO r SELECT vp_rowid, c0 FROM src;
+
+-- 单表：实际返回空
+SELECT c0
+FROM src
+WHERE +(IF('', NULL, '0.22857643383585602')) IN (c0)
+ORDER BY CAST((CASE c0 WHEN vp_rowid THEN vp_rowid ELSE NULL END) IS NOT NULL AS SIGNED) DESC;
+
+-- 多表：实际返回一行 c0 = 0
+WITH
+  lrn AS (
+    SELECT ROW_NUMBER() OVER (ORDER BY vp_rowid) AS rn, vp_rowid FROM l
+  ),
+  rrn AS (
+    SELECT ROW_NUMBER() OVER (ORDER BY vp_rowid) AS rn, vp_rowid, c0 FROM r
+  )
+SELECT x.c0
+FROM (
+  SELECT lrn.vp_rowid, rrn.c0
+  FROM lrn STRAIGHT_JOIN rrn ON lrn.rn = rrn.rn
+) AS x
+WHERE +(IF('', NULL, '0.22857643383585602')) IN (x.c0)
+ORDER BY CAST((CASE x.c0 WHEN x.vp_rowid THEN x.vp_rowid ELSE NULL END) IS NOT NULL AS SIGNED) DESC;
+
+
+单表执行计划
+
+-> Zero rows (Impossible WHERE noticed after reading const tables)  (cost=0..0 rows=0)
+
+多表执行计划核心：
+
+-> Nested loop inner join
+    -> Table scan on lrn
+    -> Index lookup on rrn using <auto_key0>
+       (rn = lrn.rn, c0 = if('',NULL,'0.22857643383585602'))
+
+
+关键表达式与类型背景
+sql
+WHERE +(IF('', NULL, '0.22857643383585602')) IN (c0)
+IF('', NULL, '0.22857643383585602')：'' 为假，返回字符串 '0.22857643383585602'。
+
+一元 + 将该字符串转换为数值：得到 浮点数 0.22857643383585602（DOUBLE）。
+
+右侧 c0 的类型是 BIGINT，表中值为 0 和 1。
+
+根据 MySQL 比较规则，当数值（DOUBLE）与整数列比较时，会将整数转为 DOUBLE，即比较 0.228... 与 0.0 和 1.0，不可能相等。因此正确的查询结果应为空集。
+
+. 单表查询为什么返回空（正确）
+单表 src 有 UNIQUE KEY (c0)，但优化器在解析阶段直接计算了常量表达式，得出 0.228...，并意识到它与 c0 中的所有值都不匹配（c0 为 0、1），于是将 WHERE 标记为 “Impossible WHERE”，跳过数据读取，直接输出零行。执行计划明确显示：
+
+text
+Zero rows (Impossible WHERE noticed after reading const tables)
+这里表达式语义完全保留，结果为浮点比较。
+
+3. 多表查询为什么返回 c0=0（错误）
+多表查询引入了窗口函数、派生表和连接，优化器无法在早期将常量折叠并判断“不可能”，于是走上了另一条路径：
+
+将 +(IF(...)) IN (x.c0) 转化为等值条件 x.c0 = +(IF(...))，并尝试使用 r 表上的索引 KEY (c0, vp_rowid) 进行查找。
+
+执行计划片段：
+
+text
+Index lookup on rrn using <auto_key0> (rn = lrn.rn, c0 = if('',NULL,'0.22857643383585602'))
+由于索引列 c0 的类型是 BIGINT，存储引擎在接收搜索键 '0.22857643383585602'（字符串，因为 IF 的原始返回值是字符串）时，会按照整数截断规则将其转换为 0。
+
+于是存储引擎成功找到了 c0 = 0 的行（对应 vp_rowid=1），该行被保留。
+
+后续查询管道可能继续使用这个已经被篡改为整数 0 的常量值，使得 IN 条件被“满足”，最终输出该行。
+
+核心问题：索引查找所用的值与原始 IN 表达式计算的 DOUBLE 0.228... 不一致，字符串到整数的截断使得 0.228... 变成了 0，从而匹配到了 c0 = 0 的行。这违反了 SQL 语义的正确性，属于 MySQL 在将字符串常量传递给整型索引键时的类型处理缺陷。
+
+
++(IF('', NULL, '0.22857643383585602')) 中，IF 返回字符串 '0.228...'，一元加 + 将其转换为 DOUBLE 数值 0.228...。
+
+原始条件：0.228... IN (c0)，即判断 0.228... 是否等于 0 或 1，结果为 FALSE（无匹配）。
+
+下推重写错误：优化器在将条件下推到索引查找时，将 IN 转换为等值比较，并生成了查找键。但在生成键值的过程中，错误地丢弃了外层的 + 运算符，直接将 IF() 的返回值（字符串）作为键值。
+
+类型转换差异：比较 BIGINT 列与字符串时，MySQL 将字符串转为整数（从开头解析数字，遇到非数字停止），'0.228...' 被截断为 0，因此错误匹配到 c0=0 的行。
+
+为何单表正确：直接扫描路径未触发该下推重写，表达式保持完整，按 DOUBLE 与 BIGINT 比较（0.228... != 0），无匹配。

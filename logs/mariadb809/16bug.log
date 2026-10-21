@@ -1,0 +1,114 @@
+https://jira.mariadb.org/browse/MDEV-41117 ok
+
+DROP DATABASE IF EXISTS repro_mariadb809_db16_min;
+CREATE DATABASE repro_mariadb809_db16_min;
+USE repro_mariadb809_db16_min;
+
+CREATE TABLE base_rows (
+    c0 BIT(8) NOT NULL
+) ENGINE=MyISAM;
+
+INSERT INTO base_rows(c0)
+VALUES (1),(2),(3),(4),(5),(6),(7),(8);
+
+CREATE TABLE vp_source (
+    vp_rowid BIGINT NOT NULL,
+    c0 BIT(8) NOT NULL,
+    PRIMARY KEY (vp_rowid)
+) ENGINE=InnoDB;
+
+INSERT INTO vp_source(vp_rowid, c0)
+SELECT ROW_NUMBER() OVER (ORDER BY c0), c0
+FROM base_rows;
+
+CREATE TABLE vp_left (
+    vp_rowid BIGINT NOT NULL PRIMARY KEY,
+    c0 BIT(8) NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE vp_right (
+    vp_rowid BIGINT NOT NULL PRIMARY KEY,
+    c0 BIT(8) NOT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO vp_left
+SELECT vp_rowid, c0 FROM vp_source;
+
+INSERT INTO vp_right
+SELECT vp_rowid, c0 FROM vp_source;
+
+CREATE INDEX idx_left_c0 ON vp_left(c0);
+
+单表查询：
+
+SELECT DISTINCT
+    CAST(LENGTHB(c0) AS UNSIGNED) AS result_value
+FROM vp_source
+WHERE c0 IN ('3bf0a4fa-72ff-433c-9a26-eecf4d741c6c');
+
+
+实际结果：
+result_value
+1
+
+重构查询，强制使用 vp_left(c0) 索引：
+
+SELECT DISTINCT
+    CAST(LENGTHB(c0) AS UNSIGNED) AS result_value
+FROM (
+    SELECT
+        l.vp_rowid,
+        l.c0 AS c0
+    FROM vp_left AS l FORCE INDEX (idx_left_c0)
+    JOIN (
+        SELECT
+            vp_rowid,
+            JSON_OBJECT('vp', vp_rowid) AS payload
+        FROM vp_right
+    ) AS p
+        ON p.vp_rowid = l.vp_rowid
+    JOIN vp_right AS r
+        ON r.vp_rowid = p.vp_rowid
+) AS reconstructed
+WHERE c0 IN ('3bf0a4fa-72ff-433c-9a26-eecf4d741c6c');
+
+实际结果：
+Empty set
+直接查询执行计划：
+id  select_type  table      type  possible_keys  key   rows  Extra
+1   SIMPLE       vp_source  ALL   NULL           NULL  8     Using where; Using temporary
+强制索引的重构查询执行计划：
+id  select_type  table  type  possible_keys  key          key_len  ref                                      rows  Extra
+1   SIMPLE       l      ref   idx_left_c0    idx_left_c0  1        const                                    0     Using where; Using index; Using temporary
+1   SIMPLE       vp_right
+                    eq_ref PRIMARY          PRIMARY      8        repro_mariadb809_db16_min.l.vp_rowid       1     Distinct
+1   SIMPLE       r      eq_ref PRIMARY       PRIMARY      8        repro_mariadb809_db16_min.l.vp_rowid       1     Distinct
+另外，禁用索引时：
+SELECT DISTINCT
+    CAST(LENGTHB(c0) AS UNSIGNED) AS result_value
+FROM (
+    SELECT
+        l.vp_rowid,
+        l.c0 AS c0
+    FROM vp_left AS l IGNORE INDEX (idx_left_c0)
+    JOIN (
+        SELECT
+            vp_rowid,
+            JSON_OBJECT('vp', vp_rowid) AS payload
+        FROM vp_right
+    ) AS p
+        ON p.vp_rowid = l.vp_rowid
+    JOIN vp_right AS r
+        ON r.vp_rowid = p.vp_rowid
+) AS reconstructed
+WHERE c0 IN ('3bf0a4fa-72ff-433c-9a26-eecf4d741c6c');
+结果恢复为：
+result_value
+1
+MariaDB 中，BIT(8) 索引列与字符串常量比较时，全表扫描会在 SQL 层把字符串隐式转成数字，而索引 ref 查找路径没有做同样的数值转换，导致同一查询在不同执行计划下返回不同结果。正确类型常量（整数或 bit literal）不受影响。
+
+BIT(8) 列与字符串 UUID '3bf0a4fa-...' 比较。
+字符串数字前缀是 3。
+全表扫描时，SQL 层把字符串隐式转成数字 3，匹配 c0=3，LENGTHB(c0)=1，所以返回 1；
+强制走 idx_left_c0 索引时，索引 ref 查找没有做同样的数值转换，可能按二进制/字节方式比较，导致空集。
+IGNORE INDEX 后恢复全表扫描，结果又变回 1。

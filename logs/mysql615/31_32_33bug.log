@@ -1,0 +1,235 @@
+https://bugs.mysql.com/bug.php?id=120716 Verified as described.
+ 
+空的 MEMORY 表经过 LEFT JOIN / RIGHT JOIN 派生表后，外层做无输入聚合时，本应返回 NULL，但 MySQL 返回了常量表达式的聚合值，例如 0 或 -1。
+最小复现案例如下：
+DROP DATABASE IF EXISTS repro_vp_empty;
+CREATE DATABASE repro_vp_empty;
+USE repro_vp_empty;
+
+CREATE TABLE s (id BIGINT NOT NULL PRIMARY KEY) ENGINE=MEMORY;
+CREATE TABLE l (id BIGINT NOT NULL PRIMARY KEY) ENGINE=MEMORY;
+CREATE TABLE r (id BIGINT NOT NULL PRIMARY KEY) ENGINE=MEMORY;
+
+-- 确认都是空表
+SELECT
+  (SELECT COUNT(*) FROM s) AS s_cnt,
+  (SELECT COUNT(*) FROM l) AS l_cnt,
+  (SELECT COUNT(*) FROM r) AS r_cnt;
+
+-- 正确基线：空表聚合，返回 NULL
+SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v
+FROM s;
+
+-- 错误：空 LEFT JOIN 派生表，仍然没有输入行，但返回 0
+SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v
+FROM (
+  SELECT l.id
+  FROM l LEFT JOIN r ON l.id = r.id
+) AS dt;
+
+-- 错误：空 RIGHT JOIN 派生表，仍然没有输入行，但返回 -1
+SELECT MAX(-CAST(EXISTS(SELECT 1) AS SIGNED)) AS v
+FROM (
+  SELECT l.id
+  FROM l RIGHT JOIN r ON l.id = r.id
+) AS dt;
+
+-- 对应 database33 的形态：WHERE TRUE 后仍错误返回 0
+SELECT MIN(+EXISTS(SELECT 1 WHERE FALSE)) AS v
+FROM (
+  SELECT l.id
+  FROM l LEFT JOIN r ON l.id = r.id
+) AS dt
+WHERE 1;
+我在 13309 上实际跑到的结果：
+s_cnt | l_cnt | r_cnt
+0     | 0     | 0
+
+direct_empty_min_false
+NULL
+
+left_join_empty_min_false
+0
+
+right_join_empty_max_neg_true
+-1
+
+left_join_empty_min_false_where_true
+0
+
+关键点我也验证了一下：
+CREATE TABLE l_inn (id BIGINT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+CREATE TABLE r_inn (id BIGINT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+
+SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v
+FROM (
+  SELECT l_inn.id
+  FROM l_inn LEFT JOIN r_inn ON l_inn.id = r_inn.id
+) AS dt;
+这个 InnoDB 版本返回 NULL。所以目前最小触发条件里，ENGINE=MEMORY 是关键；外键不是必要条件，ORDER BY/LIMIT 也不是必要条件。
+执行计划如下。
+基线查询：
+EXPLAIN FORMAT=TREE
+SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v
+FROM s;
+计划：
+-> Rows fetched before execution  (cost=0..0 rows=1)
+-> Select #2 (subquery in projection; run only once)
+    -> Zero rows (Impossible WHERE)  (cost=0..0 rows=0)
+触发 database32/33 类问题的查询：
+EXPLAIN FORMAT=TREE
+SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v
+FROM (
+  SELECT l.id
+  FROM l LEFT JOIN r ON l.id = r.id
+) AS dt;
+计划：
+-> Rows fetched before execution  (cost=0..0 rows=1)
+-> Select #2 (subquery in projection; run only once)
+    -> Zero rows (Impossible WHERE)  (cost=0..0 rows=0)
+触发 database31 类问题的查询：
+EXPLAIN FORMAT=TREE
+SELECT MAX(-CAST(EXISTS(SELECT 1) AS SIGNED)) AS v
+FROM (
+  SELECT l.id
+  FROM l RIGHT JOIN r ON l.id = r.id
+) AS dt;
+计划：
+-> Rows fetched before execution  (cost=0..0 rows=1)
+-> Select #2 (subquery in projection; run only once)
+    -> Limit: 1 row(s)  (cost=0..0 rows=1)
+        -> Rows fetched before execution  (cost=0..0 rows=1)
+这里的可疑点是执行计划直接出现了：
+Rows fetched before execution  (cost=0..0 rows=1)
+对空的 MEMORY 外连接派生表来说，外层聚合应该看到 0 行输入，聚合结果应该是 NULL。但优化器似乎把它当成可预先求值的一行常量输入，于是：
+MIN(FALSE) -> 0
+MAX(-TRUE) -> -1
+这就是 SQLancer 报的差异来源。
+
+
+
+4. 错误案例一：LEFT JOIN 派生表
+sql
+-- 错误：空 LEFT JOIN 派生表，仍然没有输入行，但返回 0
+SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v
+FROM (
+  SELECT l.id
+  FROM l LEFT JOIN r ON l.id = r.id
+) AS dt;
+解析：
+l 和 r 都是空表
+l LEFT JOIN r → 左表为空 → 结果应为 0 行（不是 1 行 NULL 补全，因为派生表只选了 l.id）
+外层 MIN(...) 聚合 0 行 → 应返回 NULL
+实际结果：0 ✗ （错误）
+为什么是错误的：
+如果优化器认为派生表有 0 行，聚合结果必须是 NULL
+返回 0 说明优化器把 EXISTS(FALSE) 当成常量表达式预先计算了，并假设存在一行输入
+5. 错误案例二：RIGHT JOIN 派生表
+sql
+-- 错误：空 RIGHT JOIN 派生表，仍然没有输入行，但返回 -1
+SELECT MAX(-CAST(EXISTS(SELECT 1) AS SIGNED)) AS v
+FROM (
+  SELECT l.id
+  FROM l RIGHT JOIN r ON l.id = r.id
+) AS dt;
+解析：
+l RIGHT JOIN r → 右表 r 为空 → 结果 0 行
+EXISTS(SELECT 1) → 子查询无条件 → 返回 TRUE（即 1）
+CAST(TRUE AS SIGNED) → 1
+-1 → -1
+MAX(...) 聚合 0 行 → 应返回 NULL
+实际结果：-1 ✗ （错误）
+6. 错误案例三：带恒真 WHERE 的 LEFT JOIN
+sql
+-- 对应 database33 的形态：WHERE TRUE 后仍错误返回 0
+SELECT MIN(+EXISTS(SELECT 1 WHERE FALSE)) AS v
+FROM (
+  SELECT l.id
+  FROM l LEFT JOIN r ON l.id = r.id
+) AS dt
+WHERE 1;
+解析：
+WHERE 1 即 WHERE TRUE，恒真条件，不改变行数
+意图验证：即使加上 WHERE 过滤，是否仍然错误？
+结果：仍然返回 0 → 说明 WHERE 条件没能纠正优化器的错误
+7. 实际执行结果汇总
+表格
+测试用例	结果	预期	状态
+s_cnt / l_cnt / r_cnt	0 / 0 / 0	0 / 0 / 0	✓ 确认空表
+direct_empty_min_false	NULL	NULL	✓ 基线正确
+left_join_empty_min_false	0	NULL	✗ Bug
+right_join_empty_max_neg_true	-1	NULL	✗ Bug
+left_join_empty_min_false_where_true	0	NULL	✗ Bug
+
+9. 对照实验：InnoDB 引擎
+sql
+CREATE TABLE l_inn (id BIGINT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+CREATE TABLE r_inn (id BIGINT NOT NULL PRIMARY KEY) ENGINE=InnoDB;
+
+SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v
+FROM (
+  SELECT l_inn.id
+  FROM l_inn LEFT JOIN r_inn ON l_inn.id = r_inn.id
+) AS dt;
+结果：NULL（正确）
+结论：这是 MEMORY 引擎特有的 Bug，与 InnoDB 无关。
+10. 触发条件精简
+所以目前最小触发条件里，ENGINE=MEMORY 是关键；外键不是必要条件，ORDER BY/LIMIT 也不是必要条件。
+必要：ENGINE=MEMORY
+不必要：外键约束、ORDER BY、LIMIT
+11. 执行计划分析 — 基线查询
+sql
+EXPLAIN FORMAT=TREE
+SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v
+FROM s;
+计划输出：
+plain
+-> Rows fetched before execution  (cost=0..0 rows=1)
+-> Select #2 (subquery in projection; run only once)
+    -> Zero rows (Impossible WHERE)  (cost=0..0 rows=0)
+解析：
+Rows fetched before execution：优化器在运行前已确定结果
+rows=1：但这里基线是正确的（返回 NULL），所以这个计划本身不一定代表错误
+Zero rows (Impossible WHERE)：子查询被优化为恒假
+12. 执行计划分析 — 错误查询（LEFT JOIN）
+sql
+EXPLAIN FORMAT=TREE
+SELECT MIN(EXISTS(SELECT 1 WHERE FALSE)) AS v
+FROM (
+  SELECT l.id
+  FROM l LEFT JOIN r ON l.id = r.id
+) AS dt;
+计划输出：
+plain
+-> Rows fetched before execution  (cost=0..0 rows=1)
+-> Select #2 (subquery in projection; run only once)
+    -> Zero rows (Impossible WHERE)  (cost=0..0 rows=0)
+关键发现：计划与基线几乎相同，但结果不同！
+这说明优化器对派生表和基表的处理路径存在差异——虽然计划显示相似，但派生表情况下优化器错误地假设了"存在一行常量输入"。
+13. 执行计划分析 — 错误查询（RIGHT JOIN）
+sql
+EXPLAIN FORMAT=TREE
+SELECT MAX(-CAST(EXISTS(SELECT 1) AS SIGNED)) AS v
+FROM (
+  SELECT l.id
+  FROM l RIGHT JOIN r ON l.id = r.id
+) AS dt;
+计划输出：
+plain
+-> Rows fetched before execution  (cost=0..0 rows=1)
+-> Select #2 (subquery in projection; run only once)
+    -> Limit: 1 row(s)  (cost=0..0 rows=1)
+        -> Rows fetched before execution  (cost=0..0 rows=1)
+差异点：这里子查询部分出现了 Limit: 1 row(s)，而 LEFT JOIN 版本是 Zero rows。
+EXISTS(SELECT 1)（无条件）被优化器视为恒真
+优化器进一步将其与 LIMIT 1 结合，错误地假设"存在一行"
+14. 根因推断（核心结论）
+这里的可疑点是执行计划直接出现了：
+Rows fetched before execution (cost=0..0 rows=1)
+对空的 MEMORY 外连接派生表来说，外层聚合应该看到 0 行输入，聚合结果应该是 NULL。但优化器似乎把它当成可预先求值的一行常量输入，于是：
+MIN(FALSE) -> 0
+MAX(-TRUE) -> -1
+Bug 机制：
+优化器常量传播：EXISTS(SELECT 1 WHERE FALSE) 被识别为常量 FALSE（0）
+行数估算错误：对于 MEMORY 引擎的空表外连接，优化器没有正确估算出 0 行，而是假设有 1 行（可能是为了"保留 NULL 补全行"的逻辑被错误应用）
+聚合函数短路：既然假设有 1 行输入，且该输入是常量表达式，优化器直接返回常量值，而不是按"0 行输入 → NULL"的聚合规则处理

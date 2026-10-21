@@ -1,0 +1,112 @@
+https://jira.mariadb.org/browse/MDEV-41528   confirming
+
+DROP DATABASE IF EXISTS repro_mariadb817_db2_min;
+CREATE DATABASE repro_mariadb817_db2_min;
+USE repro_mariadb817_db2_min;
+
+CREATE TABLE s (
+    vp_rowid BIGINT NOT NULL,
+    c0 BIT(16) NOT NULL,
+    UNIQUE KEY (vp_rowid),
+    KEY idx_s (vp_rowid, c0)
+) ENGINE=Aria;
+
+CREATE TABLE lpart (
+    vp_rowid BIGINT NOT NULL PRIMARY KEY,
+    c0 BIT(16) NOT NULL
+) ENGINE=Aria;
+
+CREATE TABLE rpart (
+    vp_rowid BIGINT NOT NULL PRIMARY KEY
+) ENGINE=Aria;
+
+INSERT INTO s VALUES
+(1, b'0000000000001000'),
+(2, b'0000000000000000'),
+(3, b'0000000000000010'),
+(4, b'0000000000000011'),
+(5, b'0000000000000100'),
+(6, b'0000000000000101'),
+(7, b'0000000000000110'),
+(8, b'0000000000000111');
+
+INSERT INTO lpart SELECT * FROM s;
+INSERT INTO rpart SELECT vp_rowid FROM s;
+
+SET SESSION optimizer_switch='derived_merge=off';
+
+-- 单表路径
+SELECT DISTINCT c0 + 0
+FROM s
+WHERE (
+    CONCAT(
+        CAST(c0 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+        CAST(59615238 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+        CAST('2017-12-25 07:22:08' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin
+    ) IN ('2035-02-08 07:06:22', c0)
+);
+
+-- 多表重建路径
+SELECT DISTINCT c0 + 0
+FROM (
+    SELECT l.vp_rowid, l.c0
+    FROM lpart l
+    JOIN rpart r USING (vp_rowid)
+) AS reconstructed
+WHERE (
+    CONCAT(
+        CAST(c0 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+        CAST(59615238 AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin,
+        CAST('2017-12-25 07:22:08' AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_bin
+    ) IN ('2035-02-08 07:06:22', c0)
+);
+
+单表路径：
+0
+
+多表重建路径：
+(empty set)
+
+单表路径
+s
+access_type: index
+key: idx_s
+used_key_parts: vp_rowid, c0
+attached_condition:
+  CONCAT(CAST(s.c0 AS CHAR ...), ...) IN (...)
+
+多表重建路径
+r
+access_type: index
+key: PRIMARY
+using_index: true
+
+l
+access_type: hash_ALL
+key: #hash#PRIMARY
+join_type: BNLH
+buffer_type: flat
+
+EXPLAIN FORMAT=JSON 还显示，外层条件被附加到 hash join 的 l.c0 扫描上：
+attached_condition:
+  concat(cast(l.c0 as char charset utf8mb4), ...)
+  IN ('2035-02-08 07:06:22', convert(l.c0 using utf
+
+重跑了 EXPLAIN FORMAT=JSON。关键差异是同一个 WHERE 谓词在重建路径中被执行了两次。
+路径	关键计划
+单表 s	扫描 idx_s（type=index）；谓词附着在 s 上，返回 0
+重建路径，条件下推开启	外层扫描物化的 <derived2>，谓词附着在外层；同一谓词还被下推到 lpart 的 hash_ALL 连接节点，结果为空
+重建路径，条件下推关闭	连接方式仍是 hash_ALL，但 lpart 节点不再附着该谓词；结果恢复为 0
+
+
+重建路径的关键计划片段：
+condition_pushdown_for_derived=on:
+  <derived2>  ALL       Using where
+  lpart       hash_ALL  Using where; Using join buffer (flat, BNLH join)
+  结果：空集
+
+condition_pushdown_for_derived=off:
+  <derived2>  ALL       Using where
+  lpart       hash_ALL  Using join buffer (flat, BNLH join)
+  结果：0
+JSON 计划进一步显示，下推到 lpart 的是整个 CONCAT(...) IN ('2035-02-08 07:06:22', c0) 谓词。

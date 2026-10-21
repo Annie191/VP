@@ -1,0 +1,72 @@
+DROP DATABASE IF EXISTS repro_crdb803_db0_min;
+CREATE DATABASE repro_crdb803_db0_min;
+USE repro_crdb803_db0_min;
+
+SET TimeZone = 'UTC';
+SET vectorize = 'on';
+SET optimizer_use_histograms = 'on';
+SET enable_zigzag_join = 'on';
+SET distsql = 'auto';
+SET opt_split_scan_limit = 2048;
+SET serial_normalization = 'rowid';
+
+-- 单表 src（原始表）
+CREATE TABLE src (
+  vp_rowid     INT8 PRIMARY KEY,
+  c0           JSONB NULL,
+  c1           TIMESTAMP NULL,
+  rowid        INT8 NULL,
+  vp_computed  INT8 AS (vp_rowid * 2) STORED
+);
+
+-- 垂直拆分左表 l（列：c0/c1/rowid/vp_computed）与右表 r（列：rowid）
+CREATE TABLE l (
+  vp_rowid     INT8 PRIMARY KEY,
+  c0           JSONB NULL,
+  c1           TIMESTAMP NULL,
+  rowid        INT8 NULL,
+  vp_computed  INT8 AS (vp_rowid * 2) STORED
+);
+CREATE TABLE r (
+  vp_rowid INT8 PRIMARY KEY,
+  rowid    INT8 NULL
+);
+
+INSERT INTO src (vp_rowid, c0, c1, rowid) VALUES
+  (1, '[true,false]', NULL, 1207314825998467075),
+  (2, '[]', NULL, 1207314832807886851),
+  (3, '{"k":1}', NULL, 1207314835357728771),
+  (4, '{"k":null}', NULL, 1207314839727570947),
+  (5, '{}', NULL, 1207314839727734787),
+  (6, '[]', '1913-02-16 05:27:44', 1198865393),
+  (7, '{"k":null}', '1953-05-02 12:38:04', -1969819676),
+  (8, '{"k":1}', '2020-03-29 15:23:15', -1093704999),
+  (9, '[true,false]', '2037-03-26 10:12:23', 1179498406);
+INSERT INTO l (vp_rowid, c0, c1, rowid) SELECT vp_rowid, c0, c1, rowid FROM src;
+INSERT INTO r (vp_rowid, rowid) SELECT vp_rowid, rowid FROM src;
+
+CREATE INDEX l_partial ON l(c1)   WHERE c1   IS NOT NULL;
+CREATE INDEX r_partial ON r(rowid) WHERE rowid IS NOT NULL;
+
+SELECT DISTINCT VARIANCE(rowid) FROM (
+  SELECT s.* FROM src s
+  WHERE NOT EXISTS (
+    SELECT 1 FROM r rx
+    WHERE rx.vp_rowid = s.vp_rowid AND rx.vp_rowid % 2::INT8 = 0
+  )
+) AS src LIMIT 4;
+
+SELECT DISTINCT VARIANCE(rowid) FROM (
+  SELECT l.vp_rowid AS vp_rowid, l.c0 AS c0, l.c1 AS c1,
+         l.rowid AS rowid, l.vp_computed AS vp_computed
+  FROM l
+  WHERE NOT EXISTS (
+    SELECT 1 FROM r rx
+    WHERE rx.vp_rowid = l.vp_rowid AND rx.vp_rowid % 2::INT8 = 0
+  )
+) AS src LIMIT 4;
+
+single 和 split 都会在 ...4335 / ...4336 之间抖，所以：
+
+单次手跑两者相等 → 非常常见（你现在看到的就是这种情况）；
+要撞上 single≠split，得循环多次对比。

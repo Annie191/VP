@@ -1,0 +1,60 @@
+https://jira.mariadb.org/browse/MDEV-41459 not a bug as reported (Q1 vs Q2).
+
+DROP DATABASE IF EXISTS repro_mariadb813_db0_vp599_min;
+CREATE DATABASE repro_mariadb813_db0_vp599_min;
+USE repro_mariadb813_db0_vp599_min;
+
+SET SESSION optimizer_switch='derived_merge=on';
+SET SESSION sort_buffer_size=2097152;
+SET SESSION max_sort_length=6259757;
+
+CREATE TABLE s(id INT, c1 BOOLEAN) ENGINE=MyISAM;
+CREATE TABLE l(id INT) ENGINE=MyISAM;
+CREATE TABLE r(id INT, c1 BOOLEAN) ENGINE=MyISAM;
+
+DROP TEMPORARY TABLE IF EXISTS tmp;
+CREATE TEMPORARY TABLE tmp ENGINE=InnoDB AS
+SELECT l.id, r.c1
+FROM l JOIN r ON l.id=r.id;
+
+-- Q1：原单表查询
+SELECT *
+FROM (
+    SELECT DISTINCT REGEXP_REPLACE('1', c1, 'a') AS v
+    FROM s
+    WHERE c1
+) q
+ORDER BY 1;
+
+-- Q2：分表重建后的查询
+SELECT *
+FROM (
+    SELECT DISTINCT REGEXP_REPLACE('1', c1, 'a') AS v
+    FROM tmp
+    WHERE c1
+) q
+ORDER BY 1;
+
+Q1:
+Empty set
+
+Q2:
+ERROR 1038 (HY001):
+Out of sort memory, consider increasing server sort buffer size
+
+实际计划如下，省略全部为 NULL 的索引相关列：
+Q1:
+id  select_type  table       type    rows  Extra
+1   PRIMARY      <derived2>  system  0     Const row not found
+2   DERIVED      NULL        NULL    NULL  no matching row in const table
+
+两表 JOIN:
+id  select_type  table  type  rows  Extra
+1   SIMPLE       NULL   NULL  NULL  Impossible WHERE noticed after reading const tables
+
+Q2:
+id  select_type  table       type  rows  Extra
+1   PRIMARY      <derived2>  ALL   2     Using temporary; Using filesort
+2   DERIVED      tmp         ALL   1     Using where; Using temporary
+
+在相同数据和会话参数下，原查询因优化器识别空表直接返回空集；重写为 InnoDB 临时表后，优化器未识别临时表为空，选择 DISTINCT + filesort 计划，并在零行输入上触发 ERROR 1038 Out of sort memory。调整 max_sort_length 后 Q2 可返回空集，说明逻辑结果一致，但原参数下查询执行失败。不是“结果集错误”，而是“合法查询在合法参数下执行失败，且与等价查询行为不一致”

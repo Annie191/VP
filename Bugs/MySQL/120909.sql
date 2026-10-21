@@ -1,0 +1,60 @@
+DROP DATABASE IF EXISTS repro713_11_final;
+CREATE DATABASE repro713_11_final;
+USE repro713_11_final;
+
+SET SESSION sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+SET SESSION big_tables=0;
+SET SESSION internal_tmp_mem_storage_engine='MEMORY';
+
+CREATE TABLE src (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  c0 TEXT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO src(c0) VALUES
+  (NULL), (''), ('a'), ('b'), ('c');
+
+CREATE TABLE l (
+  id BIGINT NOT NULL PRIMARY KEY
+) ENGINE=InnoDB;
+
+CREATE TABLE r (
+  id BIGINT NOT NULL PRIMARY KEY,
+  c0 TEXT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO l SELECT id FROM src;
+INSERT INTO r SELECT id, c0 FROM src;
+
+SELECT 'single' AS q,
+       COUNT(EXISTS(SELECT 1 WHERE FALSE)) AS ref0,
+       src.id AS ref1,
+       COALESCE((NULL) XOR (src.id), CAST('x' AS SIGNED)) AS ref2
+FROM src
+GROUP BY
+       src.id,
+       COALESCE((NULL) XOR (src.id), CAST('x' AS SIGNED))
+WITH ROLLUP
+ORDER BY src.id
+LIMIT 2;
+
+SELECT 'split' AS q,
+       COUNT(EXISTS(SELECT 1 WHERE FALSE)) AS ref0,
+       s.id AS ref1,
+       COALESCE((NULL) XOR (s.id), CAST('x' AS SIGNED)) AS ref2
+FROM (
+  SELECT l.id AS id, r.c0 AS c0
+  FROM l
+  JOIN (
+    SELECT id, COUNT(*) AS c
+    FROM r
+    GROUP BY id
+  ) rg ON l.id = rg.id
+  JOIN r ON r.id = rg.id
+) s
+GROUP BY
+       s.id,
+       COALESCE((NULL) XOR (s.id), CAST('x' AS SIGNED))
+WITH ROLLUP
+ORDER BY s.id
+LIMIT 2;

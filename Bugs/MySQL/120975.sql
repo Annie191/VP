@@ -1,0 +1,30 @@
+DROP DATABASE IF EXISTS repro_mysql714_db54;
+CREATE DATABASE repro_mysql714_db54;
+USE repro_mysql714_db54;
+
+DROP TABLE IF EXISTS vp_s, vp_l, vp_r;
+
+SET SESSION sql_mode = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+SET SESSION big_tables = 0;
+
+CREATE TABLE vp_s (vp_rowid BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, c0 BIGINT NULL) ENGINE = InnoDB;
+INSERT INTO vp_s (c0) VALUES (NULL), (1);
+ALTER TABLE vp_s ADD UNIQUE KEY i0 (c0);
+
+CREATE TABLE vp_l (vp_rowid BIGINT NOT NULL PRIMARY KEY) ENGINE = InnoDB;
+CREATE TABLE vp_r (vp_rowid BIGINT NOT NULL PRIMARY KEY, c0 BIGINT NULL) ENGINE = InnoDB;
+INSERT INTO vp_l SELECT vp_rowid FROM vp_s;
+INSERT INTO vp_r SELECT vp_rowid, c0 FROM vp_s;
+
+-- 单表（优化器常量评估 → Impossible WHERE → 0 行）
+SELECT EXISTS (SELECT 1) AS ref0 FROM vp_s
+WHERE (vp_s.c0) IN (IFNULL(0.7957106135922298, 'nK'));
+
+-- EXISTS_FILTER 多表查询（物化后索引查找 → 错误命中 c0=1 → 1 行）
+SELECT EXISTS (SELECT 1) AS ref0 FROM (
+    SELECT l.vp_rowid,
+           (SELECT r.c0 FROM vp_r r WHERE r.vp_rowid = l.vp_rowid) AS c0
+    FROM vp_l l
+    WHERE EXISTS (SELECT 1 FROM vp_r r WHERE r.vp_rowid = l.vp_rowid)
+) vp_s
+WHERE (vp_s.c0) IN (IFNULL(0.7957106135922298, 'nK'));

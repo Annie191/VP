@@ -1,0 +1,58 @@
+https://jira.mariadb.org/browse/MDEV-41301?filter=-2 ok
+
+DROP DATABASE IF EXISTS repro_mariadb810_db0_min;
+CREATE DATABASE repro_mariadb810_db0_min;
+USE repro_mariadb810_db0_min;
+
+SET SESSION sql_buffer_result = 0;
+SET SESSION optimizer_switch = 'derived_merge=on';
+
+CREATE TABLE src (
+    c DATETIME NOT NULL UNIQUE
+) ENGINE=MyISAM;
+
+CREATE TABLE lt (
+    id INT PRIMARY KEY,
+    c DATETIME NOT NULL
+) ENGINE=MyISAM;
+
+CREATE TABLE rt (
+    id INT PRIMARY KEY
+) ENGINE=MyISAM;
+
+INSERT INTO src VALUES ('2000-01-01'), ('2000-01-02');
+INSERT INTO lt VALUES (1, '2000-01-01'), (2, '2000-01-02');
+INSERT INTO rt VALUES (1), (2);
+
+-- 单表查询
+SELECT DISTINCTROW c, NULLIF(-TRUE, c) AS v
+FROM src;
+
+-- 多表重写查询
+SELECT DISTINCTROW c, NULLIF(-TRUE, c) AS v
+FROM (
+    WITH l AS (SELECT * FROM lt),
+         r AS (SELECT * FROM rt)
+    SELECT l.c
+    FROM l JOIN r ON l.id = r.id
+) AS s;
+
+
+
+direct结果第三列：
+-1
+-1
+
+CTE/derived结果第三列：
+
+1
+1
+
+无 DISTINCTROW:
+direct:      -1
+rewritten:   -1
+
+有 DISTINCTROW:
+direct:      -1
+rewritten:    1
+

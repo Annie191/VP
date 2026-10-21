@@ -1,0 +1,132 @@
+DROP DATABASE IF EXISTS repro_databend918_db7_min;
+CREATE DATABASE repro_databend918_db7_min;
+USE repro_databend918_db7_min;
+
+SET default_order_by_null = 'nulls_last';
+SET disable_join_reorder = 0;
+SET enable_bloom_runtime_filter = 1;
+SET enable_cbo = 1;
+SET enable_join_runtime_filter = 1;
+SET enable_query_result_cache = 0;
+SET max_threads = 40;
+SET numeric_cast_option = 'rounding';
+SET sql_dialect = 'PostgreSQL';
+SET timezone = 'UTC';
+
+CREATE TABLE source7 (
+  vp_rowid BIGINT NOT NULL,
+  c0timestamp TIMESTAMP NULL,
+  c1array ARRAY(BIGINT NULL) NULL,
+  c2tuple TUPLE(BIGINT NULL, VARCHAR NULL) NOT NULL,
+  c3array ARRAY(BIGINT NULL) NULL DEFAULT [1, 2, 3],
+  c4float DOUBLE NULL DEFAULT 0.9876939654,
+  c5geometry GEOMETRY NOT NULL,
+  c6tuple TUPLE(BIGINT NULL, VARCHAR NULL) NULL,
+  c7date DATE NULL DEFAULT '1970-01-25'
+) ENGINE = MEMORY;
+
+INSERT INTO source7 VALUES
+  (
+    5,
+    '1970-01-22 00:29:47',
+    [1,2,3],
+    (1, 'sqlancer'),
+    [1,2,3],
+    0.9876939654,
+    '{"type":"Point","coordinates":[1,2]}',
+    NULL,
+    '1970-01-25'
+  ),
+  (
+    10,
+    NULL,
+    NULL,
+    (1, 'sqlancer'),
+    [1,2,3],
+    0.10469181835651398,
+    '{"type":"Point","coordinates":[1,2]}',
+    NULL,
+    '1969-12-16'
+  ),
+  (
+    11,
+    NULL,
+    [0,0],
+    (0, 'vp_0'),
+    [1,2,3],
+    0.9876939654,
+    '{"type":"Point","coordinates":[0,0]}',
+    NULL,
+    '1970-01-25'
+  );
+
+CREATE TABLE left7 (
+  vp_rowid BIGINT NOT NULL,
+  c4float DOUBLE NULL,
+  c5geometry GEOMETRY NULL,
+  c3array ARRAY(BIGINT NULL) NULL,
+  c6tuple TUPLE(BIGINT NULL, VARCHAR NULL) NULL,
+  c2tuple TUPLE(BIGINT NULL, VARCHAR NULL) NULL
+) ENGINE = MEMORY;
+
+CREATE TABLE right7 (
+  vp_rowid BIGINT NOT NULL,
+  c0timestamp TIMESTAMP NULL,
+  c2tuple TUPLE(BIGINT NULL, VARCHAR NULL) NULL,
+  c1array ARRAY(BIGINT NULL) NULL,
+  c7date DATE NULL
+) ENGINE = FUSE;
+
+INSERT INTO left7
+SELECT vp_rowid, c4float, c5geometry, c3array, c6tuple, c2tuple
+FROM source7;
+
+INSERT INTO right7
+SELECT vp_rowid, c0timestamp, c2tuple, c1array, c7date
+FROM source7;
+
+SELECT c7date
+FROM source7
+WHERE c0timestamp IN (c0timestamp, c0timestamp, c0timestamp)
+ORDER BY c0timestamp, vp_rowid, c7date, c4float;
+
+SELECT x.c7date
+FROM (
+  SELECT l.vp_rowid, r.c0timestamp, l.c4float, r.c7date
+  FROM left7 l
+  LEFT JOIN right7 r
+    ON l.vp_rowid = r.vp_rowid
+
+  UNION ALL
+
+  SELECT r.vp_rowid, r.c0timestamp, l.c4float, r.c7date
+  FROM left7 l
+  RIGHT JOIN right7 r
+    ON l.vp_rowid = r.vp_rowid
+  WHERE l.vp_rowid IS NULL
+) x
+WHERE x.c0timestamp IN (x.c0timestamp, x.c0timestamp, x.c0timestamp)
+ORDER BY x.c0timestamp, x.vp_rowid, x.c7date, x.c4float;
+
+单表：
+1970-01-25
+
+多表：
+1970-01-25
+1969-12-16
+1970-01-25
+
+单表：
+Sort
+└── Filter
+    filters: is_true(c0timestamp = c0timestamp)
+        └── TableScan(source7)
+
+重构：
+Sort
+└── UnionAll
+    ├── HashJoin LEFT OUTER
+    └── Filter NOT is_not_null(left.vp_rowid)
+        └── HashJoin LEFT OUTER
+
+c0timestamp IN (c0timestamp, c0timestamp, c0timestamp) 在单表路径被按 c0timestamp = c0timestamp 处理，而 FULL_OUTER_SIMULATION 的两个 JOIN 分支在 UNION 后没有保持同样的 NULL 过滤语义，导致 NULL 时间戳行被错误保留或重复输出。

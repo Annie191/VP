@@ -1,0 +1,72 @@
+{
+  "database": "MariaDB",
+  "source": "/home/lwm/sqlancer/Bugs/MariaDB/MDEV-40923.sql",
+  "status": "done",
+  "queries": {
+    "original": {
+      "sql": "SELECT 'DIRECT' AS variant,\n       c0,\n       LOCATE(false, c0) AS locate_result,\n       ORD(ORD(c0)) AS value\nFROM vp_source\nWHERE LOCATE(false, c0)",
+      "ok": true,
+      "rows": [
+        "DIRECT\t0000000000000234567890\t1\t52"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_base": {
+      "sql": "SELECT 'DIRECT' AS variant, c0, LOCATE(FALSE, c0) AS locate_result, ORD(ORD(c0)) AS value FROM vp_source",
+      "ok": true,
+      "rows": [
+        "DIRECT\t0000000000000234567890\t1\t52"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "tlp_union": {
+      "sql": "SELECT 'DIRECT' AS variant, c0, LOCATE(FALSE, c0) AS locate_result, ORD(ORD(c0)) AS value FROM vp_source WHERE LOCATE(FALSE, c0) UNION ALL SELECT 'DIRECT' AS variant, c0, LOCATE(FALSE, c0) AS locate_result, ORD(ORD(c0)) AS value FROM vp_source WHERE NOT LOCATE(FALSE, c0) UNION ALL SELECT 'DIRECT' AS variant, c0, LOCATE(FALSE, c0) AS locate_result, ORD(ORD(c0)) AS value FROM vp_source WHERE LOCATE(FALSE, c0) IS NULL",
+      "ok": true,
+      "rows": [
+        "DIRECT\t234567890\t1\t52"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_optimized": {
+      "sql": "SELECT COUNT(*) FROM vp_source WHERE LOCATE(FALSE, c0)",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    },
+    "norec_unoptimized": {
+      "sql": "SELECT SUM(CASE WHEN LOCATE(FALSE, c0) THEN 1 ELSE NULL END) FROM vp_source",
+      "ok": true,
+      "rows": [
+        "1"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n",
+      "stdout": ""
+    }
+  },
+  "errors": [],
+  "target_statement_index": 12,
+  "target_query": "SELECT 'DIRECT' AS variant,\n       c0,\n       LOCATE(false, c0) AS locate_result,\n       ORD(ORD(c0)) AS value\nFROM vp_source\nWHERE LOCATE(false, c0);",
+  "variants": {
+    "tlp_base": "SELECT 'DIRECT' AS variant, c0, LOCATE(FALSE, c0) AS locate_result, ORD(ORD(c0)) AS value FROM vp_source",
+    "tlp_part_true": "SELECT 'DIRECT' AS variant, c0, LOCATE(FALSE, c0) AS locate_result, ORD(ORD(c0)) AS value FROM vp_source WHERE LOCATE(FALSE, c0)",
+    "tlp_part_false": "SELECT 'DIRECT' AS variant, c0, LOCATE(FALSE, c0) AS locate_result, ORD(ORD(c0)) AS value FROM vp_source WHERE NOT LOCATE(FALSE, c0)",
+    "tlp_part_unknown": "SELECT 'DIRECT' AS variant, c0, LOCATE(FALSE, c0) AS locate_result, ORD(ORD(c0)) AS value FROM vp_source WHERE LOCATE(FALSE, c0) IS NULL",
+    "tlp_union": "SELECT 'DIRECT' AS variant, c0, LOCATE(FALSE, c0) AS locate_result, ORD(ORD(c0)) AS value FROM vp_source WHERE LOCATE(FALSE, c0) UNION ALL SELECT 'DIRECT' AS variant, c0, LOCATE(FALSE, c0) AS locate_result, ORD(ORD(c0)) AS value FROM vp_source WHERE NOT LOCATE(FALSE, c0) UNION ALL SELECT 'DIRECT' AS variant, c0, LOCATE(FALSE, c0) AS locate_result, ORD(ORD(c0)) AS value FROM vp_source WHERE LOCATE(FALSE, c0) IS NULL",
+    "norec_optimized": "SELECT COUNT(*) FROM vp_source WHERE LOCATE(FALSE, c0)",
+    "norec_unoptimized": "SELECT SUM(CASE WHEN LOCATE(FALSE, c0) THEN 1 ELSE NULL END) FROM vp_source",
+    "predicate": "LOCATE(FALSE, c0)"
+  },
+  "tlp_checked": true,
+  "tlp_inconsistent": true,
+  "norec_checked": true,
+  "norec_inconsistent": false,
+  "notes": [
+    "NoREC comparison normalizes empty aggregate NULL to 0."
+  ]
+}

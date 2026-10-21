@@ -1,0 +1,11 @@
+{
+  "database": "ClickHouse",
+  "source": "/home/lwm/sqlancer/Bugs/ClickHouse/115289.sql",
+  "status": "unavailable",
+  "errors": [
+    {
+      "stage": "probe",
+      "stderr": "Code: 115. DB::Exception: Setting multiquery is neither a builtin setting nor started with the prefix 'SQL_' registered for user-defined settings. (UNKNOWN_SETTING) (version 26.8.4.11 (official build))"
+    }
+  ]
+}

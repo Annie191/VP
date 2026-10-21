@@ -1,0 +1,22 @@
+{
+  "database": "MySQL",
+  "source": "/home/lwm/sqlancer/Bugs/MySQL/120785.sql",
+  "status": "skipped",
+  "queries": {
+    "original": {
+      "sql": "SELECT DISTINCT s.c0 AS ref0\nFROM s\nGROUP BY s.c0",
+      "ok": true,
+      "rows": [
+        "1903340000",
+        "1894990000",
+        "-0",
+        "NULL"
+      ],
+      "stderr": "mysql: [Warning] Using a password on the command line interface can be insecure.\n"
+    }
+  },
+  "errors": [],
+  "target_statement_index": 13,
+  "target_query": "SELECT DISTINCT s.c0 AS ref0\nFROM s\nGROUP BY s.c0;",
+  "skip_reason": "GROUP BY is not handled by this batch rewriter"
+}
