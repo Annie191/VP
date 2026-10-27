@@ -174,7 +174,13 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + "config=" + testCase.getDescription() + System.lineSeparator() + "shiftStatus="
                 + observation.getStatus() + System.lineSeparator() + "shiftReason=" + observation.getReason()
                 + System.lineSeparator() + "originalContext=" + observation.getOriginal() + System.lineSeparator()
-                + "transformedContext=" + observation.getTransformed() + System.lineSeparator() + "originalQuery="
+                + "transformedContext=" + observation.getTransformed() + System.lineSeparator() + "originalMatchedNode="
+                + observation.getOriginalMatchedNode() + System.lineSeparator() + "transformedMatchedNode="
+                + observation.getTransformedMatchedNode() + System.lineSeparator() + "originalEvidence="
+                + observation.getOriginalEvidence() + System.lineSeparator() + "transformedEvidence="
+                + observation.getTransformedEvidence() + System.lineSeparator() + "originalPlan="
+                + observation.getOriginalPlan() + System.lineSeparator() + "transformedPlan="
+                + observation.getTransformedPlan() + System.lineSeparator() + "originalQuery="
                 + testCase.getOriginalQuery() + System.lineSeparator() + "targetDependencies="
                 + testCase.getTargetDependencies() + System.lineSeparator() + "transformedQuery="
                 + testCase.getTransformedQuery() + System.lineSeparator() + "originalSample="
