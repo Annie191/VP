@@ -27,6 +27,7 @@ import sqlancer.IgnoreMeException;
 import sqlancer.Main;
 import sqlancer.Randomly;
 import sqlancer.common.oracle.TestOracle;
+import sqlancer.common.oracle.ecst.EcstTransformationConfig;
 import sqlancer.common.query.ExpectedErrors;
 import sqlancer.common.query.SQLQueryAdapter;
 import sqlancer.common.query.SQLancerResultSet;
@@ -84,7 +85,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
     private enum SplitStrategy {
         EMPTY_SPLIT, SINGLE_REPLICATED, SINGLE_RIGHT_ROW_ID_ONLY, SINGLE_LEFT_ROW_ID_ONLY, EVEN_SPLIT, OVERLAPPED_SPLIT,
-        SKEWED_SPLIT, TYPE_DIRECTED_SPLIT
+        SKEWED_SPLIT, TYPE_DIRECTED_SPLIT, ECST_SAME_SIDE, ECST_CROSS_SIDE
     }
 
     private enum ReconstructionStrategy {
@@ -213,6 +214,79 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             this.extraSetupStatements = extraSetupStatements;
             this.description = description;
             this.orderedComparisonEnabled = orderedComparisonEnabled;
+        }
+    }
+
+    /** A controlled VP query pair owned by this oracle so the existing VP machinery can be reused by ECST. */
+    public static final class EcstCase {
+        private final VpQueryPair pair;
+        private final String targetExpression;
+        private final String baseTable;
+        private final List<String> targetDependencies;
+
+        private EcstCase(VpQueryPair pair, String targetExpression, String baseTable, List<String> targetDependencies) {
+            this.pair = pair;
+            this.targetExpression = targetExpression;
+            this.baseTable = baseTable;
+            this.targetDependencies = List.copyOf(targetDependencies);
+        }
+
+        public String getOriginalQuery() {
+            return pair.singleQuery;
+        }
+
+        public String getTransformedQuery() {
+            return pair.splitQuery;
+        }
+
+        public String getTargetExpression() {
+            return targetExpression;
+        }
+
+        public String getDescription() {
+            return pair.description;
+        }
+
+        public String getBaseTable() {
+            return baseTable;
+        }
+
+        public List<String> getTargetDependencies() {
+            return targetDependencies;
+        }
+    }
+
+    public static final class EcstComparison {
+        private final boolean equal;
+        private final String originalSample;
+        private final String transformedSample;
+
+        private EcstComparison(boolean equal, String originalSample, String transformedSample) {
+            this.equal = equal;
+            this.originalSample = originalSample;
+            this.transformedSample = transformedSample;
+        }
+
+        public boolean isEqual() {
+            return equal;
+        }
+
+        public String getOriginalSample() {
+            return originalSample;
+        }
+
+        public String getTransformedSample() {
+            return transformedSample;
+        }
+    }
+
+    private static final class ControlledSplitPlan {
+        private final SplitPlan splitPlan;
+        private final SplitStrategy splitStrategy;
+
+        private ControlledSplitPlan(SplitPlan splitPlan, SplitStrategy splitStrategy) {
+            this.splitPlan = splitPlan;
+            this.splitStrategy = splitStrategy;
         }
     }
 
@@ -389,6 +463,12 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     private VpSchema materializeTable(BaseTableInfo base, SplitStrategy splitStrategy) throws Exception {
+        return materializeTable(base, createSplitPlan(base.columns, base.shape, splitStrategy), splitStrategy,
+                Randomly.getBoolean());
+    }
+
+    private VpSchema materializeTable(BaseTableInfo base, SplitPlan splitPlan, SplitStrategy splitStrategy,
+            boolean useForeignKey) throws Exception {
         String prefix = "vp_" + sanitizeIdentifier(state.getDatabaseName()) + "_" + ORACLE_RUN_ID.incrementAndGet()
                 + "_";
         String source = prefix + "source";
@@ -396,9 +476,6 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         String right = prefix + "r";
         String view = prefix + "v";
         String temp = prefix + "joined";
-
-        SplitPlan splitPlan = createSplitPlan(base.columns, base.shape, splitStrategy);
-        boolean useForeignKey = Randomly.getBoolean();
 
         VpSchema vp = new VpSchema(prefix, base.tableName, source, left, right, view, temp, base.columns,
                 splitPlan.leftColumns, splitPlan.rightColumns, splitPlan.overlapColumns, base.shape, splitStrategy,
@@ -418,6 +495,110 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                             + quote(ROW_ID) + ")");
         }
         return vp;
+    }
+
+    /**
+     * Creates one bounded, dependency-aware ECST case while reusing the existing VP materializer and reconstruction
+     * code. The random VP schedule never calls this method.
+     */
+    public EcstCase createEcstCase(EcstTransformationConfig config) throws Exception {
+        if (config.getRepresentation() != EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
+                || config.getExpressionContext() != EcstTransformationConfig.ExpressionContext.WHERE) {
+            throw new IgnoreMeException();
+        }
+        ReconstructionStrategy reconstructionStrategy;
+        switch (config.getReconstruction()) {
+        case JOIN:
+            reconstructionStrategy = ReconstructionStrategy.JOIN;
+            break;
+        case DERIVED_TABLE:
+            reconstructionStrategy = ReconstructionStrategy.DERIVED_TABLE;
+            break;
+        default:
+            throw new IgnoreMeException();
+        }
+        resetSessionForVerticalPartitioningOracle();
+        TiDBProvider.ensureVerticalPartitioningBaseTables(state, 2);
+        BaseTableInfo base = selectBaseTable();
+        List<VpColumn> numeric = base.columns.stream().filter(c -> c.type.isNumeric()).collect(Collectors.toList());
+        List<VpColumn> dependencies = numeric.isEmpty() ? base.columns : numeric;
+        if (dependencies.isEmpty()) {
+            throw new IgnoreMeException();
+        }
+        if (dependencies.size() > 2) {
+            dependencies = dependencies.subList(0, 2);
+        }
+
+        ControlledSplitPlan controlled = createControlledSplitPlan(base.columns, dependencies,
+                config.getPartitionLayout());
+        VpSchema vp = materializeTable(base, controlled.splitPlan, controlled.splitStrategy, false);
+        String left = quote(dependencies.get(0).name);
+        String right = quote(dependencies.size() > 1 ? dependencies.get(1).name : dependencies.get(0).name);
+        String targetExpression = "(CAST(" + left + " AS SIGNED) + CAST(" + right + " AS SIGNED))";
+        String predicate = targetExpression + " > 0";
+        String singleQuery = "SELECT " + quote(ROW_ID) + " FROM " + vp.sourceTable + " WHERE " + predicate;
+        List<String> extraSetup = new ArrayList<>();
+        String relation = buildReconstructionRelation(vp, reconstructionStrategy, extraSetup);
+        String splitQuery = replaceSourceFrom(singleQuery, vp.sourceTable, relation);
+        VpQueryPair pair = new VpQueryPair(vp, reconstructionStrategy, singleQuery, splitQuery, extraSetup,
+                "ECST config=" + config.stableKey() + ", target=" + targetExpression, false);
+        return new EcstCase(pair, targetExpression, base.tableName,
+                dependencies.stream().map(column -> column.name).collect(Collectors.toList()));
+    }
+
+    public EcstComparison compareEcstCase(EcstCase ecstCase) throws Exception {
+        VpQueryPair pair = ecstCase.pair;
+        for (String setup : pair.extraSetupStatements) {
+            executeNoSchemaRefresh(setup);
+            pair.schema.setupStatements.add(setup);
+        }
+        QueryResultMultiset original = getResultMultiset(pair.singleQuery);
+        QueryResultMultiset transformed = getResultMultiset(pair.splitQuery);
+        return new EcstComparison(resultMultisetsMatch(original, transformed), sample(original.rows),
+                sample(transformed.rows));
+    }
+
+    public void cleanupEcstCase(EcstCase ecstCase) throws Exception {
+        dropArtifacts(ecstCase.pair.schema);
+    }
+
+    private ControlledSplitPlan createControlledSplitPlan(List<VpColumn> columns, List<VpColumn> dependencies,
+            EcstTransformationConfig.PartitionLayout layout) {
+        List<VpColumn> left = new ArrayList<>();
+        List<VpColumn> right = new ArrayList<>();
+        List<VpColumn> overlap = new ArrayList<>();
+        if (layout == EcstTransformationConfig.PartitionLayout.SAME_SIDE) {
+            left.addAll(dependencies);
+            for (VpColumn column : columns) {
+                if (!containsColumn(left, column.name)) {
+                    right.add(column);
+                }
+            }
+            if (right.isEmpty()) {
+                VpColumn replicated = dependencies.get(0);
+                right.add(replicated);
+                overlap.add(replicated);
+            }
+            return new ControlledSplitPlan(new SplitPlan(left, right, overlap), SplitStrategy.ECST_SAME_SIDE);
+        }
+
+        left.add(dependencies.get(0));
+        VpColumn second = dependencies.size() > 1 ? dependencies.get(1) : dependencies.get(0);
+        right.add(second);
+        if (dependencies.size() == 1) {
+            overlap.add(second);
+        }
+        for (VpColumn column : columns) {
+            if (containsColumn(left, column.name) || containsColumn(right, column.name)) {
+                continue;
+            }
+            if (left.size() <= right.size()) {
+                left.add(column);
+            } else {
+                right.add(column);
+            }
+        }
+        return new ControlledSplitPlan(new SplitPlan(left, right, overlap), SplitStrategy.ECST_CROSS_SIDE);
     }
 
     private static final class SplitPlan {

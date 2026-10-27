@@ -36,3 +36,15 @@
 - 导出日期：2026-10-17。
 - `MANIFEST.sha256` 记录本次导出的 17 个 Java 文件的 SHA-256，可执行 `sha256sum -c MANIFEST.sha256` 校验。
 - 测试、日志、数据库数据、构建产物及旧 Git 历史未包含在本次导出中。
+
+## ECST 扩展
+
+本次导出还包含 TiDB ECST 的反馈驱动骨架：
+
+- [TiDBECSTOracle.java](src/sqlancer/tidb/oracle/TiDBECSTOracle.java)
+- [TiDBExecutionContextAnalyzer.java](src/sqlancer/tidb/oracle/TiDBExecutionContextAnalyzer.java)
+- [TiDBVerticalPartitioningOracle.java](src/sqlancer/tidb/oracle/TiDBVerticalPartitioningOracle.java) 中的受控 VP/ECST seam
+- `src/sqlancer/common/oracle/ecst/` 中的上下文、历史反馈、规则和变换配置类
+- [EcstHistoryTest.java](test/sqlancer/common/oracle/ecst/EcstHistoryTest.java)
+
+ECST 与 VP 一样依赖完整 SQLancer 工程中的 TiDB Provider、Options、Schema、AST 和构建配置，当前仓库仍是源码导出，不是独立构建项目。
