@@ -237,6 +237,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 && config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE) {
             return false;
         }
+        if (config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE
+                && shape.maxDependencies < 2) {
+            return false;
+        }
         if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.ON) {
             return shape.hasJoin && (target.getDimension() == EcstContextDimension.BOUNDARY
                     || target.getDimension() == EcstContextDimension.ACCESS_PATH);
@@ -337,7 +341,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + observation.getOriginalPlan() + System.lineSeparator() + "transformedPlan="
                 + observation.getTransformedPlan() + System.lineSeparator() + "originalQuery="
                 + testCase.getOriginalQuery() + System.lineSeparator() + "targetDependencies="
-                + testCase.getTargetDependencies() + System.lineSeparator() + "transformedQuery="
+                + testCase.getTargetDependencies() + System.lineSeparator() + "leftDependencies="
+                + testCase.getLeftDependencies() + System.lineSeparator() + "rightDependencies="
+                + testCase.getRightDependencies() + System.lineSeparator() + "transformedQuery="
                 + testCase.getTransformedQuery() + System.lineSeparator() + "originalSample="
                 + comparison.getOriginalSample() + System.lineSeparator() + "transformedSample="
                 + comparison.getTransformedSample() + System.lineSeparator() + "history="

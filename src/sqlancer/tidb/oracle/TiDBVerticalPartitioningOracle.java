@@ -223,12 +223,17 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         private final String targetExpression;
         private final String baseTable;
         private final List<String> targetDependencies;
+        private final List<String> leftDependencies;
+        private final List<String> rightDependencies;
 
-        private EcstCase(VpQueryPair pair, String targetExpression, String baseTable, List<String> targetDependencies) {
+        private EcstCase(VpQueryPair pair, String targetExpression, String baseTable, List<String> targetDependencies,
+                List<String> leftDependencies, List<String> rightDependencies) {
             this.pair = pair;
             this.targetExpression = targetExpression;
             this.baseTable = baseTable;
             this.targetDependencies = List.copyOf(targetDependencies);
+            this.leftDependencies = List.copyOf(leftDependencies);
+            this.rightDependencies = List.copyOf(rightDependencies);
         }
 
         public String getOriginalQuery() {
@@ -253,6 +258,14 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
         public List<String> getTargetDependencies() {
             return targetDependencies;
+        }
+
+        public List<String> getLeftDependencies() {
+            return leftDependencies;
+        }
+
+        public List<String> getRightDependencies() {
+            return rightDependencies;
         }
     }
 
@@ -521,12 +534,16 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         TiDBProvider.ensureVerticalPartitioningBaseTables(state, 2);
         BaseTableInfo base = selectBaseTable();
         List<VpColumn> numeric = base.columns.stream().filter(c -> c.type.isNumeric()).collect(Collectors.toList());
-        List<VpColumn> dependencies = numeric.isEmpty() ? base.columns : numeric;
+        List<VpColumn> dependencies = numeric.size() >= 2 ? numeric : base.columns;
         if (dependencies.isEmpty()) {
             throw new IgnoreMeException();
         }
         if (dependencies.size() > 2) {
             dependencies = dependencies.subList(0, 2);
+        }
+        if (config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE
+                && dependencies.size() < 2) {
+            throw new IgnoreMeException();
         }
 
         ControlledSplitPlan controlled = createControlledSplitPlan(base.columns, dependencies,
@@ -558,8 +575,13 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         String splitQuery = replaceSourceFrom(singleQuery, vp.sourceTable, relation);
         VpQueryPair pair = new VpQueryPair(vp, reconstructionStrategy, singleQuery, splitQuery, extraSetup,
                 "ECST config=" + config.stableKey() + ", target=" + targetExpression, false);
+        List<String> dependencyNames = dependencies.stream().map(column -> column.name).collect(Collectors.toList());
+        List<String> leftDependencies = dependencies.stream().filter(column -> containsColumn(controlled.splitPlan.leftColumns,
+                column.name)).map(column -> column.name).collect(Collectors.toList());
+        List<String> rightDependencies = dependencies.stream().filter(column -> containsColumn(controlled.splitPlan.rightColumns,
+                column.name)).map(column -> column.name).collect(Collectors.toList());
         return new EcstCase(pair, targetExpression, base.tableName,
-                dependencies.stream().map(column -> column.name).collect(Collectors.toList()));
+                dependencyNames, leftDependencies, rightDependencies);
     }
 
     public EcstComparison compareEcstCase(EcstCase ecstCase) throws Exception {
@@ -598,12 +620,12 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             return new ControlledSplitPlan(new SplitPlan(left, right, overlap), SplitStrategy.ECST_SAME_SIDE);
         }
 
-        left.add(dependencies.get(0));
-        VpColumn second = dependencies.size() > 1 ? dependencies.get(1) : dependencies.get(0);
-        right.add(second);
-        if (dependencies.size() == 1) {
-            overlap.add(second);
+        if (dependencies.size() < 2) {
+            throw new IllegalArgumentException("CROSS_SIDE requires two distinct dependency columns");
         }
+        left.add(dependencies.get(0));
+        VpColumn second = dependencies.get(1);
+        right.add(second);
         for (VpColumn column : columns) {
             if (containsColumn(left, column.name) || containsColumn(right, column.name)) {
                 continue;
