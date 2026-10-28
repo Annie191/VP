@@ -73,6 +73,8 @@ public final class EcstHistory {
     private final ConcurrentMap<String, Stats> transformStats = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Stats> targetStats = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Boolean> observedShifts = new ConcurrentHashMap<>();
+    /** N_cov[s]: count of tests in which the concrete migration s was confirmed. */
+    private final ConcurrentMap<String, Long> shiftCoverage = new ConcurrentHashMap<>();
     private volatile long totalTrials;
     private volatile String lastTargetDecision = "<none>";
     private volatile String lastTransformDecision = "<none>";
@@ -111,14 +113,21 @@ public final class EcstHistory {
             long costNanos) {
         String target = targetKey == null ? "UNKNOWN_TARGET" : targetKey;
         String transform = transformKey == null ? "UNKNOWN_TRANSFORM" : transformKey;
-        boolean covered = shifts != null && !shifts.isEmpty();
+        LinkedHashSet<String> distinctShifts = new LinkedHashSet<>();
+        if (shifts != null) {
+            for (String shift : shifts) {
+                if (shift != null && !shift.trim().isEmpty()) {
+                    distinctShifts.add(shift.trim());
+                }
+            }
+        }
+        boolean covered = hasTargetShift(target, distinctShifts);
         transformStats.computeIfAbsent(target + "|" + transform, ignored -> new Stats()).observe(status, covered,
                 costNanos);
         targetStats.computeIfAbsent(target, ignored -> new Stats()).observe(status, covered, costNanos);
-        if (shifts != null) {
-            for (String shift : shifts) {
-                observedShifts.put(shift, Boolean.TRUE);
-            }
+        for (String shift : distinctShifts) {
+            observedShifts.put(shift, Boolean.TRUE);
+            shiftCoverage.merge(shift, 1L, Long::sum);
         }
         totalTrials++;
     }
@@ -177,7 +186,7 @@ public final class EcstHistory {
         for (Map.Entry<String, ? extends Collection<String>> entry : candidateConfigs.entrySet()) {
             String candidate = entry.getKey();
             Stats stats = targetStats.get(candidate);
-            long coverage = stats == null ? 0 : stats.coverage();
+            long coverage = targetCoverage(candidate);
             long trials = stats == null ? 0 : stats.trials();
             double novelty = 1.0 / Math.sqrt(1.0 + coverage);
             double reachability = maxReachability(candidate, entry.getValue());
@@ -217,8 +226,22 @@ public final class EcstHistory {
         return observedShifts.size();
     }
 
+    /** Returns N_cov for one concrete observed migration key. */
+    public long getShiftCoverage(String shift) {
+        return shiftCoverage.getOrDefault(shift, 0L);
+    }
+
+    /** Returns N_cov for the migration dimension represented by a target key. */
+    public long getTargetCoverage(String targetKey) {
+        return targetCoverage(targetKey);
+    }
+
     public Map<String, Boolean> observedShiftsSnapshot() {
         return Collections.unmodifiableMap(observedShifts);
+    }
+
+    public Map<String, Long> shiftCoverageSnapshot() {
+        return Collections.unmodifiableMap(new LinkedHashMap<>(shiftCoverage));
     }
 
     public String formatSummary() {
@@ -227,6 +250,7 @@ public final class EcstHistory {
         for (Map.Entry<String, Stats> entry : transformStats.entrySet()) {
             sb.append(entry.getKey()).append(':').append(entry.getValue().summary()).append(System.lineSeparator());
         }
+        sb.append("coverageByShift=").append(new LinkedHashMap<>(shiftCoverage)).append(System.lineSeparator());
         sb.append("lastTargetDecision=").append(lastTargetDecision).append(System.lineSeparator());
         sb.append("lastTransformDecision=").append(lastTransformDecision).append(System.lineSeparator());
         return sb.toString();
@@ -234,5 +258,58 @@ public final class EcstHistory {
 
     public LinkedHashSet<String> observedShiftKeys() {
         return new LinkedHashSet<>(observedShifts.keySet());
+    }
+
+    private long targetCoverage(String targetKey) {
+        if (targetKey == null || targetKey.isEmpty()) {
+            return 0;
+        }
+        long exact = shiftCoverage.getOrDefault(targetKey, 0L);
+        if (exact > 0) {
+            return exact;
+        }
+        String dimension = targetDimension(targetKey);
+        if (dimension == null) {
+            return 0;
+        }
+        long total = 0;
+        for (Map.Entry<String, Long> entry : shiftCoverage.entrySet()) {
+            if (entry.getKey().startsWith(dimension + ":")) {
+                total += entry.getValue();
+            }
+        }
+        return total;
+    }
+
+    private static boolean hasTargetShift(String targetKey, Collection<String> shifts) {
+        if (shifts == null || shifts.isEmpty() || targetKey == null) {
+            return false;
+        }
+        String dimension = targetDimension(targetKey);
+        for (String shift : shifts) {
+            if (targetKey.equals(shift) || dimension != null && shift.startsWith(dimension + ":")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String targetDimension(String targetKey) {
+        if (targetKey.startsWith("LOCATION") || targetKey.contains("LOCATION")) {
+            return "LOCATION";
+        }
+        if (targetKey.startsWith("BOUNDARY") || targetKey.contains("PUSHDOWN")) {
+            return "BOUNDARY";
+        }
+        if (targetKey.startsWith("ACCESS_PATH") || targetKey.contains("ACCESS_PATH")) {
+            return "ACCESS_PATH";
+        }
+        if (targetKey.startsWith("OPERATOR") || targetKey.contains("OPERATOR")) {
+            return "OPERATOR";
+        }
+        if (targetKey.startsWith("EVALUATION") || targetKey.contains("EVALUATION")) {
+            return "EVALUATION";
+        }
+        return null;
     }
 }

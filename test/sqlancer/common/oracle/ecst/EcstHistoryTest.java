@@ -33,6 +33,22 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void coverageCountsOnlyTheTargetMigrationDimension() {
+        EcstHistory history = new EcstHistory();
+        history.observe("TIDB_LOCATION_SHIFT", "config", EcstShiftStatus.FAILURE,
+                Set.of("ACCESS_PATH:TABLEFULLSCAN->INDEXLOOKUP"), 10);
+
+        assertEquals(0, history.getTargetCoverage("TIDB_LOCATION_SHIFT"));
+        assertEquals(1, history.getShiftCoverage("ACCESS_PATH:TABLEFULLSCAN->INDEXLOOKUP"));
+
+        history.observe("TIDB_LOCATION_SHIFT", "config", EcstShiftStatus.SUCCESS,
+                List.of("LOCATION:ROOT->COP_TIKV", "LOCATION:ROOT->COP_TIKV"), 10);
+        assertEquals(1, history.getTargetCoverage("TIDB_LOCATION_SHIFT"));
+        assertEquals(1, history.getShiftCoverage("LOCATION:ROOT->COP_TIKV"));
+        assertEquals(2, history.getTotalTrials());
+    }
+
+    @Test
     public void transformSelectionUsesObservedSuccessRateAndCost() {
         EcstHistory history = new EcstHistory();
         for (int i = 0; i < 12; i++) {
