@@ -178,9 +178,11 @@ public final class TiDBExecutionContextAnalyzer {
             return List.of();
         }
         List<PlanNode> nodes = new ArrayList<>();
+        List<PlanNode> parents = new ArrayList<>();
         String[] lines = plan.split("\\R");
         for (int i = 0; i < lines.length; i++) {
-            String raw = lines[i].trim();
+            String sourceLine = lines[i];
+            String raw = sourceLine.trim();
             if (raw.isEmpty() || raw.startsWith("id ") || raw.equalsIgnoreCase("id")) {
                 continue;
             }
@@ -191,9 +193,24 @@ public final class TiDBExecutionContextAnalyzer {
             }
             Matcher matcher = LOCATION.matcher(normalized);
             String task = matcher.find() ? matcher.group(1).toLowerCase(Locale.ROOT) : "UNKNOWN";
-            nodes.add(new PlanNode(i + 1, raw, nodeId, operatorName(nodeId), task));
+            int depth = treeDepth(sourceLine);
+            PlanNode node = new PlanNode(i + 1, raw, nodeId, operatorName(nodeId), task);
+            while (parents.size() > depth) {
+                parents.remove(parents.size() - 1);
+            }
+            if (!parents.isEmpty()) {
+                parents.get(parents.size() - 1).children.add(node);
+            }
+            parents.add(node);
+            nodes.add(node);
         }
         return nodes;
+    }
+
+    private static int treeDepth(String line) {
+        String prefix = line.substring(0, Math.max(0, line.length() - line.trim().length()))
+                .replace('│', ' ').replace('├', ' ').replace('└', ' ').replace('─', ' ');
+        return prefix.length() / 2;
     }
 
     private static Candidate score(PlanNode node, TargetPattern target) {
@@ -303,6 +320,12 @@ public final class TiDBExecutionContextAnalyzer {
                 return marker.replace('_', ' ').replace(" ", "_").toUpperCase(Locale.ROOT);
             }
         }
+        for (PlanNode child : node.children) {
+            String path = accessPath(child);
+            if (!"UNKNOWN".equals(path)) {
+                return path;
+            }
+        }
         return "UNKNOWN";
     }
 
@@ -388,6 +411,7 @@ public final class TiDBExecutionContextAnalyzer {
         private final String raw;
         private final String operator;
         private final String task;
+        private final List<PlanNode> children = new ArrayList<>();
 
         private PlanNode(int line, String raw, String nodeId, String operator, String task) {
             this.line = line;

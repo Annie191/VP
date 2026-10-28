@@ -22,7 +22,7 @@ public class TiDBExecutionContextAnalyzerTest {
         assertEquals("ROOT", context.getLocation());
         assertEquals("SELECTION", context.getOperator());
         assertEquals("NON_PUSHDOWN", context.getBoundary());
-        assertEquals("UNKNOWN", context.getAccessPath());
+        assertEquals("TABLEFULLSCAN", context.getAccessPath());
     }
 
     @Test
@@ -124,6 +124,17 @@ public class TiDBExecutionContextAnalyzerTest {
         EcstContext context = TiDBExecutionContextAnalyzer.parse(plan,
                 "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
         assertEquals("UNKNOWN", context.getLocation());
+    }
+
+    @Test
+    void accessPathIsResolvedFromMatchedNodeSubtree() {
+        String plan = "Selection_5 1 root gt(cast(test.t.a, signed), 0)\n"
+                + "  └─IndexLookUp_4 1 root \n"
+                + "    ├─IndexRangeScan_2 1 cop[tikv] table:t index:a\n"
+                + "    └─TableRowIDScan_3 1 cop[tikv] table:t\n";
+        EcstContext context = TiDBExecutionContextAnalyzer.parse(plan, "CAST(`a` AS SIGNED)");
+        assertEquals("SELECTION", context.getOperator());
+        assertEquals("INDEXLOOKUP", context.getAccessPath());
     }
 
     @Test
