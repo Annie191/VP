@@ -45,6 +45,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int candidateSetSkips;
     private int creationSkips;
     private int executionFailures;
+    private int bugCandidates;
 
     public TiDBECSTOracle(TiDBGlobalState state) {
         this.state = state;
@@ -89,6 +90,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         candidateSetSkips = 0;
         creationSkips = 0;
         executionFailures = 0;
+        bugCandidates = 0;
         semanticPreconditionRejects = 0;
         String lastBaseTable = null;
         while (completed < budget && attempts < budget * 4) {
@@ -125,14 +127,15 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             boolean keepArtifacts = false;
             try {
                 TiDBVerticalPartitioningOracle.EcstComparison comparison = vp.compareEcstCase(testCase);
+                // A result comparison, including a mismatch, is a completed test pair.
+                completed++;
+                completedCases = completed;
                 if (!comparison.isEqual()) {
+                    bugCandidates++;
                     keepArtifacts = true;
                     throw new AssertionError(formatBug(target, testCase, observation, comparison));
                 }
             } catch (Exception failure) {
-                executionFailures++;
-                throw failure;
-            } catch (AssertionError failure) {
                 executionFailures++;
                 throw failure;
             } finally {
@@ -142,8 +145,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     vp.cleanupEcstCase(testCase);
                 }
             }
-            completed++;
-            completedCases = completed;
         }
         completedCases = completed;
         if (completed == 0) {
@@ -484,6 +485,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             writer.write("candidateSetSkips=" + candidateSetSkips + System.lineSeparator());
             writer.write("creationSkips=" + creationSkips + System.lineSeparator());
             writer.write("executionFailures=" + executionFailures + System.lineSeparator());
+            writer.write("bugCandidates=" + bugCandidates + System.lineSeparator());
             writer.write("budgetComplete=" + (completedCases >= requestedBudget) + System.lineSeparator());
             writer.write(history.formatSummary());
         } catch (IOException ignored) {
