@@ -14,6 +14,7 @@ import sqlancer.IgnoreMeException;
 import sqlancer.Main;
 import sqlancer.common.oracle.TestOracle;
 import sqlancer.common.oracle.ecst.EcstContextDimension;
+import sqlancer.common.oracle.ecst.EcstFeature;
 import sqlancer.common.oracle.ecst.EcstHistory;
 import sqlancer.common.oracle.ecst.EcstObservation;
 import sqlancer.common.oracle.ecst.EcstRuleLibrary;
@@ -84,6 +85,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             EcstTarget target = chooseTarget(candidateSets);
             List<EcstTransformationConfig> applicable = candidateSets.get(target.getKey());
             EcstTransformationConfig config = chooseConfig(target, applicable);
+            EcstFeature feature = featureFor(config);
             long started = System.nanoTime();
             TiDBVerticalPartitioningOracle.EcstCase testCase;
             try {
@@ -104,7 +106,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 }
             } finally {
                 history.observe(target.getKey(), config.stableKey(), observation.getStatus(),
-                        observation.getObservedShifts(), System.nanoTime() - started);
+                        observation.getObservedShifts(), System.nanoTime() - started, feature);
                 if (!keepArtifacts) {
                     vp.cleanupEcstCase(testCase);
                 }
@@ -289,7 +291,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             keys.put(entry.getKey(), entry.getValue().stream().map(EcstTransformationConfig::stableKey)
                     .collect(Collectors.toList()));
         }
-        String chosen = history.chooseTargetDecision(keys).getKey();
+        EcstFeature targetFeature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "NUMERIC_DEPENDENCY");
+        String chosen = history.chooseTargetDecision(keys, targetFeature).getKey();
         for (EcstTarget target : targets) {
             if (target.getKey().equals(chosen)) {
                 return target;
@@ -302,14 +305,21 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         if (applicable.isEmpty()) {
             throw new IllegalStateException("No applicable ECST configuration for target " + target.getKey());
         }
-        List<String> keys = applicable.stream().map(EcstTransformationConfig::stableKey).collect(Collectors.toList());
-        String chosen = history.chooseTransform(target.getKey(), keys);
+        Map<String, EcstFeature> features = new LinkedHashMap<>();
+        for (EcstTransformationConfig candidate : applicable) {
+            features.put(candidate.stableKey(), featureFor(candidate));
+        }
+        String chosen = history.chooseTransformDecision(target.getKey(), features).getKey();
         for (EcstTransformationConfig candidate : applicable) {
             if (candidate.stableKey().equals(chosen)) {
                 return candidate;
             }
         }
         return applicable.get(state.getRandomly().getInteger(0, applicable.size()));
+    }
+
+    private EcstFeature featureFor(EcstTransformationConfig config) {
+        return new EcstFeature("TiDB", "CAST_ARITHMETIC", config.getExpressionContext().name(), "NUMERIC_DEPENDENCY");
     }
 
     private String formatBug(EcstTarget target, TiDBVerticalPartitioningOracle.EcstCase testCase,

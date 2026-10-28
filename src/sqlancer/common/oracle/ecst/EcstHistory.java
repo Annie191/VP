@@ -14,6 +14,7 @@ import sqlancer.Randomly;
 public final class EcstHistory {
     private static final double SMOOTHING_A = 1.0;
     private static final double SMOOTHING_B = 1.0;
+    private static final long MIN_FEATURE_TRIALS = 3;
 
     private static final class Stats {
         private long success;
@@ -56,10 +57,6 @@ public final class EcstHistory {
             return success + failure;
         }
 
-        private synchronized long coverage() {
-            return coverage;
-        }
-
         private synchronized long costNanos() {
             return costNanos;
         }
@@ -72,6 +69,10 @@ public final class EcstHistory {
 
     private final ConcurrentMap<String, Stats> transformStats = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Stats> targetStats = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Stats> featureTransformStats = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Stats> featureTargetStats = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Stats> coarseFeatureTransformStats = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Stats> coarseFeatureTargetStats = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Boolean> observedShifts = new ConcurrentHashMap<>();
     /** N_cov[s]: count of tests in which the concrete migration s was confirmed. */
     private final ConcurrentMap<String, Long> shiftCoverage = new ConcurrentHashMap<>();
@@ -111,6 +112,11 @@ public final class EcstHistory {
 
     public void observe(String targetKey, String transformKey, EcstShiftStatus status, Collection<String> shifts,
             long costNanos) {
+        observe(targetKey, transformKey, status, shifts, costNanos, null);
+    }
+
+    public void observe(String targetKey, String transformKey, EcstShiftStatus status, Collection<String> shifts,
+            long costNanos, EcstFeature feature) {
         String target = targetKey == null ? "UNKNOWN_TARGET" : targetKey;
         String transform = transformKey == null ? "UNKNOWN_TRANSFORM" : transformKey;
         LinkedHashSet<String> distinctShifts = new LinkedHashSet<>();
@@ -125,6 +131,16 @@ public final class EcstHistory {
         transformStats.computeIfAbsent(target + "|" + transform, ignored -> new Stats()).observe(status, covered,
                 costNanos);
         targetStats.computeIfAbsent(target, ignored -> new Stats()).observe(status, covered, costNanos);
+        if (feature != null) {
+            featureTransformStats.computeIfAbsent(featureTransformKey(target, transform, feature), ignored -> new Stats())
+                    .observe(status, covered, costNanos);
+            featureTargetStats.computeIfAbsent(featureTargetKey(target, feature), ignored -> new Stats())
+                    .observe(status, covered, costNanos);
+            coarseFeatureTransformStats.computeIfAbsent(coarseFeatureTransformKey(target, transform, feature),
+                    ignored -> new Stats()).observe(status, covered, costNanos);
+            coarseFeatureTargetStats.computeIfAbsent(coarseFeatureTargetKey(target, feature), ignored -> new Stats())
+                    .observe(status, covered, costNanos);
+        }
         for (String shift : distinctShifts) {
             observedShifts.put(shift, Boolean.TRUE);
             shiftCoverage.merge(shift, 1L, Long::sum);
@@ -138,6 +154,17 @@ public final class EcstHistory {
     }
 
     public Decision chooseTransformDecision(String targetKey, Collection<String> candidates) {
+        Map<String, EcstFeature> featureMap = new LinkedHashMap<>();
+        if (candidates != null) {
+            for (String candidate : candidates) {
+                featureMap.put(candidate, null);
+            }
+        }
+        return chooseTransformDecision(targetKey, featureMap);
+    }
+
+    /** Feature-conditioned transform selection with full-to-coarse-to-global fallback. */
+    public Decision chooseTransformDecision(String targetKey, Map<String, EcstFeature> candidates) {
         if (candidates == null || candidates.isEmpty()) {
             return null;
         }
@@ -145,8 +172,9 @@ public final class EcstHistory {
         double best = Double.NEGATIVE_INFINITY;
         Stats target = targetStats.get(targetKey);
         long targetTrials = target == null ? 0 : target.trials();
-        for (String candidate : candidates) {
-            Stats stats = transformStats.get(targetKey + "|" + candidate);
+        for (Map.Entry<String, EcstFeature> candidateEntry : candidates.entrySet()) {
+            String candidate = candidateEntry.getKey();
+            Stats stats = selectTransformStats(targetKey, candidate, candidateEntry.getValue());
             double rate = stats == null ? 0.5 : stats.successRate();
             long decidableTrials = stats == null ? 0 : stats.decidableTrials();
             long allTrials = stats == null ? 0 : stats.trials();
@@ -178,6 +206,11 @@ public final class EcstHistory {
 
     /** First-level feedback with candidate-set reachability as defined by the ECST document. */
     public Decision chooseTargetDecision(Map<String, ? extends Collection<String>> candidateConfigs) {
+        return chooseTargetDecision(candidateConfigs, null);
+    }
+
+    public Decision chooseTargetDecision(Map<String, ? extends Collection<String>> candidateConfigs,
+            EcstFeature feature) {
         if (candidateConfigs == null || candidateConfigs.isEmpty()) {
             return null;
         }
@@ -185,7 +218,7 @@ public final class EcstHistory {
         double best = Double.NEGATIVE_INFINITY;
         for (Map.Entry<String, ? extends Collection<String>> entry : candidateConfigs.entrySet()) {
             String candidate = entry.getKey();
-            Stats stats = targetStats.get(candidate);
+            Stats stats = selectTargetStats(candidate, feature);
             long coverage = targetCoverage(candidate);
             long trials = stats == null ? 0 : stats.trials();
             double novelty = 1.0 / Math.sqrt(1.0 + coverage);
@@ -250,6 +283,10 @@ public final class EcstHistory {
         for (Map.Entry<String, Stats> entry : transformStats.entrySet()) {
             sb.append(entry.getKey()).append(':').append(entry.getValue().summary()).append(System.lineSeparator());
         }
+        for (Map.Entry<String, Stats> entry : featureTransformStats.entrySet()) {
+            sb.append("feature[").append(entry.getKey()).append("]:").append(entry.getValue().summary())
+                    .append(System.lineSeparator());
+        }
         sb.append("coverageByShift=").append(new LinkedHashMap<>(shiftCoverage)).append(System.lineSeparator());
         sb.append("lastTargetDecision=").append(lastTargetDecision).append(System.lineSeparator());
         sb.append("lastTransformDecision=").append(lastTransformDecision).append(System.lineSeparator());
@@ -311,5 +348,53 @@ public final class EcstHistory {
             return "EVALUATION";
         }
         return null;
+    }
+
+    private Stats selectTransformStats(String targetKey, String transformKey, EcstFeature feature) {
+        if (feature != null) {
+            Stats exact = featureTransformStats.get(featureTransformKey(targetKey, transformKey, feature));
+            if (hasEnoughFeatureSamples(exact)) {
+                return exact;
+            }
+            Stats coarse = coarseFeatureTransformStats.get(coarseFeatureTransformKey(targetKey, transformKey, feature));
+            if (hasEnoughFeatureSamples(coarse)) {
+                return coarse;
+            }
+        }
+        return transformStats.get(targetKey + "|" + transformKey);
+    }
+
+    private Stats selectTargetStats(String targetKey, EcstFeature feature) {
+        if (feature != null) {
+            Stats exact = featureTargetStats.get(featureTargetKey(targetKey, feature));
+            if (hasEnoughFeatureSamples(exact)) {
+                return exact;
+            }
+            Stats coarse = coarseFeatureTargetStats.get(coarseFeatureTargetKey(targetKey, feature));
+            if (hasEnoughFeatureSamples(coarse)) {
+                return coarse;
+            }
+        }
+        return targetStats.get(targetKey);
+    }
+
+    private static boolean hasEnoughFeatureSamples(Stats stats) {
+        return stats != null && stats.trials() >= MIN_FEATURE_TRIALS;
+    }
+
+    private static String featureTransformKey(String targetKey, String transformKey, EcstFeature feature) {
+        return targetKey + "|" + transformKey + "|" + feature.key();
+    }
+
+    private static String featureTargetKey(String targetKey, EcstFeature feature) {
+        return targetKey + "|" + feature.key();
+    }
+
+    private static String coarseFeatureTransformKey(String targetKey, String transformKey, EcstFeature feature) {
+        return targetKey + "|" + transformKey + "|" + feature.coarseKey();
+    }
+
+    private static String coarseFeatureTargetKey(String targetKey, EcstFeature feature) {
+        return targetKey + "|" + feature.coarseKey();
     }
 }

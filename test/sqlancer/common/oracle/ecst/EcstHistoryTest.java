@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -56,5 +57,19 @@ public class EcstHistoryTest {
             history.observe("target", "fast-success", EcstShiftStatus.SUCCESS, Set.of("LOCATION"), 1L);
         }
         assertEquals("fast-success", history.chooseTransform("target", List.of("slow-failing", "fast-success")));
+    }
+
+    @Test
+    public void featureFeedbackUsesAHierarchicalFallback() {
+        EcstHistory history = new EcstHistory();
+        EcstFeature feature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "NUMERIC_DEPENDENCY");
+        for (int i = 0; i < 3; i++) {
+            history.observe("target", "config", EcstShiftStatus.SUCCESS, Set.of("LOCATION"), 1L, feature);
+        }
+
+        EcstHistory.Decision decision = history.chooseTransformDecision("target", Map.of("config", feature));
+
+        assertNotNull(decision);
+        assertTrue(history.formatSummary().contains("feature[target|config|TIDB:CAST_ARITHMETIC:WHERE:NUMERIC_DEPENDENCY]"));
     }
 }
