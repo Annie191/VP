@@ -5,7 +5,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
-/** Initial TiDB-capability rule set. Unsupported rules can be added without changing the oracle loop. */
+/** Target rule envelope; DBMS-specific capability checks happen after this semantic rule filter. */
 public final class EcstRuleLibrary {
     private EcstRuleLibrary() {
     }
