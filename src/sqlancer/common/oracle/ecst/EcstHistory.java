@@ -315,6 +315,10 @@ public final class EcstHistory {
         if (exact > 0) {
             return exact;
         }
+        String concreteShift = targetConcreteShift(targetKey);
+        if (concreteShift != null) {
+            return shiftCoverage.getOrDefault(concreteShift, 0L);
+        }
         String dimension = targetDimension(targetKey);
         if (dimension == null) {
             return 0;
@@ -331,6 +335,10 @@ public final class EcstHistory {
     private static boolean hasTargetShift(String targetKey, Collection<String> shifts) {
         if (shifts == null || shifts.isEmpty() || targetKey == null) {
             return false;
+        }
+        String concreteShift = targetConcreteShift(targetKey);
+        if (concreteShift != null) {
+            return shifts.contains(concreteShift);
         }
         String dimension = targetDimension(targetKey);
         for (String shift : shifts) {
@@ -356,6 +364,37 @@ public final class EcstHistory {
         }
         if (targetKey.startsWith("EVALUATION") || targetKey.contains("EVALUATION")) {
             return "EVALUATION";
+        }
+        return null;
+    }
+
+    /** Resolves the concrete migration represented by the directional TiDB target keys. */
+    private static String targetConcreteShift(String targetKey) {
+        if (targetKey == null) {
+            return null;
+        }
+        if (targetKey.startsWith("TIDB_LOCATION_")) {
+            String direction = targetKey.substring("TIDB_LOCATION_".length());
+            int marker = direction.indexOf("_TO_");
+            if (marker > 0) {
+                return "LOCATION:" + direction.substring(0, marker) + "->"
+                        + direction.substring(marker + "_TO_".length());
+            }
+        }
+        if (targetKey.contains("PUSHDOWN_ROOT_TO_COP")) {
+            return "BOUNDARY:NON_PUSHDOWN->PUSHDOWN";
+        }
+        if (targetKey.contains("PUSHDOWN_COP_TO_ROOT")) {
+            return "BOUNDARY:PUSHDOWN->NON_PUSHDOWN";
+        }
+        if (targetKey.startsWith("TIDB_ACCESS_PATH_") || targetKey.startsWith("TIDB_ACCESS_")) {
+            String prefix = targetKey.startsWith("TIDB_ACCESS_PATH_") ? "TIDB_ACCESS_PATH_" : "TIDB_ACCESS_";
+            String direction = targetKey.substring(prefix.length());
+            int marker = direction.indexOf("_TO_");
+            if (marker > 0) {
+                return "ACCESS_PATH:" + direction.substring(0, marker) + "->"
+                        + direction.substring(marker + "_TO_".length());
+            }
         }
         return null;
     }

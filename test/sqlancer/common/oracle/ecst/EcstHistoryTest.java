@@ -50,6 +50,33 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void directionalTargetsDoNotCountReverseMigrations() {
+        EcstHistory history = new EcstHistory();
+        String target = "TIDB_LOCATION_ROOT_TO_COP_TIKV";
+
+        history.observe(target, "config", EcstShiftStatus.SUCCESS, Set.of("LOCATION:COP_TIKV->ROOT"), 1);
+        assertEquals(0, history.getTargetCoverage(target));
+
+        history.observe(target, "config", EcstShiftStatus.SUCCESS, Set.of("LOCATION:ROOT->COP_TIKV"), 1);
+        assertEquals(1, history.getTargetCoverage(target));
+    }
+
+    @Test
+    public void featureBucketsRemainVisibleAndDoNotCollapseIntoOneKey() {
+        EcstHistory history = new EcstHistory();
+        EcstFeature where = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "NUMERIC_DEPENDENCY");
+        EcstFeature select = new EcstFeature("TiDB", "CAST_ARITHMETIC", "SELECT", "NUMERIC_DEPENDENCY");
+        for (int i = 0; i < 3; i++) {
+            history.observe("target", "config", EcstShiftStatus.SUCCESS, Set.of("LOCATION"), 1, where);
+            history.observe("target", "config", EcstShiftStatus.FAILURE, Set.of(), 1, select);
+        }
+
+        String summary = history.formatSummary();
+        assertTrue(summary.contains(where.key()));
+        assertTrue(summary.contains(select.key()));
+    }
+
+    @Test
     public void transformSelectionUsesObservedSuccessRateAndCost() {
         EcstHistory history = new EcstHistory();
         for (int i = 0; i < 12; i++) {
