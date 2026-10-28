@@ -293,6 +293,27 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         }
     }
 
+    public static final class EcstSemanticPreconditionResult {
+        private final List<String> violations;
+
+        private EcstSemanticPreconditionResult(List<String> violations) {
+            this.violations = List.copyOf(violations);
+        }
+
+        public boolean isValid() {
+            return violations.isEmpty();
+        }
+
+        public List<String> getViolations() {
+            return violations;
+        }
+
+        @Override
+        public String toString() {
+            return isValid() ? "valid" : String.join("; ", violations);
+        }
+    }
+
     private static final class ControlledSplitPlan {
         private final SplitPlan splitPlan;
         private final SplitStrategy splitStrategy;
@@ -598,6 +619,60 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
     public void cleanupEcstCase(EcstCase ecstCase) throws Exception {
         dropArtifacts(ecstCase.pair.schema);
+    }
+
+    /**
+     * Checks semantic obligations before plan analysis or result comparison. This is deliberately independent from
+     * both the execution-context analyzer and the result oracle.
+     */
+    public EcstSemanticPreconditionResult checkSemanticPreconditions(EcstCase ecstCase) {
+        List<String> violations = new ArrayList<>();
+        if (ecstCase == null || ecstCase.pair == null || ecstCase.pair.schema == null) {
+            violations.add("missing ECST case or materialized schema");
+            return new EcstSemanticPreconditionResult(violations);
+        }
+        if (ecstCase.targetExpression == null || ecstCase.targetExpression.isEmpty()) {
+            violations.add("target expression is empty");
+        }
+        if (ecstCase.targetDependencies.isEmpty()) {
+            violations.add("target has no dependency columns");
+        }
+        if (new java.util.HashSet<>(ecstCase.targetDependencies).size() != ecstCase.targetDependencies.size()) {
+            violations.add("target dependencies contain duplicates");
+        }
+        if (ecstCase.pair.singleQuery == null || ecstCase.pair.singleQuery.isEmpty()
+                || ecstCase.pair.splitQuery == null || ecstCase.pair.splitQuery.isEmpty()) {
+            violations.add("original or transformed query is empty");
+        }
+        if (ecstCase.pair.singleQuery != null && ecstCase.pair.splitQuery != null
+                && ecstCase.pair.singleQuery.equals(ecstCase.pair.splitQuery)) {
+            violations.add("transformation did not change the query representation");
+        }
+        if (ecstCase.pair.singleQuery != null && !ecstCase.pair.singleQuery.contains(quote(ROW_ID))) {
+            violations.add("original query does not preserve the row identity projection");
+        }
+        if (ecstCase.pair.splitQuery != null && !ecstCase.pair.splitQuery.contains(quote(ROW_ID))) {
+            violations.add("transformed query does not preserve the row identity projection");
+        }
+        for (String dependency : ecstCase.targetDependencies) {
+            if (!ecstCase.leftDependencies.contains(dependency) && !ecstCase.rightDependencies.contains(dependency)) {
+                violations.add("dependency is absent from both partitions: " + dependency);
+            }
+        }
+        if (ecstCase.pair.schema.splitStrategy == SplitStrategy.ECST_CROSS_SIDE) {
+            if (ecstCase.targetDependencies.size() < 2) {
+                violations.add("CROSS_SIDE requires at least two distinct dependencies");
+            }
+            if (ecstCase.leftDependencies.isEmpty() || ecstCase.rightDependencies.isEmpty()) {
+                violations.add("CROSS_SIDE has no dependency on one side");
+            }
+            for (String dependency : ecstCase.targetDependencies) {
+                if (ecstCase.leftDependencies.contains(dependency) && ecstCase.rightDependencies.contains(dependency)) {
+                    violations.add("CROSS_SIDE dependency is replicated on both sides: " + dependency);
+                }
+            }
+        }
+        return new EcstSemanticPreconditionResult(violations);
     }
 
     private ControlledSplitPlan createControlledSplitPlan(List<VpColumn> columns, List<VpColumn> dependencies,

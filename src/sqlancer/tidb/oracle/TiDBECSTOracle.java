@@ -36,6 +36,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private final EcstHistory history = new EcstHistory();
     private final List<EcstTarget> targets = defaultTargets();
     private volatile String lastSynthesisSummary = "<none>";
+    private long semanticPreconditionRejects;
 
     public TiDBECSTOracle(TiDBGlobalState state) {
         this.state = state;
@@ -91,6 +92,13 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             try {
                 testCase = vp.createEcstCase(config);
             } catch (IgnoreMeException ignored) {
+                continue;
+            }
+            TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult semantic = vp
+                    .checkSemanticPreconditions(testCase);
+            if (!semantic.isValid()) {
+                semanticPreconditionRejects++;
+                vp.cleanupEcstCase(testCase);
                 continue;
             }
             lastBaseTable = testCase.getBaseTable();
@@ -359,6 +367,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         try (FileWriter writer = new FileWriter(file, true)) {
             writer.write("-- [ecst-stats]" + System.lineSeparator());
             writer.write("candidateSynthesis=" + lastSynthesisSummary + System.lineSeparator());
+            writer.write("semanticPreconditionRejects=" + semanticPreconditionRejects + System.lineSeparator());
             writer.write(history.formatSummary());
         } catch (IOException ignored) {
             // Feedback logging must never turn a completed test into a DBMS failure.
