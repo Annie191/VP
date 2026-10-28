@@ -503,7 +503,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
      */
     public EcstCase createEcstCase(EcstTransformationConfig config) throws Exception {
         if (config.getRepresentation() != EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
-                || config.getExpressionContext() != EcstTransformationConfig.ExpressionContext.WHERE) {
+                || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.ON) {
             throw new IgnoreMeException();
         }
         ReconstructionStrategy reconstructionStrategy;
@@ -536,7 +536,23 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         String right = quote(dependencies.size() > 1 ? dependencies.get(1).name : dependencies.get(0).name);
         String targetExpression = "(CAST(" + left + " AS SIGNED) + CAST(" + right + " AS SIGNED))";
         String predicate = targetExpression + " > 0";
-        String singleQuery = "SELECT " + quote(ROW_ID) + " FROM " + vp.sourceTable + " WHERE " + predicate;
+        String singleQuery;
+        switch (config.getExpressionContext()) {
+        case WHERE:
+            singleQuery = "SELECT " + quote(ROW_ID) + " FROM " + vp.sourceTable + " WHERE " + predicate;
+            break;
+        case SELECT:
+            singleQuery = "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
+                    + vp.sourceTable;
+            break;
+        case HAVING:
+            singleQuery = "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
+                    + vp.sourceTable + " GROUP BY " + quote(ROW_ID) + ", " + targetExpression + " HAVING "
+                    + predicate;
+            break;
+        default:
+            throw new IgnoreMeException();
+        }
         List<String> extraSetup = new ArrayList<>();
         String relation = buildReconstructionRelation(vp, reconstructionStrategy, extraSetup);
         String splitQuery = replaceSourceFrom(singleQuery, vp.sourceTable, relation);

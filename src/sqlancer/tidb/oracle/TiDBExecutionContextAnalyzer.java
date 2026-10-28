@@ -34,8 +34,8 @@ public final class TiDBExecutionContextAnalyzer {
             "indexlookup", "indexreader", "indexfullscan", "indexscan", "tablefullscan", "tablescan",
             "table_scan", "table_reader", "index_reader")));
     private static final Set<String> PREDICATE_MARKERS = Collections.unmodifiableSet(new LinkedHashSet<>(Arrays.asList(
-            "selection", "filter", "condition", "predicate", "gt(", "ge(", "lt(", "le(", "eq(", "ne(",
-            "in(", "like(", "isnull", "notnull", ">", "<", "=")));
+            "selection", "filter", "condition", "predicate", "projection", "aggregation", "hashagg", "streamagg",
+            "gt(", "ge(", "lt(", "le(", "eq(", "ne(", "in(", "like(", "isnull", "notnull", ">", "<", "=")));
 
     private final TiDBGlobalState state;
 

@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,7 +16,6 @@ import sqlancer.common.oracle.TestOracle;
 import sqlancer.common.oracle.ecst.EcstContextDimension;
 import sqlancer.common.oracle.ecst.EcstHistory;
 import sqlancer.common.oracle.ecst.EcstObservation;
-import sqlancer.common.oracle.ecst.EcstRule;
 import sqlancer.common.oracle.ecst.EcstRuleLibrary;
 import sqlancer.common.oracle.ecst.EcstTarget;
 import sqlancer.common.oracle.ecst.EcstTransformationConfig;
@@ -32,28 +32,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private final TiDBVerticalPartitioningOracle vp;
     private final TiDBExecutionContextAnalyzer analyzer;
     private final EcstHistory history = new EcstHistory();
-    private final List<EcstRule> rules = EcstRuleLibrary.tiDbRules();
     private final List<EcstTarget> targets = Arrays.asList(
             new EcstTarget("TIDB_LOCATION_SHIFT", EcstContextDimension.LOCATION, "*", "*"),
             new EcstTarget("TIDB_PUSHDOWN_SHIFT", EcstContextDimension.BOUNDARY, "*", "*"),
             new EcstTarget("TIDB_ACCESS_PATH_SHIFT", EcstContextDimension.ACCESS_PATH, "*", "*"));
-    private final List<EcstTransformationConfig> candidates = Arrays.asList(
-            new EcstTransformationConfig(EcstTransformationConfig.Representation.VERTICAL_PARTITIONED,
-                    EcstTransformationConfig.PartitionLayout.SAME_SIDE,
-                    EcstTransformationConfig.Reconstruction.JOIN,
-                    EcstTransformationConfig.ExpressionContext.WHERE),
-            new EcstTransformationConfig(EcstTransformationConfig.Representation.VERTICAL_PARTITIONED,
-                    EcstTransformationConfig.PartitionLayout.CROSS_SIDE,
-                    EcstTransformationConfig.Reconstruction.JOIN,
-                    EcstTransformationConfig.ExpressionContext.WHERE),
-            new EcstTransformationConfig(EcstTransformationConfig.Representation.VERTICAL_PARTITIONED,
-                    EcstTransformationConfig.PartitionLayout.SAME_SIDE,
-                    EcstTransformationConfig.Reconstruction.DERIVED_TABLE,
-                    EcstTransformationConfig.ExpressionContext.WHERE),
-            new EcstTransformationConfig(EcstTransformationConfig.Representation.VERTICAL_PARTITIONED,
-                    EcstTransformationConfig.PartitionLayout.CROSS_SIDE,
-                    EcstTransformationConfig.Reconstruction.DERIVED_TABLE,
-                    EcstTransformationConfig.ExpressionContext.WHERE));
+    private volatile String lastSynthesisSummary = "<none>";
 
     public TiDBECSTOracle(TiDBGlobalState state) {
         this.state = state;
@@ -122,11 +105,29 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
     private Map<String, List<EcstTransformationConfig>> synthesizeCandidateSets() {
         Map<String, List<EcstTransformationConfig>> result = new LinkedHashMap<>();
+        List<String> synthesis = new ArrayList<>();
         for (EcstTarget target : targets) {
-            List<EcstTransformationConfig> applicable = candidates.stream()
-                    .filter(config -> rules.stream().anyMatch(rule -> rule.getTargetKey().equals(target.getKey())
-                            && rule.supports(config)))
-                    .collect(Collectors.toList());
+            int generated = 0;
+            int ruleAccepted = 0;
+            int legal = 0;
+            int applicableCount = 0;
+            List<EcstTransformationConfig> applicable = new ArrayList<>();
+            for (EcstTransformationConfig config : enumerateConfigurationSpace()) {
+                generated++;
+                if (!supportsRule(target, config)) {
+                    continue;
+                }
+                ruleAccepted++;
+                if (!isLegal(target, config)) {
+                    continue;
+                }
+                legal++;
+                if (!isApplicableToTiDb(config)) {
+                    continue;
+                }
+                applicableCount++;
+                applicable.add(config);
+            }
             int maxCandidates = Math.max(1, state.getDbmsSpecificOptions().ecstMaxCandidates);
             if (applicable.size() > maxCandidates) {
                 applicable = applicable.subList(0, maxCandidates);
@@ -134,8 +135,72 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             if (!applicable.isEmpty()) {
                 result.put(target.getKey(), applicable);
             }
+            synthesis.add(target.getKey() + "{generated=" + generated + ",ruleAccepted=" + ruleAccepted
+                    + ",legal=" + legal + ",applicable=" + applicableCount + ",selected=" + applicable.size()
+                    + "}");
+        }
+        lastSynthesisSummary = String.join("; ", synthesis);
+        return result;
+    }
+
+    /** Full bounded product before target, semantic, and TiDB capability filtering. */
+    static List<EcstTransformationConfig> enumerateConfigurationSpace() {
+        List<EcstTransformationConfig> result = new ArrayList<>();
+        for (EcstTransformationConfig.Representation representation : EcstTransformationConfig.Representation.values()) {
+            for (EcstTransformationConfig.PartitionLayout layout : EcstTransformationConfig.PartitionLayout.values()) {
+                for (EcstTransformationConfig.Reconstruction reconstruction : EcstTransformationConfig.Reconstruction
+                        .values()) {
+                    for (EcstTransformationConfig.ExpressionContext context : EcstTransformationConfig.ExpressionContext
+                            .values()) {
+                        result.add(new EcstTransformationConfig(representation, layout, reconstruction, context));
+                    }
+                }
+            }
         }
         return result;
+    }
+
+    static List<EcstTransformationConfig> applicableConfigurations(EcstTarget target) {
+        List<EcstTransformationConfig> result = new ArrayList<>();
+        for (EcstTransformationConfig config : enumerateConfigurationSpace()) {
+            if (supportsRule(target, config) && isLegal(target, config) && isApplicableToTiDb(config)) {
+                result.add(config);
+            }
+        }
+        return result;
+    }
+
+    private static boolean supportsRule(EcstTarget target, EcstTransformationConfig config) {
+        return EcstRuleLibrary.tiDbRules().stream()
+                .anyMatch(rule -> rule.getTargetKey().equals(target.getKey()) && rule.supports(config));
+    }
+
+    private static boolean isLegal(EcstTarget target, EcstTransformationConfig config) {
+        if (config.getRepresentation() == EcstTransformationConfig.Representation.ORIGINAL) {
+            return false;
+        }
+        if (config.getRepresentation() == EcstTransformationConfig.Representation.VIEW
+                && config.getReconstruction() != EcstTransformationConfig.Reconstruction.VIEW) {
+            return false;
+        }
+        if (config.getRepresentation() == EcstTransformationConfig.Representation.REPLICATED
+                && config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE) {
+            return false;
+        }
+        if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.ON) {
+            return target.getKey().equals("TIDB_PUSHDOWN_SHIFT") || target.getKey().equals("TIDB_ACCESS_PATH_SHIFT");
+        }
+        return true;
+    }
+
+    /** TiDB currently has a VP materializer for these contexts; other legal configs remain visible as future work. */
+    private static boolean isApplicableToTiDb(EcstTransformationConfig config) {
+        return config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
+                && (config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
+                        || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE)
+                && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.SELECT
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING);
     }
 
     private EcstTarget chooseTarget(Map<String, List<EcstTransformationConfig>> candidateSets) {
@@ -155,7 +220,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
     private EcstTransformationConfig chooseConfig(EcstTarget target, List<EcstTransformationConfig> applicable) {
         if (applicable.isEmpty()) {
-            return candidates.get(state.getRandomly().getInteger(0, candidates.size()));
+            throw new IllegalStateException("No applicable ECST configuration for target " + target.getKey());
         }
         List<String> keys = applicable.stream().map(EcstTransformationConfig::stableKey).collect(Collectors.toList());
         String chosen = history.chooseTransform(target.getKey(), keys);
@@ -197,6 +262,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         File file = new File(directory, "ecst-stats.log");
         try (FileWriter writer = new FileWriter(file, true)) {
             writer.write("-- [ecst-stats]" + System.lineSeparator());
+            writer.write("candidateSynthesis=" + lastSynthesisSummary + System.lineSeparator());
             writer.write(history.formatSummary());
         } catch (IOException ignored) {
             // Feedback logging must never turn a completed test into a DBMS failure.
