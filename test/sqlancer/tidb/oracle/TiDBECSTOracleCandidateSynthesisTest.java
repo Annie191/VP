@@ -36,4 +36,17 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(configurations.stream().anyMatch(c -> c.getExpressionContext()
                 == EcstTransformationConfig.ExpressionContext.HAVING));
     }
+
+    @Test
+    void targetDefinitionsCarryConcreteDirections() {
+        List<EcstTarget> targets = TiDBECSTOracle.defaultTargets();
+
+        assertTrue(targets.size() >= 6);
+        assertTrue(targets.stream().noneMatch(target -> "*".equals(target.getFrom())
+                || "*".equals(target.getTo())));
+        assertTrue(targets.stream().anyMatch(target -> target.getDimension() == EcstContextDimension.LOCATION
+                && "ROOT".equals(target.getFrom()) && "COP_TIKV".equals(target.getTo())));
+        assertTrue(targets.stream().anyMatch(target -> target.getDimension() == EcstContextDimension.BOUNDARY
+                && "NON_PUSHDOWN".equals(target.getFrom()) && "PUSHDOWN".equals(target.getTo())));
+    }
 }

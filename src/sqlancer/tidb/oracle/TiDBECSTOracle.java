@@ -33,16 +33,31 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private final TiDBVerticalPartitioningOracle vp;
     private final TiDBExecutionContextAnalyzer analyzer;
     private final EcstHistory history = new EcstHistory();
-    private final List<EcstTarget> targets = Arrays.asList(
-            new EcstTarget("TIDB_LOCATION_SHIFT", EcstContextDimension.LOCATION, "*", "*"),
-            new EcstTarget("TIDB_PUSHDOWN_SHIFT", EcstContextDimension.BOUNDARY, "*", "*"),
-            new EcstTarget("TIDB_ACCESS_PATH_SHIFT", EcstContextDimension.ACCESS_PATH, "*", "*"));
+    private final List<EcstTarget> targets = defaultTargets();
     private volatile String lastSynthesisSummary = "<none>";
 
     public TiDBECSTOracle(TiDBGlobalState state) {
         this.state = state;
         this.vp = new TiDBVerticalPartitioningOracle(state);
         this.analyzer = new TiDBExecutionContextAnalyzer(state);
+    }
+
+    static List<EcstTarget> defaultTargets() {
+        return Arrays.asList(
+                new EcstTarget("TIDB_LOCATION_ROOT_TO_COP_TIKV", EcstContextDimension.LOCATION, "ROOT", "COP_TIKV"),
+                new EcstTarget("TIDB_LOCATION_ROOT_TO_COP_TIFLASH", EcstContextDimension.LOCATION, "ROOT",
+                        "COP_TIFLASH"),
+                new EcstTarget("TIDB_LOCATION_COP_TIKV_TO_ROOT", EcstContextDimension.LOCATION, "COP_TIKV", "ROOT"),
+                new EcstTarget("TIDB_LOCATION_COP_TIFLASH_TO_ROOT", EcstContextDimension.LOCATION, "COP_TIFLASH",
+                        "ROOT"),
+                new EcstTarget("TIDB_PUSHDOWN_ROOT_TO_COP", EcstContextDimension.BOUNDARY, "NON_PUSHDOWN",
+                        "PUSHDOWN"),
+                new EcstTarget("TIDB_PUSHDOWN_COP_TO_ROOT", EcstContextDimension.BOUNDARY, "PUSHDOWN",
+                        "NON_PUSHDOWN"),
+                new EcstTarget("TIDB_ACCESS_TABLEFULLSCAN_TO_INDEXLOOKUP", EcstContextDimension.ACCESS_PATH,
+                        "TABLEFULLSCAN", "INDEXLOOKUP"),
+                new EcstTarget("TIDB_ACCESS_INDEXLOOKUP_TO_TABLEFULLSCAN", EcstContextDimension.ACCESS_PATH,
+                        "INDEXLOOKUP", "TABLEFULLSCAN"));
     }
 
     @Override
@@ -192,7 +207,20 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
     private static boolean supportsRule(EcstTarget target, EcstTransformationConfig config) {
         return EcstRuleLibrary.tiDbRules().stream()
-                .anyMatch(rule -> rule.getTargetKey().equals(target.getKey()) && rule.supports(config));
+                .anyMatch(rule -> rule.getTargetKey().equals(targetFamily(target)) && rule.supports(config));
+    }
+
+    private static String targetFamily(EcstTarget target) {
+        switch (target.getDimension()) {
+        case LOCATION:
+            return "TIDB_LOCATION_SHIFT";
+        case BOUNDARY:
+            return "TIDB_PUSHDOWN_SHIFT";
+        case ACCESS_PATH:
+            return "TIDB_ACCESS_PATH_SHIFT";
+        default:
+            return target.getKey();
+        }
     }
 
     private static boolean isLegal(EcstTarget target, EcstTransformationConfig config, QueryShape shape) {
@@ -208,8 +236,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             return false;
         }
         if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.ON) {
-            return shape.hasJoin && (target.getKey().equals("TIDB_PUSHDOWN_SHIFT")
-                    || target.getKey().equals("TIDB_ACCESS_PATH_SHIFT"));
+            return shape.hasJoin && (target.getDimension() == EcstContextDimension.BOUNDARY
+                    || target.getDimension() == EcstContextDimension.ACCESS_PATH);
         }
         if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING) {
             return shape.hasAggregation;
