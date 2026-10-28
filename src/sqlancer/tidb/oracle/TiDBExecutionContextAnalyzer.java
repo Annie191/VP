@@ -123,7 +123,7 @@ public final class TiDBExecutionContextAnalyzer {
                 transformed.evidence);
     }
 
-    private EcstShiftStatus matchTarget(EcstContext original, EcstContext transformed, EcstTarget target) {
+    static EcstShiftStatus matchTarget(EcstContext original, EcstContext transformed, EcstTarget target) {
         String before = original.value(target.getDimension());
         String after = transformed.value(target.getDimension());
         if ("UNKNOWN".equals(before) || "UNKNOWN".equals(after)) {
@@ -158,14 +158,16 @@ public final class TiDBExecutionContextAnalyzer {
         }
         candidates.sort((a, b) -> Integer.compare(b.score, a.score));
         Candidate best = candidates.get(0);
-        if (candidates.size() > 1 && candidates.get(1).score == best.score
-                && !candidates.get(1).node.raw.equals(best.node.raw)) {
-            String lines = candidates.stream().filter(c -> c.score == best.score)
+        if (best.score == Integer.MAX_VALUE) {
+            return ParsedContext.unknown(plan, "multiple target occurrences in one node; sessionMetadata=" + evaluation);
+        }
+        if (candidates.size() > 1) {
+            String lines = candidates.stream()
                     .map(c -> Integer.toString(c.node.line)).collect(Collectors.joining(","));
             return ParsedContext.unknown(plan, "ambiguous target match at plan lines " + lines);
         }
         EcstContext context = contextFor(best.node, evaluation, target);
-        String evidence = "line=" + best.node.line + ", score=" + best.score + ", signals="
+        String evidence = "sessionMetadata=" + evaluation + "; executorEvaluation=UNOBSERVED; line=" + best.node.line + ", score=" + best.score + ", signals="
                 + String.join("+", best.signals) + ", normalizedTarget=" + target.normalized + ", node="
                 + best.node.raw;
         return new ParsedContext(context, plan, best.node.raw, evidence, true);
@@ -199,7 +201,12 @@ public final class TiDBExecutionContextAnalyzer {
         Set<String> nodeReferences = references(node.raw);
         List<String> signals = new ArrayList<>();
         int score = 0;
-        boolean exact = !target.normalized.isEmpty() && text.contains(target.normalized);
+        int first = text.indexOf(target.normalized);
+        boolean exact = !target.normalized.isEmpty() && first >= 0;
+        // Multiple occurrences (including distinct table columns with the same leaf name) are ambiguous.
+        if (exact && text.indexOf(target.normalized, first + target.normalized.length()) >= 0) {
+            return new Candidate(node, Integer.MAX_VALUE, List.of("ambiguous-expression-occurrences"));
+        }
         boolean allReferences = !target.references.isEmpty() && nodeReferences.containsAll(target.references);
         boolean predicate = containsPredicateMarker(text) || isPredicateOperator(node.operator);
         if (exact) {
@@ -218,7 +225,7 @@ public final class TiDBExecutionContextAnalyzer {
             score += 10;
             signals.add("type-conversion");
         }
-        if ((!exact && !allReferences) || (!exact && !predicate)) {
+        if (!exact) {
             return null;
         }
         return new Candidate(node, score, signals);
@@ -228,14 +235,8 @@ public final class TiDBExecutionContextAnalyzer {
         String location = location(node.task);
         String boundary = "ROOT".equals(location) || "MPP".equals(location) ? "NON_PUSHDOWN"
                 : "COP_TIKV".equals(location) || "COP_TIFLASH".equals(location) ? "PUSHDOWN" : "UNKNOWN";
-        String nodeEvaluation = evaluation == null || evaluation.isEmpty() ? "UNKNOWN" : evaluation;
-        String text = normalize(node.raw);
-        if (text.contains("collate") || text.contains("charset") || text.contains("cast(")
-                || text.contains("convert(")) {
-            nodeEvaluation += ";nodeTypeEvidence=" + (text.contains("collate") ? "COLLATION"
-                    : text.contains("charset") ? "CHARSET" : "CAST_OR_CONVERT");
-        }
-        return new EcstContext(location, node.operator, boundary, accessPath(node), nodeEvaluation);
+        // Session variables and CAST syntax do not establish executor evaluation semantics.
+        return new EcstContext(location, node.operator, boundary, accessPath(node), "UNKNOWN");
     }
 
     private static String location(String task) {
@@ -289,7 +290,11 @@ public final class TiDBExecutionContextAnalyzer {
         }
         String normalized = value.toLowerCase(Locale.ROOT).replace("`", "").replace("\"", "");
         normalized = normalized.replaceAll("\\b[a-z_][a-z0-9_$]*\\.", "");
-        return normalized.replaceAll("\\s+", "");
+        normalized = normalized.replaceAll("\\s+", "");
+        // Restricted, lossless spelling correspondence for a single-column signed cast.
+        // Unsupported expressions/optimizer rewrites remain UNKNOWN instead of matching columns alone.
+        normalized = normalized.replaceAll("cast\\(([a-z_][a-z0-9_$]*)assigned\\)", "cast($1,signed)");
+        return normalized.replaceAll("cast\\(([a-z_][a-z0-9_$]*),bigintbinary\\)", "cast($1,signed)");
     }
 
     private static Set<String> references(String value) {
@@ -345,6 +350,10 @@ public final class TiDBExecutionContextAnalyzer {
         private static ParsedContext unknown(String plan, String evidence) {
             return new ParsedContext(new EcstContext("UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN"),
                     plan, "", evidence, false);
+        }
+
+        String evidence() {
+            return evidence;
         }
 
         EcstContext context() {

@@ -1,0 +1,6 @@
+HashJoin | 10000.00 | root |  | inner join, equal:[eq(ecst_plan_regression_20261028.a.id, ecst_plan_regression_20261028.b.id)], other cond:gt(cast(ecst_plan_regression_20261028.a.v, bigint BINARY), ecst_plan_regression_20261028.b.id)
+├─TableReader(Build) | 8000.00 | root |  | data:Selection
+│ └─Selection | 8000.00 | cop[tikv] |  | gt(cast(ecst_plan_regression_20261028.a.v, bigint BINARY), ecst_plan_regression_20261028.a.id)
+│   └─TableFullScan | 10000.00 | cop[tikv] | table:a | keep order:false, stats:pseudo
+└─TableReader(Probe) | 10000.00 | root |  | data:TableFullScan
+  └─TableFullScan | 10000.00 | cop[tikv] | table:b | keep order:false, stats:pseudo

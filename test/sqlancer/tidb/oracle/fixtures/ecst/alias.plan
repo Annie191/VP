@@ -1,0 +1,4 @@
+Projection | 8000.00 | root |  | cast(ecst_plan_regression_20261028.a.v, bigint BINARY)->Column#4
+└─TableReader | 8000.00 | root |  | data:Selection
+  └─Selection | 8000.00 | cop[tikv] |  | gt(cast(ecst_plan_regression_20261028.a.v, bigint BINARY), 0)
+    └─TableFullScan | 10000.00 | cop[tikv] | table:a | keep order:false, stats:pseudo
