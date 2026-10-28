@@ -225,15 +225,17 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         private final List<String> targetDependencies;
         private final List<String> leftDependencies;
         private final List<String> rightDependencies;
+        private final String generationInfo;
 
         private EcstCase(VpQueryPair pair, String targetExpression, String baseTable, List<String> targetDependencies,
-                List<String> leftDependencies, List<String> rightDependencies) {
+                List<String> leftDependencies, List<String> rightDependencies, String generationInfo) {
             this.pair = pair;
             this.targetExpression = targetExpression;
             this.baseTable = baseTable;
             this.targetDependencies = List.copyOf(targetDependencies);
             this.leftDependencies = List.copyOf(leftDependencies);
             this.rightDependencies = List.copyOf(rightDependencies);
+            this.generationInfo = generationInfo == null ? "" : generationInfo;
         }
 
         public String getOriginalQuery() {
@@ -266,6 +268,14 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
         public List<String> getRightDependencies() {
             return rightDependencies;
+        }
+
+        public String getGenerationInfo() {
+            return generationInfo;
+        }
+
+        public List<String> getMaterializationSetup() {
+            return List.copyOf(pair.schema.setupStatements);
         }
     }
 
@@ -514,21 +524,36 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         VpSchema vp = new VpSchema(prefix, base.tableName, source, left, right, view, temp, base.columns,
                 splitPlan.leftColumns, splitPlan.rightColumns, splitPlan.overlapColumns, base.shape, splitStrategy,
                 useForeignKey, base.stableOrderStrategy, base.rowCount, base.engine);
-        initializeColumnCollations(vp);
-        dropArtifacts(vp);
-        createSourceTable(vp, helperEngineCandidate(base));
-        populateSourceTable(vp, base.stableOrderStrategy);
-        copyBaseSchemaObjectsToSource(vp);
-        createPartitionTables(vp, helperEngineCandidate(base));
-        populatePartitionTables(vp);
-        maybeCreateHelperIndexes(vp);
-        if (useForeignKey) {
-            tryExecuteSetup(vp,
-                    "ALTER TABLE " + quote(vp.rightTable) + " ADD CONSTRAINT " + quote(vp.prefix + "fk_r_l")
-                            + " FOREIGN KEY (" + quote(ROW_ID) + ") REFERENCES " + quote(vp.leftTable) + "("
-                            + quote(ROW_ID) + ")");
+        try {
+            initializeColumnCollations(vp);
+            dropArtifacts(vp);
+            createSourceTable(vp, helperEngineCandidate(base));
+            populateSourceTable(vp, base.stableOrderStrategy);
+            copyBaseSchemaObjectsToSource(vp);
+            createPartitionTables(vp, helperEngineCandidate(base));
+            populatePartitionTables(vp);
+            maybeCreateHelperIndexes(vp);
+            if (useForeignKey) {
+                tryExecuteSetup(vp,
+                        "ALTER TABLE " + quote(vp.rightTable) + " ADD CONSTRAINT " + quote(vp.prefix + "fk_r_l")
+                                + " FOREIGN KEY (" + quote(ROW_ID) + ") REFERENCES " + quote(vp.leftTable) + "("
+                                + quote(ROW_ID) + ")");
+            }
+            return vp;
+        } catch (Throwable failure) {
+            try {
+                dropArtifacts(vp);
+            } catch (Exception cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+            if (failure instanceof Exception) {
+                throw (Exception) failure;
+            }
+            if (failure instanceof Error) {
+                throw (Error) failure;
+            }
+            throw new RuntimeException(failure);
         }
-        return vp;
     }
 
     /**
@@ -601,8 +626,13 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 column.name)).map(column -> column.name).collect(Collectors.toList());
         List<String> rightDependencies = dependencies.stream().filter(column -> containsColumn(controlled.splitPlan.rightColumns,
                 column.name)).map(column -> column.name).collect(Collectors.toList());
+        String generationInfo = "rowCount=" + base.rowCount + ",engine=" + base.engine + ",stableOrder="
+                + base.stableOrderStrategy + ",splitStrategy=" + controlled.splitStrategy + ",leftColumns="
+                + columnNames(controlled.splitPlan.leftColumns) + ",rightColumns="
+                + columnNames(controlled.splitPlan.rightColumns) + ",overlapColumns="
+                + columnNames(controlled.splitPlan.overlapColumns);
         return new EcstCase(pair, targetExpression, base.tableName,
-                dependencyNames, leftDependencies, rightDependencies);
+                dependencyNames, leftDependencies, rightDependencies, generationInfo);
     }
 
     public EcstComparison compareEcstCase(EcstCase ecstCase) throws Exception {

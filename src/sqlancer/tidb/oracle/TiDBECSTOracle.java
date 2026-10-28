@@ -37,6 +37,12 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private final List<EcstTarget> targets = defaultTargets();
     private volatile String lastSynthesisSummary = "<none>";
     private long semanticPreconditionRejects;
+    private int requestedBudget;
+    private int completedCases;
+    private int attempts;
+    private int candidateSetSkips;
+    private int creationSkips;
+    private int executionFailures;
 
     public TiDBECSTOracle(TiDBGlobalState state) {
         this.state = state;
@@ -74,13 +80,20 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private void checkInternal() throws Exception {
         TiDBOptions options = state.getDbmsSpecificOptions();
         int budget = Math.max(1, options.ecstQueryPairs);
+        requestedBudget = budget;
+        completedCases = 0;
         int completed = 0;
-        int attempts = 0;
+        attempts = 0;
+        candidateSetSkips = 0;
+        creationSkips = 0;
+        executionFailures = 0;
+        semanticPreconditionRejects = 0;
         String lastBaseTable = null;
         while (completed < budget && attempts < budget * 4) {
             attempts++;
             Map<String, List<EcstTransformationConfig>> candidateSets = synthesizeCandidateSets();
             if (candidateSets.isEmpty()) {
+                candidateSetSkips++;
                 continue;
             }
             EcstTarget target = chooseTarget(candidateSets);
@@ -92,6 +105,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             try {
                 testCase = vp.createEcstCase(config);
             } catch (IgnoreMeException ignored) {
+                creationSkips++;
                 continue;
             }
             TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult semantic = vp
@@ -112,6 +126,12 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     keepArtifacts = true;
                     throw new AssertionError(formatBug(target, testCase, observation, comparison));
                 }
+            } catch (Exception failure) {
+                executionFailures++;
+                throw failure;
+            } catch (AssertionError failure) {
+                executionFailures++;
+                throw failure;
             } finally {
                 history.observe(target.getKey(), config.stableKey(), observation.getStatus(),
                         observation.getObservedShifts(), System.nanoTime() - started, feature);
@@ -120,7 +140,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 }
             }
             completed++;
+            completedCases = completed;
         }
+        completedCases = completed;
         if (completed == 0) {
             throw new IgnoreMeException();
         }
@@ -355,7 +377,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + testCase.getTransformedQuery() + System.lineSeparator() + "originalSample="
                 + comparison.getOriginalSample() + System.lineSeparator() + "transformedSample="
                 + comparison.getTransformedSample() + System.lineSeparator() + "history="
-                + history.formatSummary();
+                + history.formatSummary() + System.lineSeparator() + "generationInfo="
+                + testCase.getGenerationInfo() + System.lineSeparator() + "materializationSetup="
+                + testCase.getMaterializationSetup();
     }
 
     private void writeFeedbackSummary() {
@@ -368,6 +392,13 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             writer.write("-- [ecst-stats]" + System.lineSeparator());
             writer.write("candidateSynthesis=" + lastSynthesisSummary + System.lineSeparator());
             writer.write("semanticPreconditionRejects=" + semanticPreconditionRejects + System.lineSeparator());
+            writer.write("requestedBudget=" + requestedBudget + System.lineSeparator());
+            writer.write("completedCases=" + completedCases + System.lineSeparator());
+            writer.write("attempts=" + attempts + System.lineSeparator());
+            writer.write("candidateSetSkips=" + candidateSetSkips + System.lineSeparator());
+            writer.write("creationSkips=" + creationSkips + System.lineSeparator());
+            writer.write("executionFailures=" + executionFailures + System.lineSeparator());
+            writer.write("budgetComplete=" + (completedCases >= requestedBudget) + System.lineSeparator());
             writer.write(history.formatSummary());
         } catch (IOException ignored) {
             // Feedback logging must never turn a completed test into a DBMS failure.
