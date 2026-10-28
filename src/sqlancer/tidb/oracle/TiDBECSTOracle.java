@@ -22,6 +22,7 @@ import sqlancer.common.oracle.ecst.EcstTransformationConfig;
 import sqlancer.tidb.TiDBOptions;
 import sqlancer.tidb.TiDBProvider;
 import sqlancer.tidb.TiDBProvider.TiDBGlobalState;
+import sqlancer.tidb.TiDBSchema.TiDBTable;
 
 /**
  * TiDB MVP for ECST. It deliberately uses a separate oracle entry point and the controlled VP seam, leaving the
@@ -106,6 +107,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private Map<String, List<EcstTransformationConfig>> synthesizeCandidateSets() {
         Map<String, List<EcstTransformationConfig>> result = new LinkedHashMap<>();
         List<String> synthesis = new ArrayList<>();
+        QueryShape shape = inspectQueryShape();
         for (EcstTarget target : targets) {
             int generated = 0;
             int ruleAccepted = 0;
@@ -118,11 +120,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     continue;
                 }
                 ruleAccepted++;
-                if (!isLegal(target, config)) {
+                if (!isLegal(target, config, shape)) {
                     continue;
                 }
                 legal++;
-                if (!isApplicableToTiDb(config)) {
+                if (!isApplicableToTiDb(config, shape)) {
                     continue;
                 }
                 applicableCount++;
@@ -139,8 +141,25 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     + ",legal=" + legal + ",applicable=" + applicableCount + ",selected=" + applicable.size()
                     + "}");
         }
-        lastSynthesisSummary = String.join("; ", synthesis);
+        lastSynthesisSummary = "queryShape=" + shape + "; " + String.join("; ", synthesis);
         return result;
+    }
+
+    private QueryShape inspectQueryShape() {
+        int tables = 0;
+        int maxColumns = 0;
+        try {
+            state.updateSchema();
+            for (TiDBTable table : state.getSchema().getDatabaseTables()) {
+                if (!table.isView() && !table.getName().startsWith("vp_")) {
+                    tables++;
+                    maxColumns = Math.max(maxColumns, table.getColumns().size());
+                }
+            }
+        } catch (Exception ignored) {
+            // Candidate synthesis remains conservative if schema metadata is temporarily unavailable.
+        }
+        return new QueryShape(tables > 0, maxColumns >= 1, maxColumns >= 2, false, maxColumns);
     }
 
     /** Full bounded product before target, semantic, and TiDB capability filtering. */
@@ -163,7 +182,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     static List<EcstTransformationConfig> applicableConfigurations(EcstTarget target) {
         List<EcstTransformationConfig> result = new ArrayList<>();
         for (EcstTransformationConfig config : enumerateConfigurationSpace()) {
-            if (supportsRule(target, config) && isLegal(target, config) && isApplicableToTiDb(config)) {
+            if (supportsRule(target, config) && isLegal(target, config, QueryShape.synthetic())
+                    && isApplicableToTiDb(config, QueryShape.synthetic())) {
                 result.add(config);
             }
         }
@@ -175,7 +195,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 .anyMatch(rule -> rule.getTargetKey().equals(target.getKey()) && rule.supports(config));
     }
 
-    private static boolean isLegal(EcstTarget target, EcstTransformationConfig config) {
+    private static boolean isLegal(EcstTarget target, EcstTransformationConfig config, QueryShape shape) {
         if (config.getRepresentation() == EcstTransformationConfig.Representation.ORIGINAL) {
             return false;
         }
@@ -188,19 +208,51 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             return false;
         }
         if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.ON) {
-            return target.getKey().equals("TIDB_PUSHDOWN_SHIFT") || target.getKey().equals("TIDB_ACCESS_PATH_SHIFT");
+            return shape.hasJoin && (target.getKey().equals("TIDB_PUSHDOWN_SHIFT")
+                    || target.getKey().equals("TIDB_ACCESS_PATH_SHIFT"));
         }
-        return true;
+        if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING) {
+            return shape.hasAggregation;
+        }
+        return config.getExpressionContext() != EcstTransformationConfig.ExpressionContext.SELECT || shape.hasProjection;
     }
 
     /** TiDB currently has a VP materializer for these contexts; other legal configs remain visible as future work. */
-    private static boolean isApplicableToTiDb(EcstTransformationConfig config) {
+    private static boolean isApplicableToTiDb(EcstTransformationConfig config, QueryShape shape) {
         return config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
                 && (config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
                         || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE)
                 && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
                         || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.SELECT
-                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING);
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING)
+                && shape.hasBaseTable;
+    }
+
+    private static final class QueryShape {
+        private final boolean hasBaseTable;
+        private final boolean hasProjection;
+        private final boolean hasAggregation;
+        private final boolean hasJoin;
+        private final int maxDependencies;
+
+        private QueryShape(boolean hasBaseTable, boolean hasProjection, boolean hasAggregation, boolean hasJoin,
+                int maxDependencies) {
+            this.hasBaseTable = hasBaseTable;
+            this.hasProjection = hasProjection;
+            this.hasAggregation = hasAggregation;
+            this.hasJoin = hasJoin;
+            this.maxDependencies = maxDependencies;
+        }
+
+        private static QueryShape synthetic() {
+            return new QueryShape(true, true, true, false, 2);
+        }
+
+        @Override
+        public String toString() {
+            return "baseTable=" + hasBaseTable + ",projection=" + hasProjection + ",aggregation="
+                    + hasAggregation + ",join=" + hasJoin + ",maxDependencies=" + maxDependencies;
+        }
     }
 
     private EcstTarget chooseTarget(Map<String, List<EcstTransformationConfig>> candidateSets) {
