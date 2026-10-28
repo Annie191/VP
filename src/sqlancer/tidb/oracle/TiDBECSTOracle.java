@@ -414,19 +414,33 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         String expressionType = expression.contains("CAST(") ? "CAST_ARITHMETIC"
                 : expression.contains("+") || expression.contains("-") || expression.contains("*") ? "ARITHMETIC"
                         : expression.contains("(") ? "FUNCTION" : "COLUMN_REFERENCE";
-        String dependencyClass;
-        if (testCase.getTargetDependencies().size() < 2) {
-            dependencyClass = "SINGLE_DEPENDENCY";
-        } else if (testCase.getTargetDependencies().stream().anyMatch(
-                dependency -> testCase.getLeftDependencies().contains(dependency)
-                        && testCase.getRightDependencies().contains(dependency))) {
-            dependencyClass = "OVERLAPPED_DEPENDENCY";
-        } else if (config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE) {
-            dependencyClass = "CROSS_SIDE_DEPENDENCY";
-        } else {
-            dependencyClass = "SAME_SIDE_DEPENDENCY";
-        }
+        String dependencyClass = dependencyLayoutClass(testCase, config);
         return new EcstFeature("TiDB", expressionType, config.getExpressionContext().name(), dependencyClass);
+    }
+
+    private String dependencyLayoutClass(TiDBVerticalPartitioningOracle.EcstCase testCase,
+            EcstTransformationConfig config) {
+        List<String> dependencies = testCase.getTargetDependencies();
+        if (dependencies.size() < 2) {
+            return "SINGLE_DEPENDENCY";
+        }
+        boolean missing = dependencies.stream().anyMatch(dependency -> !testCase.getLeftDependencies().contains(dependency)
+                && !testCase.getRightDependencies().contains(dependency));
+        if (missing) {
+            return "INVALID_DEPENDENCY_LAYOUT";
+        }
+        boolean overlap = dependencies.stream().anyMatch(
+                dependency -> testCase.getLeftDependencies().contains(dependency)
+                        && testCase.getRightDependencies().contains(dependency));
+        if (overlap) {
+            return "OVERLAPPED_DEPENDENCY";
+        }
+        if (config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE) {
+            return testCase.getLeftDependencies().isEmpty() || testCase.getRightDependencies().isEmpty()
+                    ? "INVALID_DEPENDENCY_LAYOUT" : "CROSS_SIDE_DEPENDENCY";
+        }
+        return dependencies.stream().allMatch(testCase.getLeftDependencies()::contains)
+                ? "SAME_SIDE_DEPENDENCY" : "INVALID_DEPENDENCY_LAYOUT";
     }
 
     private EcstFeature featureForTargetSelection(Map<String, List<EcstTransformationConfig>> candidateSets) {
