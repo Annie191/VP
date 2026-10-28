@@ -163,6 +163,16 @@ public final class EcstHistory {
         return chooseTransformDecision(targetKey, featureMap);
     }
 
+    public Decision chooseTransformDecision(String targetKey, Collection<String> candidates, EcstFeature feature) {
+        Map<String, EcstFeature> featureMap = new LinkedHashMap<>();
+        if (candidates != null) {
+            for (String candidate : candidates) {
+                featureMap.put(candidate, feature);
+            }
+        }
+        return chooseTransformDecision(targetKey, featureMap);
+    }
+
     /** Feature-conditioned transform selection with full-to-coarse-to-global fallback. */
     public Decision chooseTransformDecision(String targetKey, Map<String, EcstFeature> candidates) {
         if (candidates == null || candidates.isEmpty()) {
