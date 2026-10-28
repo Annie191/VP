@@ -5,8 +5,10 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -179,7 +181,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             }
             int maxCandidates = Math.max(1, state.getDbmsSpecificOptions().ecstMaxCandidates);
             if (applicable.size() > maxCandidates) {
-                applicable = applicable.subList(0, maxCandidates);
+                applicable = diversifyCandidates(applicable, maxCandidates);
             }
             if (!applicable.isEmpty()) {
                 result.put(target.getKey(), applicable);
@@ -206,7 +208,49 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         } catch (Exception ignored) {
             // Candidate synthesis remains conservative if schema metadata is temporarily unavailable.
         }
-        return new QueryShape(tables > 0, maxColumns >= 1, maxColumns >= 2, false, maxColumns);
+        // Schema width is a dependency bound, not evidence of projection, aggregation, or joins.
+        return new QueryShape(tables > 0, false, false, tables >= 2, maxColumns);
+    }
+
+    /** Extracts query-level shape signals without treating column count as an aggregation signal. */
+    static QueryShape queryShapeFromSql(String query, int maxDependencies) {
+        String normalized = query == null ? "" : query.toLowerCase(java.util.Locale.ROOT);
+        boolean hasProjection = normalized.contains("select") && !normalized.matches(".*select\\s+\\*.*");
+        boolean hasAggregation = normalized.matches(".*\\b(count|sum|avg|min|max|group\\s+by)\\b.*");
+        boolean hasJoin = normalized.matches(".*\\b(join|union)\\b.*");
+        boolean hasBaseTable = normalized.contains(" from ");
+        return new QueryShape(hasBaseTable, hasProjection, hasAggregation, hasJoin, maxDependencies);
+    }
+
+    private static List<EcstTransformationConfig> diversifyCandidates(List<EcstTransformationConfig> candidates,
+            int limit) {
+        List<EcstTransformationConfig> remaining = new ArrayList<>(candidates);
+        List<EcstTransformationConfig> selected = new ArrayList<>();
+        Set<String> seenRepresentations = new HashSet<>();
+        Set<String> seenLayouts = new HashSet<>();
+        Set<String> seenReconstructions = new HashSet<>();
+        Set<String> seenContexts = new HashSet<>();
+        while (selected.size() < limit && !remaining.isEmpty()) {
+            EcstTransformationConfig best = remaining.get(0);
+            int bestNovelty = -1;
+            for (EcstTransformationConfig candidate : remaining) {
+                int novelty = (seenRepresentations.contains(candidate.getRepresentation().name()) ? 0 : 1)
+                        + (seenLayouts.contains(candidate.getPartitionLayout().name()) ? 0 : 1)
+                        + (seenReconstructions.contains(candidate.getReconstruction().name()) ? 0 : 1)
+                        + (seenContexts.contains(candidate.getExpressionContext().name()) ? 0 : 1);
+                if (novelty > bestNovelty) {
+                    best = candidate;
+                    bestNovelty = novelty;
+                }
+            }
+            selected.add(best);
+            remaining.remove(best);
+            seenRepresentations.add(best.getRepresentation().name());
+            seenLayouts.add(best.getPartitionLayout().name());
+            seenReconstructions.add(best.getReconstruction().name());
+            seenContexts.add(best.getExpressionContext().name());
+        }
+        return selected;
     }
 
     /** Full bounded product before target, semantic, and TiDB capability filtering. */
@@ -292,7 +336,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 && shape.hasBaseTable;
     }
 
-    private static final class QueryShape {
+    static final class QueryShape {
         private final boolean hasBaseTable;
         private final boolean hasProjection;
         private final boolean hasAggregation;
@@ -308,7 +352,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             this.maxDependencies = maxDependencies;
         }
 
-        private static QueryShape synthetic() {
+        static QueryShape synthetic() {
             return new QueryShape(true, true, true, false, 2);
         }
 
@@ -316,6 +360,14 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         public String toString() {
             return "baseTable=" + hasBaseTable + ",projection=" + hasProjection + ",aggregation="
                     + hasAggregation + ",join=" + hasJoin + ",maxDependencies=" + maxDependencies;
+        }
+
+        boolean hasAggregation() {
+            return hasAggregation;
+        }
+
+        boolean hasJoin() {
+            return hasJoin;
         }
     }
 

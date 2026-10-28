@@ -49,4 +49,27 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(targets.stream().anyMatch(target -> target.getDimension() == EcstContextDimension.BOUNDARY
                 && "NON_PUSHDOWN".equals(target.getFrom()) && "PUSHDOWN".equals(target.getTo())));
     }
+
+    @Test
+    void queryShapeUsesSqlClausesInsteadOfSchemaWidth() {
+        TiDBECSTOracle.QueryShape plain = TiDBECSTOracle.queryShapeFromSql(
+                "SELECT c0, c1 FROM t0 WHERE c0 > 0", 2);
+        TiDBECSTOracle.QueryShape aggregate = TiDBECSTOracle.queryShapeFromSql(
+                "SELECT c0, COUNT(*) FROM t0 GROUP BY c0 HAVING COUNT(*) > 1", 2);
+        TiDBECSTOracle.QueryShape join = TiDBECSTOracle.queryShapeFromSql(
+                "SELECT a.c0 FROM a JOIN b ON a.id = b.id", 2);
+
+        assertTrue(!plain.hasAggregation() && !plain.hasJoin());
+        assertTrue(aggregate.hasAggregation());
+        assertTrue(join.hasJoin());
+    }
+
+    @Test
+    void boundedCandidatesRetainMultipleDimensions() {
+        List<EcstTransformationConfig> all = TiDBECSTOracle.applicableConfigurations(
+                new EcstTarget("TIDB_LOCATION_SHIFT", EcstContextDimension.LOCATION, "ROOT", "COP_TIKV"));
+        assertTrue(all.stream().map(c -> c.getPartitionLayout()).distinct().count() >= 2);
+        assertTrue(all.stream().map(c -> c.getReconstruction()).distinct().count() >= 2);
+        assertTrue(all.stream().map(c -> c.getExpressionContext()).distinct().count() >= 2);
+    }
 }
