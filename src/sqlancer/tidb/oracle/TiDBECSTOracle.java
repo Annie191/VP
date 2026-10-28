@@ -210,8 +210,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         } catch (Exception ignored) {
             // Candidate synthesis remains conservative if schema metadata is temporarily unavailable.
         }
-        // Schema width is a dependency bound, not evidence of projection, aggregation, or joins.
-        return new QueryShape(tables > 0, false, false, tables >= 2, maxColumns);
+        // Schema width is only a dependency bound. The controlled ECST generator constructs its own
+        // SELECT/HAVING seed queries, so those capabilities must not be inferred from table metadata.
+        // JOIN remains disabled until a real target query with a join is supplied.
+        return new QueryShape(tables > 0, tables > 0, tables > 0, false, maxColumns);
     }
 
     /** Extracts query-level shape signals without treating column count as an aggregation signal. */
