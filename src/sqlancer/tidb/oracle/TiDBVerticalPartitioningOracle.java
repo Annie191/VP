@@ -726,7 +726,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         }
 
         if (dependencies.size() < 2) {
-            throw new IllegalArgumentException("CROSS_SIDE requires two distinct dependency columns");
+            throw new IgnoreMeException();
         }
         left.add(dependencies.get(0));
         VpColumn second = dependencies.get(1);

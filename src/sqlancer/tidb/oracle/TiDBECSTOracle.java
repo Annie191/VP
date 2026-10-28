@@ -106,7 +106,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             TiDBVerticalPartitioningOracle.EcstCase testCase;
             try {
                 testCase = vp.createEcstCase(config);
-            } catch (IgnoreMeException ignored) {
+            } catch (IgnoreMeException | IllegalArgumentException ignored) {
                 creationSkips++;
                 continue;
             }
