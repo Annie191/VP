@@ -5,8 +5,10 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -43,6 +45,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int candidateSetSkips;
     private int creationSkips;
     private int executionFailures;
+    private int bugCandidates;
 
     public TiDBECSTOracle(TiDBGlobalState state) {
         this.state = state;
@@ -87,6 +90,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         candidateSetSkips = 0;
         creationSkips = 0;
         executionFailures = 0;
+        bugCandidates = 0;
         semanticPreconditionRejects = 0;
         String lastBaseTable = null;
         while (completed < budget && attempts < budget * 4) {
@@ -99,12 +103,12 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             EcstTarget target = chooseTarget(candidateSets);
             List<EcstTransformationConfig> applicable = candidateSets.get(target.getKey());
             EcstTransformationConfig config = chooseConfig(target, applicable);
-            EcstFeature feature = featureFor(config);
+            EcstFeature feature;
             long started = System.nanoTime();
             TiDBVerticalPartitioningOracle.EcstCase testCase;
             try {
                 testCase = vp.createEcstCase(config);
-            } catch (IgnoreMeException ignored) {
+            } catch (IgnoreMeException | IllegalArgumentException ignored) {
                 creationSkips++;
                 continue;
             }
@@ -115,6 +119,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 vp.cleanupEcstCase(testCase);
                 continue;
             }
+            feature = featureFor(testCase, config);
             lastBaseTable = testCase.getBaseTable();
             EcstObservation observation = analyzer.analyze(testCase.getOriginalQuery(), testCase.getTransformedQuery(),
                     testCase.getTargetExpression(), target);
@@ -122,14 +127,15 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             boolean keepArtifacts = false;
             try {
                 TiDBVerticalPartitioningOracle.EcstComparison comparison = vp.compareEcstCase(testCase);
+                // A result comparison, including a mismatch, is a completed test pair.
+                completed++;
+                completedCases = completed;
                 if (!comparison.isEqual()) {
+                    bugCandidates++;
                     keepArtifacts = true;
                     throw new AssertionError(formatBug(target, testCase, observation, comparison));
                 }
             } catch (Exception failure) {
-                executionFailures++;
-                throw failure;
-            } catch (AssertionError failure) {
                 executionFailures++;
                 throw failure;
             } finally {
@@ -139,8 +145,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     vp.cleanupEcstCase(testCase);
                 }
             }
-            completed++;
-            completedCases = completed;
         }
         completedCases = completed;
         if (completed == 0) {
@@ -179,7 +183,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             }
             int maxCandidates = Math.max(1, state.getDbmsSpecificOptions().ecstMaxCandidates);
             if (applicable.size() > maxCandidates) {
-                applicable = applicable.subList(0, maxCandidates);
+                applicable = diversifyCandidates(applicable, maxCandidates);
             }
             if (!applicable.isEmpty()) {
                 result.put(target.getKey(), applicable);
@@ -206,7 +210,49 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         } catch (Exception ignored) {
             // Candidate synthesis remains conservative if schema metadata is temporarily unavailable.
         }
-        return new QueryShape(tables > 0, maxColumns >= 1, maxColumns >= 2, false, maxColumns);
+        // Schema width is a dependency bound, not evidence of projection, aggregation, or joins.
+        return new QueryShape(tables > 0, false, false, tables >= 2, maxColumns);
+    }
+
+    /** Extracts query-level shape signals without treating column count as an aggregation signal. */
+    static QueryShape queryShapeFromSql(String query, int maxDependencies) {
+        String normalized = query == null ? "" : query.toLowerCase(java.util.Locale.ROOT);
+        boolean hasProjection = normalized.contains("select") && !normalized.matches(".*select\\s+\\*.*");
+        boolean hasAggregation = normalized.matches(".*\\b(count|sum|avg|min|max|group\\s+by)\\b.*");
+        boolean hasJoin = normalized.matches(".*\\b(join|union)\\b.*");
+        boolean hasBaseTable = normalized.contains(" from ");
+        return new QueryShape(hasBaseTable, hasProjection, hasAggregation, hasJoin, maxDependencies);
+    }
+
+    private static List<EcstTransformationConfig> diversifyCandidates(List<EcstTransformationConfig> candidates,
+            int limit) {
+        List<EcstTransformationConfig> remaining = new ArrayList<>(candidates);
+        List<EcstTransformationConfig> selected = new ArrayList<>();
+        Set<String> seenRepresentations = new HashSet<>();
+        Set<String> seenLayouts = new HashSet<>();
+        Set<String> seenReconstructions = new HashSet<>();
+        Set<String> seenContexts = new HashSet<>();
+        while (selected.size() < limit && !remaining.isEmpty()) {
+            EcstTransformationConfig best = remaining.get(0);
+            int bestNovelty = -1;
+            for (EcstTransformationConfig candidate : remaining) {
+                int novelty = (seenRepresentations.contains(candidate.getRepresentation().name()) ? 0 : 1)
+                        + (seenLayouts.contains(candidate.getPartitionLayout().name()) ? 0 : 1)
+                        + (seenReconstructions.contains(candidate.getReconstruction().name()) ? 0 : 1)
+                        + (seenContexts.contains(candidate.getExpressionContext().name()) ? 0 : 1);
+                if (novelty > bestNovelty) {
+                    best = candidate;
+                    bestNovelty = novelty;
+                }
+            }
+            selected.add(best);
+            remaining.remove(best);
+            seenRepresentations.add(best.getRepresentation().name());
+            seenLayouts.add(best.getPartitionLayout().name());
+            seenReconstructions.add(best.getReconstruction().name());
+            seenContexts.add(best.getExpressionContext().name());
+        }
+        return selected;
     }
 
     /** Full bounded product before target, semantic, and TiDB capability filtering. */
@@ -292,7 +338,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 && shape.hasBaseTable;
     }
 
-    private static final class QueryShape {
+    static final class QueryShape {
         private final boolean hasBaseTable;
         private final boolean hasProjection;
         private final boolean hasAggregation;
@@ -308,7 +354,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             this.maxDependencies = maxDependencies;
         }
 
-        private static QueryShape synthetic() {
+        static QueryShape synthetic() {
             return new QueryShape(true, true, true, false, 2);
         }
 
@@ -316,6 +362,14 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         public String toString() {
             return "baseTable=" + hasBaseTable + ",projection=" + hasProjection + ",aggregation="
                     + hasAggregation + ",join=" + hasJoin + ",maxDependencies=" + maxDependencies;
+        }
+
+        boolean hasAggregation() {
+            return hasAggregation;
+        }
+
+        boolean hasJoin() {
+            return hasJoin;
         }
     }
 
@@ -325,7 +379,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             keys.put(entry.getKey(), entry.getValue().stream().map(EcstTransformationConfig::stableKey)
                     .collect(Collectors.toList()));
         }
-        EcstFeature targetFeature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "NUMERIC_DEPENDENCY");
+        EcstFeature targetFeature = featureForTargetSelection(candidateSets);
         String chosen = history.chooseTargetDecision(keys, targetFeature).getKey();
         for (EcstTarget target : targets) {
             if (target.getKey().equals(chosen)) {
@@ -341,7 +395,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         }
         Map<String, EcstFeature> features = new LinkedHashMap<>();
         for (EcstTransformationConfig candidate : applicable) {
-            features.put(candidate.stableKey(), featureFor(candidate));
+            features.put(candidate.stableKey(), featureForConfig(candidate));
         }
         String chosen = history.chooseTransformDecision(target.getKey(), features).getKey();
         for (EcstTransformationConfig candidate : applicable) {
@@ -352,8 +406,41 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         return applicable.get(state.getRandomly().getInteger(0, applicable.size()));
     }
 
-    private EcstFeature featureFor(EcstTransformationConfig config) {
-        return new EcstFeature("TiDB", "CAST_ARITHMETIC", config.getExpressionContext().name(), "NUMERIC_DEPENDENCY");
+    private EcstFeature featureFor(TiDBVerticalPartitioningOracle.EcstCase testCase,
+            EcstTransformationConfig config) {
+        String expression = testCase.getTargetExpression().toUpperCase(java.util.Locale.ROOT);
+        String expressionType = expression.contains("CAST(") ? "CAST_ARITHMETIC"
+                : expression.contains("+") || expression.contains("-") || expression.contains("*") ? "ARITHMETIC"
+                        : expression.contains("(") ? "FUNCTION" : "COLUMN_REFERENCE";
+        String dependencyClass;
+        if (testCase.getTargetDependencies().size() < 2) {
+            dependencyClass = "SINGLE_DEPENDENCY";
+        } else if (testCase.getLeftDependencies().isEmpty() || testCase.getRightDependencies().isEmpty()) {
+            dependencyClass = "INCOMPLETE_LAYOUT";
+        } else if (testCase.getTargetDependencies().stream().anyMatch(
+                dependency -> testCase.getLeftDependencies().contains(dependency)
+                        && testCase.getRightDependencies().contains(dependency))) {
+            dependencyClass = "OVERLAPPED_DEPENDENCY";
+        } else {
+            dependencyClass = "CROSS_SIDE_DEPENDENCY";
+        }
+        return new EcstFeature("TiDB", expressionType, config.getExpressionContext().name(), dependencyClass);
+    }
+
+    private EcstFeature featureForTargetSelection(Map<String, List<EcstTransformationConfig>> candidateSets) {
+        String clause = "UNKNOWN";
+        for (List<EcstTransformationConfig> configs : candidateSets.values()) {
+            if (!configs.isEmpty()) {
+                clause = configs.get(0).getExpressionContext().name();
+                break;
+            }
+        }
+        return new EcstFeature("TiDB", "UNKNOWN_EXPRESSION", clause, "UNKNOWN_DEPENDENCY");
+    }
+
+    private EcstFeature featureForConfig(EcstTransformationConfig config) {
+        return new EcstFeature("TiDB", "UNKNOWN_EXPRESSION", config.getExpressionContext().name(),
+                "UNKNOWN_DEPENDENCY");
     }
 
     private String formatBug(EcstTarget target, TiDBVerticalPartitioningOracle.EcstCase testCase,
@@ -398,6 +485,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             writer.write("candidateSetSkips=" + candidateSetSkips + System.lineSeparator());
             writer.write("creationSkips=" + creationSkips + System.lineSeparator());
             writer.write("executionFailures=" + executionFailures + System.lineSeparator());
+            writer.write("bugCandidates=" + bugCandidates + System.lineSeparator());
             writer.write("budgetComplete=" + (completedCases >= requestedBudget) + System.lineSeparator());
             writer.write(history.formatSummary());
         } catch (IOException ignored) {

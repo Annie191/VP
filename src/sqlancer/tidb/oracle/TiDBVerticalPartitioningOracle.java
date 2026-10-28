@@ -664,6 +664,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         if (ecstCase.targetExpression == null || ecstCase.targetExpression.isEmpty()) {
             violations.add("target expression is empty");
         }
+        String normalizedTarget = ecstCase.targetExpression == null ? ""
+                : ecstCase.targetExpression.toLowerCase(java.util.Locale.ROOT).replace("`", "");
         if (ecstCase.targetDependencies.isEmpty()) {
             violations.add("target has no dependency columns");
         }
@@ -685,9 +687,30 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             violations.add("transformed query does not preserve the row identity projection");
         }
         for (String dependency : ecstCase.targetDependencies) {
+            if (!normalizedTarget.contains(dependency.toLowerCase(java.util.Locale.ROOT))) {
+                violations.add("target expression does not reference dependency: " + dependency);
+            }
             if (!ecstCase.leftDependencies.contains(dependency) && !ecstCase.rightDependencies.contains(dependency)) {
                 violations.add("dependency is absent from both partitions: " + dependency);
             }
+            VpColumn sourceColumn = findColumn(ecstCase.pair.schema.columns, dependency);
+            VpColumn leftColumn = findColumn(ecstCase.pair.schema.leftColumns, dependency);
+            VpColumn rightColumn = findColumn(ecstCase.pair.schema.rightColumns, dependency);
+            if (sourceColumn == null || leftColumn == null && rightColumn == null) {
+                violations.add("dependency has no source/partition column mapping: " + dependency);
+            } else if (leftColumn != null && !sameType(sourceColumn, leftColumn)
+                    || rightColumn != null && !sameType(sourceColumn, rightColumn)) {
+                violations.add("dependency type changed across materialization: " + dependency);
+            }
+        }
+        if (!containsSetupToken(ecstCase.pair.schema.setupStatements, quote(ROW_ID) + " BIGINT NOT NULL PRIMARY KEY")) {
+            violations.add("materialized partitions do not prove unique non-null row identity");
+        }
+        String transformed = ecstCase.pair.splitQuery == null ? ""
+                : ecstCase.pair.splitQuery.toLowerCase(java.util.Locale.ROOT);
+        if (!transformed.contains(ecstCase.pair.schema.leftTable.toLowerCase(java.util.Locale.ROOT))
+                || !transformed.contains(ecstCase.pair.schema.rightTable.toLowerCase(java.util.Locale.ROOT))) {
+            violations.add("transformed query does not reference both materialized partitions");
         }
         if (ecstCase.pair.schema.splitStrategy == SplitStrategy.ECST_CROSS_SIDE) {
             if (ecstCase.targetDependencies.size() < 2) {
@@ -703,6 +726,30 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             }
         }
         return new EcstSemanticPreconditionResult(violations);
+    }
+
+    private static VpColumn findColumn(List<VpColumn> columns, String name) {
+        for (VpColumn column : columns) {
+            if (column.name.equalsIgnoreCase(name)) {
+                return column;
+            }
+        }
+        return null;
+    }
+
+    private static boolean sameType(VpColumn first, VpColumn second) {
+        return first.type == second.type || first.type != null && first.type.equals(second.type);
+    }
+
+    private static boolean containsSetupToken(List<String> statements, String token) {
+        String expected = token.replace("`", "").replaceAll("\\s+", " ").toLowerCase(java.util.Locale.ROOT);
+        for (String statement : statements) {
+            String normalized = statement.replace("`", "").replaceAll("\\s+", " ").toLowerCase(java.util.Locale.ROOT);
+            if (normalized.contains(expected)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ControlledSplitPlan createControlledSplitPlan(List<VpColumn> columns, List<VpColumn> dependencies,
@@ -726,7 +773,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         }
 
         if (dependencies.size() < 2) {
-            throw new IllegalArgumentException("CROSS_SIDE requires two distinct dependency columns");
+            throw new IgnoreMeException();
         }
         left.add(dependencies.get(0));
         VpColumn second = dependencies.get(1);

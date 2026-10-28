@@ -34,6 +34,21 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void targetScorePrefersNoveltyWhenReachabilityIsComparable() {
+        EcstHistory history = new EcstHistory();
+        for (int i = 0; i < 20; i++) {
+            history.observe("TIDB_LOCATION_ROOT_TO_COP_TIKV", "config", EcstShiftStatus.SUCCESS,
+                    Set.of("LOCATION:ROOT->COP_TIKV"), 1);
+            history.observe("uncovered", "config", EcstShiftStatus.SUCCESS,
+                    Set.of("ACCESS_PATH:TABLEFULLSCAN->INDEXLOOKUP"), 1);
+        }
+        EcstHistory.Decision decision = history.chooseTargetDecision(
+                Map.of("TIDB_LOCATION_ROOT_TO_COP_TIKV", List.of("config"),
+                        "TIDB_LOCATION_SHIFT", List.of("config")));
+        assertEquals("TIDB_LOCATION_SHIFT", decision.getKey());
+    }
+
+    @Test
     public void coverageCountsOnlyTheTargetMigrationDimension() {
         EcstHistory history = new EcstHistory();
         history.observe("TIDB_LOCATION_SHIFT", "config", EcstShiftStatus.FAILURE,
@@ -77,6 +92,19 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void targetReachabilityUsesFeatureConditionedTransformStats() {
+        EcstHistory history = new EcstHistory();
+        EcstFeature feature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "CROSS_SIDE_DEPENDENCY");
+        for (int i = 0; i < 4; i++) {
+            history.observe("target-good", "config", EcstShiftStatus.SUCCESS, Set.of("LOCATION"), 1, feature);
+            history.observe("target-bad", "config", EcstShiftStatus.FAILURE, Set.of(), 1, feature);
+        }
+        EcstHistory.Decision decision = history.chooseTargetDecision(
+                Map.of("target-good", List.of("config"), "target-bad", List.of("config")), feature);
+        assertEquals("target-good", decision.getKey());
+    }
+
+    @Test
     public void transformSelectionUsesObservedSuccessRateAndCost() {
         EcstHistory history = new EcstHistory();
         for (int i = 0; i < 12; i++) {
@@ -98,5 +126,26 @@ public class EcstHistoryTest {
 
         assertNotNull(decision);
         assertTrue(history.formatSummary().contains("feature[target|config|TIDB:CAST_ARITHMETIC:WHERE:NUMERIC_DEPENDENCY]"));
+    }
+
+    @Test
+    public void sparseExactFeatureFallsBackToCoarseThenGlobalStatistics() {
+        EcstFeature coarse = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "NUMERIC_DEPENDENCY");
+        EcstFeature sparseExact = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "CROSS_SIDE_DEPENDENCY");
+        EcstHistory coarseHistory = new EcstHistory();
+        for (int i = 0; i < 3; i++) {
+            coarseHistory.observe("target", "coarse-good", EcstShiftStatus.SUCCESS, Set.of("LOCATION"), 1, coarse);
+            coarseHistory.observe("target", "global-bad", EcstShiftStatus.FAILURE, Set.of(), 1, sparseExact);
+        }
+        assertEquals("coarse-good", coarseHistory.chooseTransformDecision("target",
+                Map.of("coarse-good", sparseExact, "global-bad", sparseExact)).getKey());
+
+        EcstHistory globalHistory = new EcstHistory();
+        for (int i = 0; i < 3; i++) {
+            globalHistory.observe("target", "global-good", EcstShiftStatus.SUCCESS, Set.of("LOCATION"), 1);
+            globalHistory.observe("target", "coarse-bad", EcstShiftStatus.FAILURE, Set.of(), 1, coarse);
+        }
+        assertEquals("global-good", globalHistory.chooseTransformDecision("target",
+                Map.of("global-good", sparseExact, "coarse-bad", sparseExact)).getKey());
     }
 }

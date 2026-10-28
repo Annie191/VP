@@ -1,0 +1,3 @@
+Projection | 10000.00 | root |  | cast(ecst_plan_regression_20261028.a.v, bigint BINARY)->Column#4
+└─TableReader | 10000.00 | root |  | data:TableFullScan
+  └─TableFullScan | 10000.00 | cop[tikv] | table:a | keep order:false, stats:pseudo

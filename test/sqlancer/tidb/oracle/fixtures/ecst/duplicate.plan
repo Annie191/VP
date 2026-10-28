@@ -1,0 +1,6 @@
+Projection | 12500.00 | root |  | cast(ecst_plan_regression_20261028.a.v, bigint BINARY)->Column#7, cast(ecst_plan_regression_20261028.b.v, bigint BINARY)->Column#8
+└─MergeJoin | 12500.00 | root |  | inner join, left key:ecst_plan_regression_20261028.a.id, right key:ecst_plan_regression_20261028.b.id
+  ├─TableReader(Build) | 10000.00 | root |  | data:TableFullScan
+  │ └─TableFullScan | 10000.00 | cop[tikv] | table:b | keep order:true, stats:pseudo
+  └─TableReader(Probe) | 10000.00 | root |  | data:TableFullScan
+    └─TableFullScan | 10000.00 | cop[tikv] | table:a | keep order:true, stats:pseudo

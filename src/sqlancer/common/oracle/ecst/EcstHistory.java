@@ -232,7 +232,7 @@ public final class EcstHistory {
             long coverage = targetCoverage(candidate);
             long trials = stats == null ? 0 : stats.trials();
             double novelty = 1.0 / Math.sqrt(1.0 + coverage);
-            double reachability = maxReachability(candidate, entry.getValue());
+            double reachability = maxReachability(candidate, entry.getValue(), feature);
             double exploration = Math.sqrt(2.0 * Math.log(2.0 + Math.max(1, totalTrials)) / (1.0 + trials));
             double score = novelty + reachability + exploration;
             if (score > best || score == best && Randomly.getBoolean()) {
@@ -244,14 +244,14 @@ public final class EcstHistory {
         return selected;
     }
 
-    private double maxReachability(String targetKey, Collection<String> candidates) {
+    private double maxReachability(String targetKey, Collection<String> candidates, EcstFeature feature) {
         if (candidates == null || candidates.isEmpty()) {
             Stats target = targetStats.get(targetKey);
             return target == null ? 0.5 : target.successRate();
         }
         double best = 0.5;
         for (String candidate : candidates) {
-            Stats stats = transformStats.get(targetKey + "|" + candidate);
+            Stats stats = selectTransformStats(targetKey, candidate, feature);
             best = Math.max(best, stats == null ? 0.5 : stats.successRate());
         }
         return best;
