@@ -417,14 +417,14 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         String dependencyClass;
         if (testCase.getTargetDependencies().size() < 2) {
             dependencyClass = "SINGLE_DEPENDENCY";
-        } else if (testCase.getLeftDependencies().isEmpty() || testCase.getRightDependencies().isEmpty()) {
-            dependencyClass = "INCOMPLETE_LAYOUT";
         } else if (testCase.getTargetDependencies().stream().anyMatch(
                 dependency -> testCase.getLeftDependencies().contains(dependency)
                         && testCase.getRightDependencies().contains(dependency))) {
             dependencyClass = "OVERLAPPED_DEPENDENCY";
-        } else {
+        } else if (config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE) {
             dependencyClass = "CROSS_SIDE_DEPENDENCY";
+        } else {
+            dependencyClass = "SAME_SIDE_DEPENDENCY";
         }
         return new EcstFeature("TiDB", expressionType, config.getExpressionContext().name(), dependencyClass);
     }
@@ -437,12 +437,16 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 break;
             }
         }
-        return new EcstFeature("TiDB", "UNKNOWN_EXPRESSION", clause, "UNKNOWN_DEPENDENCY");
+        // The controlled ECST generator has a stable CAST arithmetic seed operation. Keep dependency
+        // layout coarse here because the concrete layout is selected only after the target is chosen.
+        return new EcstFeature("TiDB", "CAST_ARITHMETIC", clause, "UNKNOWN_DEPENDENCY");
     }
 
     private EcstFeature featureForConfig(EcstTransformationConfig config) {
-        return new EcstFeature("TiDB", "UNKNOWN_EXPRESSION", config.getExpressionContext().name(),
-                "UNKNOWN_DEPENDENCY");
+        String dependencyClass = config.getPartitionLayout()
+                == EcstTransformationConfig.PartitionLayout.CROSS_SIDE ? "CROSS_SIDE_DEPENDENCY"
+                        : "SAME_SIDE_DEPENDENCY";
+        return new EcstFeature("TiDB", "CAST_ARITHMETIC", config.getExpressionContext().name(), dependencyClass);
     }
 
     private String formatBug(EcstTarget target, TiDBVerticalPartitioningOracle.EcstCase testCase,
