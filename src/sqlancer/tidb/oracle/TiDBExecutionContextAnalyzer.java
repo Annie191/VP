@@ -154,7 +154,7 @@ public final class TiDBExecutionContextAnalyzer {
             }
         }
         if (candidates.isEmpty()) {
-            return ParsedContext.unknown(plan, "target references were not found in a predicate-bearing plan node");
+            return ParsedContext.unknown(plan, "target expression fingerprint was not found in a plan node");
         }
         candidates.sort((a, b) -> Integer.compare(b.score, a.score));
         Candidate best = candidates.get(0);
@@ -208,6 +208,7 @@ public final class TiDBExecutionContextAnalyzer {
             return new Candidate(node, Integer.MAX_VALUE, List.of("ambiguous-expression-occurrences"));
         }
         boolean allReferences = !target.references.isEmpty() && nodeReferences.containsAll(target.references);
+        boolean equivalent = allReferences && equivalentExpressionShape(text, target);
         boolean predicate = containsPredicateMarker(text) || isPredicateOperator(node.operator);
         if (exact) {
             score += 100;
@@ -217,6 +218,10 @@ public final class TiDBExecutionContextAnalyzer {
             score += 40;
             signals.add("all-column-references");
         }
+        if (equivalent && !exact) {
+            score += 75;
+            signals.add("equivalent-expression-fingerprint");
+        }
         if (predicate) {
             score += 30;
             signals.add("predicate-node");
@@ -225,10 +230,27 @@ public final class TiDBExecutionContextAnalyzer {
             score += 10;
             signals.add("type-conversion");
         }
-        if (!exact) {
+        if (!exact && !equivalent) {
             return null;
         }
         return new Candidate(node, score, signals);
+    }
+
+    private static boolean equivalentExpressionShape(String text, TargetPattern target) {
+        if (target.hasCast && !(text.contains("cast(") || text.contains("convert(") || text.contains("builtincast"))) {
+            return false;
+        }
+        if (target.castMode != null && !text.contains(target.castMode)) {
+            return false;
+        }
+        if (target.hasArithmetic && !(text.contains("+") || text.contains("-") || text.contains("*")
+                || text.contains("plus(") || text.contains("minus(") || text.contains("mul("))) {
+            return false;
+        }
+        if (target.hasFunction && !text.contains(target.functionName + "(")) {
+            return false;
+        }
+        return target.hasCast || target.hasArithmetic || target.hasFunction;
     }
 
     private static EcstContext contextFor(PlanNode node, String evaluation, TargetPattern target) {
@@ -390,15 +412,38 @@ public final class TiDBExecutionContextAnalyzer {
     private static final class TargetPattern {
         private final String normalized;
         private final Set<String> references;
+        private final boolean hasCast;
+        private final boolean hasArithmetic;
+        private final boolean hasFunction;
+        private final String functionName;
+        private final String castMode;
 
-        private TargetPattern(String normalized, Set<String> references) {
+        private TargetPattern(String normalized, Set<String> references, boolean hasCast, boolean hasArithmetic,
+                boolean hasFunction, String functionName, String castMode) {
             this.normalized = normalized;
             this.references = references;
+            this.hasCast = hasCast;
+            this.hasArithmetic = hasArithmetic;
+            this.hasFunction = hasFunction;
+            this.functionName = functionName;
+            this.castMode = castMode;
         }
 
         private static TargetPattern create(String expression) {
             String normalized = normalize(expression);
-            return normalized.isEmpty() ? null : new TargetPattern(normalized, references(expression));
+            if (normalized.isEmpty()) {
+                return null;
+            }
+            boolean cast = normalized.contains("cast(");
+            boolean arithmetic = normalized.contains("+") || normalized.contains("-") || normalized.contains("*");
+            String function = "";
+            Matcher matcher = Pattern.compile("^([a-z_][a-z0-9_$]*)\\(").matcher(normalized);
+            boolean hasFunction = matcher.find() && !"cast".equals(matcher.group(1));
+            if (hasFunction) {
+                function = matcher.group(1);
+            }
+            String mode = normalized.contains("unsigned") ? "unsigned" : normalized.contains("signed") ? "signed" : null;
+            return new TargetPattern(normalized, references(expression), cast, arithmetic, hasFunction, function, mode);
         }
     }
 }

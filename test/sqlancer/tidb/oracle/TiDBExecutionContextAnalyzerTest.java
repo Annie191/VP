@@ -109,6 +109,24 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void matchesTidbInternalArithmeticFingerprintAfterRewrite() {
+        String plan = "Projection_1 1 root plus(cast(test.t.a, bigint BINARY), cast(test.t.b, bigint BINARY))\n";
+        EcstContext context = TiDBExecutionContextAnalyzer.parse(plan,
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
+        assertEquals("ROOT", context.getLocation());
+        assertEquals("PROJECTION", context.getOperator());
+    }
+
+    @Test
+    void rewrittenFingerprintStillReturnsUnknownWhenTwoNodesMatch() {
+        String plan = "Projection_1 1 root plus(cast(test.t.a, bigint BINARY), cast(test.t.b, bigint BINARY))\n"
+                + "└─Selection_2 1 cop[tikv] plus(cast(test.t.a, bigint BINARY), cast(test.t.b, bigint BINARY)) > 0\n";
+        EcstContext context = TiDBExecutionContextAnalyzer.parse(plan,
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
+        assertEquals("UNKNOWN", context.getLocation());
+    }
+
+    @Test
     void realPlansConfirmOnlyRequestedDirection() throws Exception {
         EcstContext root = TiDBExecutionContextAnalyzer.parse(fixture("projection"), "CAST(`v` AS SIGNED)");
         EcstContext cop = TiDBExecutionContextAnalyzer.parse(fixture("selection"), "CAST(`v` AS SIGNED)");
