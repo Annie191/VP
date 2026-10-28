@@ -138,6 +138,26 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void realTwoCastArithmeticPlansAreLocatable() throws Exception {
+        EcstContext projection = TiDBExecutionContextAnalyzer.parse(fixture("two_cast_projection"),
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
+        EcstContext selection = TiDBExecutionContextAnalyzer.parse(fixture("two_cast_selection"),
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
+        assertEquals("PROJECTION", projection.getOperator());
+        assertEquals("ROOT", projection.getLocation());
+        assertEquals("SELECTION", selection.getOperator());
+        assertEquals("COP_TIKV", selection.getLocation());
+        assertEquals("TABLEFULLSCAN", selection.getAccessPath());
+    }
+
+    @Test
+    void realTwoCastHavingPlanReportsAmbiguousRelocation() throws Exception {
+        EcstContext having = TiDBExecutionContextAnalyzer.parse(fixture("two_cast_having"),
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
+        assertEquals("UNKNOWN", having.getLocation());
+    }
+
+    @Test
     void realPlansConfirmOnlyRequestedDirection() throws Exception {
         EcstContext root = TiDBExecutionContextAnalyzer.parse(fixture("projection"), "CAST(`v` AS SIGNED)");
         EcstContext cop = TiDBExecutionContextAnalyzer.parse(fixture("selection"), "CAST(`v` AS SIGNED)");

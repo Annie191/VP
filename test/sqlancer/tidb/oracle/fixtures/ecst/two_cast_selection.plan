@@ -1,0 +1,4 @@
+TableReader | 8000.00 | root |  | data:Projection
+└─Projection | 8000.00 | cop[tikv] |  | ecst_two_cast_20261028.t.a
+  └─Selection | 8000.00 | cop[tikv] |  | gt(plus(cast(ecst_two_cast_20261028.t.a, bigint BINARY), cast(ecst_two_cast_20261028.t.b, bigint BINARY)), 0)
+    └─TableFullScan | 10000.00 | cop[tikv] | table:t | keep order:false, stats:pseudo

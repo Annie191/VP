@@ -72,4 +72,20 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(all.stream().map(c -> c.getReconstruction()).distinct().count() >= 2);
         assertTrue(all.stream().map(c -> c.getExpressionContext()).distinct().count() >= 2);
     }
+
+    @Test
+    void productionGeneratorShapeKeepsAllImplementedClausesReachable() {
+        TiDBECSTOracle.QueryShape shape = TiDBECSTOracle.generatorQueryShape(true, 4);
+        assertTrue(shape.hasProjection());
+        assertTrue(shape.hasAggregation());
+        assertTrue(!shape.hasJoin());
+        EcstTarget target = new EcstTarget("TIDB_LOCATION_SHIFT", EcstContextDimension.LOCATION, "ROOT", "COP_TIKV");
+        List<EcstTransformationConfig> candidates = TiDBECSTOracle.applicableConfigurations(target);
+        assertTrue(candidates.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.WHERE));
+        assertTrue(candidates.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.SELECT));
+        assertTrue(candidates.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.HAVING));
+    }
 }

@@ -1,0 +1,3 @@
+Projection | 10000.00 | root |  | plus(cast(ecst_two_cast_20261028.t.a, bigint BINARY), cast(ecst_two_cast_20261028.t.b, bigint BINARY))->Column#5
+└─TableReader | 10000.00 | root |  | data:TableFullScan
+  └─TableFullScan | 10000.00 | cop[tikv] | table:t | keep order:false, stats:pseudo

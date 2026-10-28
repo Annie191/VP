@@ -1,0 +1,6 @@
+Projection | 6400.00 | root |  | ecst_two_cast_20261028.t.a, plus(cast(ecst_two_cast_20261028.t.a, bigint BINARY), cast(ecst_two_cast_20261028.t.b, bigint BINARY))->Column#7
+└─HashAgg | 6400.00 | root |  | group by:ecst_two_cast_20261028.t.a, ecst_two_cast_20261028.t.b, funcs:firstrow(ecst_two_cast_20261028.t.a)->ecst_two_cast_20261028.t.a, funcs:firstrow(ecst_two_cast_20261028.t.b)->ecst_two_cast_20261028.t.b
+  └─TableReader | 6400.00 | root |  | data:HashAgg
+    └─HashAgg | 6400.00 | cop[tikv] |  | group by:ecst_two_cast_20261028.t.a, ecst_two_cast_20261028.t.b, 
+      └─Selection | 8000.00 | cop[tikv] |  | gt(plus(cast(ecst_two_cast_20261028.t.a, bigint BINARY), cast(ecst_two_cast_20261028.t.b, bigint BINARY)), 0)
+        └─TableFullScan | 10000.00 | cop[tikv] | table:t | keep order:false, stats:pseudo

@@ -213,7 +213,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         // Schema width is only a dependency bound. The controlled ECST generator constructs its own
         // SELECT/HAVING seed queries, so those capabilities must not be inferred from table metadata.
         // JOIN remains disabled until a real target query with a join is supplied.
-        return new QueryShape(tables > 0, tables > 0, tables > 0, false, maxColumns);
+        return generatorQueryShape(tables > 0, maxColumns);
+    }
+
+    static QueryShape generatorQueryShape(boolean hasBaseTable, int maxDependencies) {
+        return new QueryShape(hasBaseTable, hasBaseTable, hasBaseTable, false, maxDependencies);
     }
 
     /** Extracts query-level shape signals without treating column count as an aggregation signal. */
@@ -368,6 +372,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
         boolean hasAggregation() {
             return hasAggregation;
+        }
+
+        boolean hasProjection() {
+            return hasProjection;
         }
 
         boolean hasJoin() {
