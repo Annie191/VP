@@ -249,7 +249,7 @@ public final class EcstHistory {
             Stats target = targetStats.get(targetKey);
             return target == null ? 0.5 : target.successRate();
         }
-        double best = 0.5;
+        double best = Double.NEGATIVE_INFINITY;
         for (String candidate : candidates) {
             Stats stats = selectTransformStats(targetKey, candidate, feature);
             best = Math.max(best, stats == null ? 0.5 : stats.successRate());

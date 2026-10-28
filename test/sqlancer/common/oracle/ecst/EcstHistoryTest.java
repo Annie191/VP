@@ -105,6 +105,23 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void reachabilityUsesObservedSuccessRateBelowPriorFloor() {
+        EcstHistory history = new EcstHistory();
+        for (int i = 0; i < 8; i++) {
+            history.observe("hard", "theta1", EcstShiftStatus.FAILURE, Set.of(), 1);
+            history.observe("slightly-easier", "theta2", EcstShiftStatus.FAILURE, Set.of(), 1);
+        }
+        history.observe("slightly-easier", "theta2", EcstShiftStatus.SUCCESS, Set.of("LOCATION"), 1);
+
+        EcstHistory.Decision hard = history.chooseTargetDecision(
+                Map.of("hard", List.of("theta1")));
+        EcstHistory.Decision slightlyEasier = history.chooseTargetDecision(
+                Map.of("slightly-easier", List.of("theta2")));
+        assertTrue(slightlyEasier.getScore() > hard.getScore());
+        assertTrue(hard.getScore() < 2.1, "reachability must not be forced to the 0.5 prior");
+    }
+
+    @Test
     public void transformSelectionUsesObservedSuccessRateAndCost() {
         EcstHistory history = new EcstHistory();
         for (int i = 0; i < 12; i++) {
