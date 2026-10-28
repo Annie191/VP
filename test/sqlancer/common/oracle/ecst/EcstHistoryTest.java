@@ -77,6 +77,19 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void targetReachabilityUsesFeatureConditionedTransformStats() {
+        EcstHistory history = new EcstHistory();
+        EcstFeature feature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "CROSS_SIDE_DEPENDENCY");
+        for (int i = 0; i < 4; i++) {
+            history.observe("target-good", "config", EcstShiftStatus.SUCCESS, Set.of("LOCATION"), 1, feature);
+            history.observe("target-bad", "config", EcstShiftStatus.FAILURE, Set.of(), 1, feature);
+        }
+        EcstHistory.Decision decision = history.chooseTargetDecision(
+                Map.of("target-good", List.of("config"), "target-bad", List.of("config")), feature);
+        assertEquals("target-good", decision.getKey());
+    }
+
+    @Test
     public void transformSelectionUsesObservedSuccessRateAndCost() {
         EcstHistory history = new EcstHistory();
         for (int i = 0; i < 12; i++) {

@@ -101,7 +101,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             EcstTarget target = chooseTarget(candidateSets);
             List<EcstTransformationConfig> applicable = candidateSets.get(target.getKey());
             EcstTransformationConfig config = chooseConfig(target, applicable);
-            EcstFeature feature = featureFor(config);
+            EcstFeature feature;
             long started = System.nanoTime();
             TiDBVerticalPartitioningOracle.EcstCase testCase;
             try {
@@ -117,6 +117,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 vp.cleanupEcstCase(testCase);
                 continue;
             }
+            feature = featureFor(testCase, config);
             lastBaseTable = testCase.getBaseTable();
             EcstObservation observation = analyzer.analyze(testCase.getOriginalQuery(), testCase.getTransformedQuery(),
                     testCase.getTargetExpression(), target);
@@ -377,7 +378,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             keys.put(entry.getKey(), entry.getValue().stream().map(EcstTransformationConfig::stableKey)
                     .collect(Collectors.toList()));
         }
-        EcstFeature targetFeature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "NUMERIC_DEPENDENCY");
+        EcstFeature targetFeature = featureForTargetSelection(candidateSets);
         String chosen = history.chooseTargetDecision(keys, targetFeature).getKey();
         for (EcstTarget target : targets) {
             if (target.getKey().equals(chosen)) {
@@ -393,7 +394,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         }
         Map<String, EcstFeature> features = new LinkedHashMap<>();
         for (EcstTransformationConfig candidate : applicable) {
-            features.put(candidate.stableKey(), featureFor(candidate));
+            features.put(candidate.stableKey(), featureForConfig(candidate));
         }
         String chosen = history.chooseTransformDecision(target.getKey(), features).getKey();
         for (EcstTransformationConfig candidate : applicable) {
@@ -404,8 +405,41 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         return applicable.get(state.getRandomly().getInteger(0, applicable.size()));
     }
 
-    private EcstFeature featureFor(EcstTransformationConfig config) {
-        return new EcstFeature("TiDB", "CAST_ARITHMETIC", config.getExpressionContext().name(), "NUMERIC_DEPENDENCY");
+    private EcstFeature featureFor(TiDBVerticalPartitioningOracle.EcstCase testCase,
+            EcstTransformationConfig config) {
+        String expression = testCase.getTargetExpression().toUpperCase(java.util.Locale.ROOT);
+        String expressionType = expression.contains("CAST(") ? "CAST_ARITHMETIC"
+                : expression.contains("+") || expression.contains("-") || expression.contains("*") ? "ARITHMETIC"
+                        : expression.contains("(") ? "FUNCTION" : "COLUMN_REFERENCE";
+        String dependencyClass;
+        if (testCase.getTargetDependencies().size() < 2) {
+            dependencyClass = "SINGLE_DEPENDENCY";
+        } else if (testCase.getLeftDependencies().isEmpty() || testCase.getRightDependencies().isEmpty()) {
+            dependencyClass = "INCOMPLETE_LAYOUT";
+        } else if (testCase.getTargetDependencies().stream().anyMatch(
+                dependency -> testCase.getLeftDependencies().contains(dependency)
+                        && testCase.getRightDependencies().contains(dependency))) {
+            dependencyClass = "OVERLAPPED_DEPENDENCY";
+        } else {
+            dependencyClass = "CROSS_SIDE_DEPENDENCY";
+        }
+        return new EcstFeature("TiDB", expressionType, config.getExpressionContext().name(), dependencyClass);
+    }
+
+    private EcstFeature featureForTargetSelection(Map<String, List<EcstTransformationConfig>> candidateSets) {
+        String clause = "UNKNOWN";
+        for (List<EcstTransformationConfig> configs : candidateSets.values()) {
+            if (!configs.isEmpty()) {
+                clause = configs.get(0).getExpressionContext().name();
+                break;
+            }
+        }
+        return new EcstFeature("TiDB", "UNKNOWN_EXPRESSION", clause, "UNKNOWN_DEPENDENCY");
+    }
+
+    private EcstFeature featureForConfig(EcstTransformationConfig config) {
+        return new EcstFeature("TiDB", "UNKNOWN_EXPRESSION", config.getExpressionContext().name(),
+                "UNKNOWN_DEPENDENCY");
     }
 
     private String formatBug(EcstTarget target, TiDBVerticalPartitioningOracle.EcstCase testCase,
