@@ -189,7 +189,11 @@ public class TiDBExecutionContextAnalyzerTest {
     void matchesJoinOtherConditionAsAnExpressionInstance() {
         String plan = "MergeJoin | 12500.00 | root | | inner join, left key:test.l.vp_rowid, "
                 + "right key:test.r.vp_rowid, other cond:gt(plus(cast(test.l.c0, bigint BINARY), "
-                + "cast(test.r.c1, bigint BINARY)), 0)\n";
+                + "cast(test.r.c1, bigint BINARY)), 0)\n"
+                + "├─TableReader(Build) | 10000.00 | root | | data:TableFullScan\n"
+                + "│ └─TableFullScan | 10000.00 | cop[tikv] | table:l\n"
+                + "└─TableReader(Probe) | 10000.00 | root | | data:TableFullScan\n"
+                + "  └─TableFullScan | 10000.00 | cop[tikv] | table:r\n";
 
         TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
                 "(CAST(`c0` AS SIGNED) + CAST(`c1` AS SIGNED))", "UNKNOWN");
@@ -201,6 +205,9 @@ public class TiDBExecutionContextAnalyzerTest {
                 parsed.selectedExpression().role());
         assertTrue(parsed.selectedExpression().expressionText().contains("plus(cast(test.l.c0"));
         assertTrue(parsed.evidence().contains("expressionRole=JOIN_OTHER_CONDITION"));
+        assertTrue(parsed.evidence().contains("BUILD=TABLEFULLSCAN"));
+        assertTrue(parsed.evidence().contains("PROBE=TABLEFULLSCAN"));
+        assertEquals("UNKNOWN", parsed.context().getAccessPath());
     }
 
     @Test

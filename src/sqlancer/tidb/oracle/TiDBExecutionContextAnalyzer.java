@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -224,7 +225,8 @@ public final class TiDBExecutionContextAnalyzer {
                 + "; candidates=" + candidates.size() + "; line=" + best.expression.owner.line + ", score="
                 + best.score + ", signals=" + String.join("+", best.signals) + ", normalizedTarget="
                 + target.normalized + ", expressionRole=" + best.expression.role + ", expression="
-                + best.expression.expressionText + ", node=" + best.expression.owner.raw;
+                + best.expression.expressionText + ", nodeRole=" + best.expression.owner.role + ", node="
+                + best.expression.owner.raw + ", accessPaths=" + accessPaths(best.expression.owner);
         String reason = status == MatchStatus.DUPLICATED_SAME_OPERATION ? "duplicated physical instances of one operation"
                 : status == MatchStatus.AMBIGUOUS ? "equally scored candidates represent different operations" : "unique operation match";
         return new ParsedContext(context, plan, best.expression.owner.raw, evidence, status, reason, candidates);
@@ -260,14 +262,21 @@ public final class TiDBExecutionContextAnalyzer {
                 continue;
             }
             String normalized = raw.replace('│', ' ').replace('├', ' ').replace('└', ' ').replace('─', ' ').trim();
-            String nodeId = normalized.split("\\s+", 2)[0];
+            String nodeToken = normalized.split("\\s+", 2)[0];
+            String nodeId = nodeToken;
+            String nodeRole = "";
+            int roleStart = nodeToken.indexOf('(');
+            if (roleStart > 0 && nodeToken.endsWith(")")) {
+                nodeId = nodeToken.substring(0, roleStart);
+                nodeRole = nodeToken.substring(roleStart + 1, nodeToken.length() - 1).toUpperCase(Locale.ROOT);
+            }
             if (nodeId.isEmpty() || !Character.isLetter(nodeId.charAt(0))) {
                 continue;
             }
             Matcher matcher = LOCATION.matcher(normalized);
             String task = matcher.find() ? matcher.group(1).toLowerCase(Locale.ROOT) : "UNKNOWN";
             int depth = treeDepth(sourceLine);
-            PlanNode node = new PlanNode(i + 1, raw, nodeId, operatorName(nodeId), task);
+            PlanNode node = new PlanNode(i + 1, raw, nodeId, operatorName(nodeId), nodeRole, task);
             while (parents.size() > depth) {
                 parents.remove(parents.size() - 1);
             }
@@ -430,9 +439,16 @@ public final class TiDBExecutionContextAnalyzer {
     }
 
     private static int treeDepth(String line) {
-        String prefix = line.substring(0, Math.max(0, line.length() - line.trim().length()))
-                .replace('│', ' ').replace('├', ' ').replace('└', ' ').replace('─', ' ');
-        return prefix.length() / 2;
+        int prefixLength = 0;
+        while (prefixLength < line.length()) {
+            char c = line.charAt(prefixLength);
+            if (c == ' ' || c == '│' || c == '├' || c == '└' || c == '─') {
+                prefixLength++;
+            } else {
+                break;
+            }
+        }
+        return prefixLength / 2;
     }
 
     private static Candidate score(PlanExpression expression, TargetPattern target) {
@@ -599,6 +615,30 @@ public final class TiDBExecutionContextAnalyzer {
     }
 
     private static String accessPath(PlanNode node) {
+        Map<String, String> paths = accessPaths(node);
+        if (paths.size() != 1) {
+            return "UNKNOWN";
+        }
+        return paths.values().iterator().next();
+    }
+
+    private static Map<String, String> accessPaths(PlanNode node) {
+        Map<String, String> result = new LinkedHashMap<>();
+        if (node.operator.toLowerCase(Locale.ROOT).contains("join")) {
+            int ordinal = 0;
+            for (PlanNode child : node.children) {
+                String key = child.role.isEmpty() ? "INPUT_" + ordinal : child.role;
+                String path = firstAccessPath(child);
+                result.put(key, path);
+                ordinal++;
+            }
+            return result;
+        }
+        result.put("INPUT", firstAccessPath(node));
+        return result;
+    }
+
+    private static String firstAccessPath(PlanNode node) {
         String operator = node.operator.toLowerCase(Locale.ROOT);
         String text = normalize(node.raw);
         for (String marker : ACCESS_MARKERS) {
@@ -607,7 +647,7 @@ public final class TiDBExecutionContextAnalyzer {
             }
         }
         for (PlanNode child : node.children) {
-            String path = accessPath(child);
+            String path = firstAccessPath(child);
             if (!"UNKNOWN".equals(path)) {
                 return path;
             }
@@ -786,14 +826,16 @@ public final class TiDBExecutionContextAnalyzer {
         private final int line;
         private final String raw;
         private final String operator;
+        private final String role;
         private final String task;
         private final List<PlanNode> children = new ArrayList<>();
         private final List<PlanExpression> expressions = new ArrayList<>();
 
-        private PlanNode(int line, String raw, String nodeId, String operator, String task) {
+        private PlanNode(int line, String raw, String nodeId, String operator, String role, String task) {
             this.line = line;
             this.raw = raw;
             this.operator = operator;
+            this.role = role == null ? "" : role;
             this.task = task;
         }
     }
