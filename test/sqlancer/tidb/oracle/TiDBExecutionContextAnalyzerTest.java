@@ -182,6 +182,40 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void matchesJoinOtherConditionAsAnExpressionInstance() {
+        String plan = "MergeJoin | 12500.00 | root | | inner join, left key:test.l.vp_rowid, "
+                + "right key:test.r.vp_rowid, other cond:gt(plus(cast(test.l.c0, bigint BINARY), "
+                + "cast(test.r.c1, bigint BINARY)), 0)\n";
+
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "(CAST(`c0` AS SIGNED) + CAST(`c1` AS SIGNED))", "UNKNOWN");
+
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+        assertEquals("ROOT", parsed.context().getLocation());
+        assertEquals("MERGEJOIN", parsed.context().getOperator());
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.JOIN_OTHER_CONDITION,
+                parsed.selectedExpression().role());
+        assertTrue(parsed.selectedExpression().expressionText().contains("plus(cast(test.l.c0"));
+        assertTrue(parsed.evidence().contains("expressionRole=JOIN_OTHER_CONDITION"));
+    }
+
+    @Test
+    void keepsProjectionAndHavingExpressionsAsSeparateInstances() throws Exception {
+        TiDBExecutionContextAnalyzer.ParsedContext projection = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                fixture("two_cast_projection"), "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.PROJECTION_ITEM,
+                projection.selectedExpression().role());
+
+        TiDBExecutionContextAnalyzer.ParsedContext having = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                fixture("two_cast_having"), "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.AMBIGUOUS, having.status());
+        assertTrue(having.candidates().stream().anyMatch(candidate ->
+                candidate.expression().role() == TiDBExecutionContextAnalyzer.ExpressionRole.SELECTION_PREDICATE));
+        assertTrue(having.candidates().stream().anyMatch(candidate ->
+                candidate.expression().role() == TiDBExecutionContextAnalyzer.ExpressionRole.PROJECTION_ITEM));
+    }
+
+    @Test
     void realPlansConfirmOnlyRequestedDirection() throws Exception {
         EcstContext root = TiDBExecutionContextAnalyzer.parse(fixture("projection"), "CAST(`v` AS SIGNED)");
         EcstContext cop = TiDBExecutionContextAnalyzer.parse(fixture("selection"), "CAST(`v` AS SIGNED)");

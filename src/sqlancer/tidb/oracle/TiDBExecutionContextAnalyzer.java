@@ -30,11 +30,10 @@ public final class TiDBExecutionContextAnalyzer {
     private static final Set<String> STOP_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             "select", "from", "where", "and", "or", "not", "as", "cast", "convert", "binary", "signed",
             "unsigned", "decimal", "char", "character", "date", "datetime", "time", "true", "false", "null",
-            "is", "in", "between", "like", "case", "when", "then", "else", "end", "collate", "charset")));
-    private static final Set<String> PLAN_WORDS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
-            "root", "cop", "tikv", "tiflash", "selection", "projection", "table", "reader", "fullscan",
-            "indexlookup", "indexrangescan", "tablerowidscan", "scan", "data", "keep", "order", "stats",
-            "pseudo", "join", "othercondition", "condition", "column", "bigint")));
+            "is", "in", "between", "like", "case", "when", "then", "else", "end", "collate", "charset",
+            "bigint", "binary")));
+    private static final Pattern JOIN_FIELD = Pattern.compile(
+            "(?i)(?:^|,\\s*)(equal|other\\s+cond|left\\s+key|right\\s+key):");
     private static final Set<String> ACCESS_MARKERS = Collections.unmodifiableSet(new LinkedHashSet<>(Arrays.asList(
             "indexlookup", "indexreader", "indexfullscan", "indexscan", "tablefullscan", "tablescan",
             "table_scan", "table_reader", "index_reader")));
@@ -174,9 +173,11 @@ public final class TiDBExecutionContextAnalyzer {
         }
         List<Candidate> candidates = new ArrayList<>();
         for (PlanNode node : nodes) {
-            Candidate candidate = score(node, target);
-            if (candidate != null) {
-                candidates.add(candidate);
+            for (PlanExpression expression : node.expressions) {
+                Candidate candidate = score(expression, target);
+                if (candidate != null) {
+                    candidates.add(candidate);
+                }
             }
         }
         if (candidates.isEmpty()) {
@@ -195,21 +196,35 @@ public final class TiDBExecutionContextAnalyzer {
             if (best.score == second.score) {
                 status = allCandidatesRepresentSameOperation(candidates, target)
                         ? MatchStatus.DUPLICATED_SAME_OPERATION : MatchStatus.AMBIGUOUS;
+            } else if (!allCandidatesHaveSameRole(candidates)) {
+                // A projection and a predicate can contain the same expression, but
+                // they are different operation instances until an AST/source
+                // correspondence identifies which one is the target.
+                status = MatchStatus.AMBIGUOUS;
             }
         }
         EcstEvaluationEnvironment environment = parseEvaluationEnvironment(evaluation);
-        EcstContext context = contextFor(best.node, environment, target);
+        EcstContext context = contextFor(best.expression.owner, environment, target);
         String evidence = "sessionMetadata=" + evaluation + "; executorEvaluation=UNOBSERVED; matchStatus=" + status
-                + "; candidates=" + candidates.size() + "; line=" + best.node.line + ", score=" + best.score + ", signals="
-                + String.join("+", best.signals) + ", normalizedTarget=" + target.normalized + ", node="
-                + best.node.raw;
+                + "; candidates=" + candidates.size() + "; line=" + best.expression.owner.line + ", score="
+                + best.score + ", signals=" + String.join("+", best.signals) + ", normalizedTarget="
+                + target.normalized + ", expressionRole=" + best.expression.role + ", expression="
+                + best.expression.expressionText + ", node=" + best.expression.owner.raw;
         String reason = status == MatchStatus.DUPLICATED_SAME_OPERATION ? "duplicated physical instances of one operation"
                 : status == MatchStatus.AMBIGUOUS ? "equally scored candidates represent different operations" : "unique operation match";
-        return new ParsedContext(context, plan, best.node.raw, evidence, status, reason, candidates);
+        return new ParsedContext(context, plan, best.expression.owner.raw, evidence, status, reason, candidates);
     }
 
     private static boolean allCandidatesRepresentSameOperation(List<Candidate> candidates, TargetPattern target) {
         return candidates.stream().allMatch(candidate -> candidate.operationFingerprint.equals(target.operationFingerprint));
+    }
+
+    private static boolean allCandidatesHaveSameRole(List<Candidate> candidates) {
+        if (candidates.isEmpty()) {
+            return true;
+        }
+        ExpressionRole role = candidates.get(0).expression.role;
+        return candidates.stream().allMatch(candidate -> candidate.expression.role == role);
     }
 
     private static List<PlanNode> parseNodes(String plan) {
@@ -241,9 +256,158 @@ public final class TiDBExecutionContextAnalyzer {
                 parents.get(parents.size() - 1).children.add(node);
             }
             parents.add(node);
+            node.expressions.addAll(extractExpressions(node));
             nodes.add(node);
         }
         return nodes;
+    }
+
+    /**
+     * Extracts expression instances from the payload owned by a physical node. The
+     * plan node remains the owner of the expression, but matching and dependency
+     * extraction are performed on the expression text only.
+     */
+    private static List<PlanExpression> extractExpressions(PlanNode node) {
+        String payload = payload(node.raw);
+        if (payload.isEmpty()) {
+            return List.of();
+        }
+        String operator = node.operator.toLowerCase(Locale.ROOT);
+        List<PlanExpression> expressions = new ArrayList<>();
+        if (operator.contains("selection") || operator.contains("filter")) {
+            addExpression(expressions, node, ExpressionRole.SELECTION_PREDICATE, payload);
+            return expressions;
+        }
+        if (operator.contains("projection")) {
+            for (String item : splitTopLevel(payload, ',')) {
+                String expression = stripProjectionAlias(item);
+                addExpression(expressions, node, ExpressionRole.PROJECTION_ITEM, expression);
+            }
+            return expressions;
+        }
+        if (operator.contains("join")) {
+            extractJoinExpressions(expressions, node, payload);
+            return expressions;
+        }
+        if (operator.contains("agg") || operator.contains("aggregation")) {
+            extractAggregationExpressions(expressions, node, payload);
+            return expressions;
+        }
+        return expressions;
+    }
+
+    private static void extractJoinExpressions(List<PlanExpression> expressions, PlanNode node, String payload) {
+        Matcher matcher = JOIN_FIELD.matcher(payload);
+        List<JoinField> fields = new ArrayList<>();
+        while (matcher.find()) {
+            fields.add(new JoinField(matcher.group(1).toLowerCase(Locale.ROOT).replaceAll("\\s+", "_"),
+                    matcher.end()));
+        }
+        for (int i = 0; i < fields.size(); i++) {
+            int end = i + 1 < fields.size() ? fields.get(i + 1).start : payload.length();
+            String value = payload.substring(fields.get(i).start, end).trim();
+            ExpressionRole role = fields.get(i).name.equals("other_cond") ? ExpressionRole.JOIN_OTHER_CONDITION
+                    : ExpressionRole.JOIN_EQUAL_CONDITION;
+            if (role == ExpressionRole.JOIN_EQUAL_CONDITION && value.startsWith("[")) {
+                value = value.substring(1, value.endsWith("]") ? value.length() - 1 : value.length());
+            }
+            for (String expression : splitTopLevel(value, ',')) {
+                addExpression(expressions, node, role, expression);
+            }
+        }
+    }
+
+    private static void extractAggregationExpressions(List<PlanExpression> expressions, PlanNode node,
+            String payload) {
+        String groupBy = fieldValue(payload, "group by:", "funcs:");
+        for (String expression : splitTopLevel(groupBy, ',')) {
+            addExpression(expressions, node, ExpressionRole.GROUP_KEY, expression);
+        }
+        String funcs = fieldValue(payload, "funcs:");
+        for (String expression : splitTopLevel(funcs, ',')) {
+            String item = stripProjectionAlias(expression);
+            addExpression(expressions, node, ExpressionRole.AGGREGATE_ARGUMENT, item);
+            int open = item.indexOf('(');
+            int close = item.lastIndexOf(')');
+            if (open >= 0 && close > open) {
+                addExpression(expressions, node, ExpressionRole.AGGREGATE_ARGUMENT,
+                        item.substring(open + 1, close));
+            }
+        }
+    }
+
+    private static String payload(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        int separator = raw.lastIndexOf('|');
+        if (separator >= 0) {
+            return raw.substring(separator + 1).trim();
+        }
+        Matcher location = LOCATION.matcher(raw);
+        return location.find() ? raw.substring(location.end()).trim() : raw.trim();
+    }
+
+    private static String fieldValue(String payload, String field, String... nextFields) {
+        int start = payload.toLowerCase(Locale.ROOT).indexOf(field.toLowerCase(Locale.ROOT));
+        if (start < 0) {
+            return "";
+        }
+        start += field.length();
+        int end = payload.length();
+        String lower = payload.toLowerCase(Locale.ROOT);
+        for (String next : nextFields) {
+            int candidate = lower.indexOf(next.toLowerCase(Locale.ROOT), start);
+            if (candidate >= 0) {
+                end = Math.min(end, candidate);
+            }
+        }
+        return payload.substring(start, end).trim();
+    }
+
+    private static String stripProjectionAlias(String value) {
+        int arrow = value.indexOf("->");
+        return (arrow >= 0 ? value.substring(0, arrow) : value).trim();
+    }
+
+    private static void addExpression(List<PlanExpression> expressions, PlanNode owner, ExpressionRole role,
+            String expression) {
+        String clean = expression == null ? "" : expression.trim();
+        if (!clean.isEmpty() && !clean.equals(",")) {
+            expressions.add(new PlanExpression(owner, role, clean, normalize(clean)));
+        }
+    }
+
+    private static List<String> splitTopLevel(String value, char delimiter) {
+        if (value == null || value.trim().isEmpty()) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '(' || c == '[') {
+                depth++;
+            } else if (c == ')' || c == ']') {
+                depth = Math.max(0, depth - 1);
+            } else if (c == delimiter && depth == 0) {
+                result.add(value.substring(start, i).trim());
+                start = i + 1;
+            }
+        }
+        result.add(value.substring(start).trim());
+        return result;
+    }
+
+    private static final class JoinField {
+        private final String name;
+        private final int start;
+
+        private JoinField(String name, int start) {
+            this.name = name;
+            this.start = start;
+        }
     }
 
     private static int treeDepth(String line) {
@@ -252,9 +416,9 @@ public final class TiDBExecutionContextAnalyzer {
         return prefix.length() / 2;
     }
 
-    private static Candidate score(PlanNode node, TargetPattern target) {
-        String text = normalize(node.raw);
-        Set<String> nodeReferences = references(node.raw);
+    private static Candidate score(PlanExpression expression, TargetPattern target) {
+        String text = expression.normalized;
+        Set<String> nodeReferences = references(expression.expressionText);
         List<String> signals = new ArrayList<>();
         int score = 0;
         int first = text.indexOf(target.normalized);
@@ -262,12 +426,13 @@ public final class TiDBExecutionContextAnalyzer {
         boolean exactStructure = exact && nodeReferences.equals(target.references);
         // Multiple occurrences (including distinct table columns with the same leaf name) are ambiguous.
         if (exact && text.indexOf(target.normalized, first + target.normalized.length()) >= 0) {
-            return new Candidate(node, Integer.MAX_VALUE, List.of("ambiguous-expression-occurrences"),
+            return new Candidate(expression, Integer.MAX_VALUE, List.of("ambiguous-expression-occurrences"),
                     target.operationFingerprint);
         }
         boolean allReferences = !target.references.isEmpty() && nodeReferences.equals(target.references);
         boolean equivalent = allReferences && equivalentExpressionShape(text, target);
-        boolean predicate = containsPredicateMarker(text) || isPredicateOperator(node.operator);
+        boolean predicate = containsPredicateMarker(text) || expression.role == ExpressionRole.SELECTION_PREDICATE
+                || expression.role == ExpressionRole.JOIN_OTHER_CONDITION;
         if (exactStructure) {
             score += 100;
             signals.add("exact-expression");
@@ -291,7 +456,8 @@ public final class TiDBExecutionContextAnalyzer {
         if (!exactStructure && !equivalent) {
             return null;
         }
-        return new Candidate(node, score, signals, target.operationFingerprint);
+        signals.add("role=" + expression.role.name());
+        return new Candidate(expression, score, signals, target.operationFingerprint);
     }
 
     private static boolean equivalentExpressionShape(String text, TargetPattern target) {
@@ -374,11 +540,6 @@ public final class TiDBExecutionContextAnalyzer {
         return name.toUpperCase(Locale.ROOT);
     }
 
-    private static boolean isPredicateOperator(String operator) {
-        String lower = operator.toLowerCase(Locale.ROOT);
-        return lower.contains("selection") || lower.contains("filter") || lower.contains("condition");
-    }
-
     private static boolean containsPredicateMarker(String text) {
         for (String marker : PREDICATE_MARKERS) {
             if (text.contains(marker)) {
@@ -428,9 +589,8 @@ public final class TiDBExecutionContextAnalyzer {
         while (matcher.find()) {
             String token = matcher.group(1);
             String leaf = token.substring(token.lastIndexOf('.') + 1);
-            String planLeaf = leaf.replaceFirst("_[0-9]+$", "");
             boolean function = matcher.end() < clean.length() && clean.charAt(matcher.end()) == '(';
-            if (!STOP_WORDS.contains(leaf) && !PLAN_WORDS.contains(leaf) && !PLAN_WORDS.contains(planLeaf) && !function
+            if (!STOP_WORDS.contains(leaf) && !function
                     && !leaf.matches("[-+]?\\d+(?:\\.\\d+)?")) {
                 result.add(leaf);
             }
@@ -522,6 +682,10 @@ public final class TiDBExecutionContextAnalyzer {
             return selected;
         }
 
+        PlanExpression selectedExpression() {
+            return selected == null ? null : selected.expression;
+        }
+
         String reason() {
             return reason;
         }
@@ -533,6 +697,7 @@ public final class TiDBExecutionContextAnalyzer {
         private final String operator;
         private final String task;
         private final List<PlanNode> children = new ArrayList<>();
+        private final List<PlanExpression> expressions = new ArrayList<>();
 
         private PlanNode(int line, String raw, String nodeId, String operator, String task) {
             this.line = line;
@@ -542,17 +707,58 @@ public final class TiDBExecutionContextAnalyzer {
         }
     }
 
-    private static final class Candidate {
-        private final PlanNode node;
+    enum ExpressionRole {
+        SELECTION_PREDICATE,
+        PROJECTION_ITEM,
+        JOIN_OTHER_CONDITION,
+        JOIN_EQUAL_CONDITION,
+        GROUP_KEY,
+        AGGREGATE_ARGUMENT
+    }
+
+    static final class PlanExpression {
+        private final PlanNode owner;
+        private final ExpressionRole role;
+        private final String expressionText;
+        private final String fingerprint;
+        private final String normalized;
+
+        private PlanExpression(PlanNode owner, ExpressionRole role, String expressionText, String normalized) {
+            this.owner = owner;
+            this.role = role;
+            this.expressionText = expressionText;
+            this.fingerprint = normalized;
+            this.normalized = normalized;
+        }
+
+        ExpressionRole role() {
+            return role;
+        }
+
+        String expressionText() {
+            return expressionText;
+        }
+
+        String fingerprint() {
+            return fingerprint;
+        }
+    }
+
+    static final class Candidate {
+        private final PlanExpression expression;
         private final int score;
         private final List<String> signals;
         private final String operationFingerprint;
 
-        private Candidate(PlanNode node, int score, List<String> signals, String operationFingerprint) {
-            this.node = node;
+        private Candidate(PlanExpression expression, int score, List<String> signals, String operationFingerprint) {
+            this.expression = expression;
             this.score = score;
             this.signals = signals;
             this.operationFingerprint = operationFingerprint;
+        }
+
+        PlanExpression expression() {
+            return expression;
         }
     }
 
