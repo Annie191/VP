@@ -482,8 +482,14 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     public TiDBVerticalPartitioningOracle(TiDBGlobalState state) {
+        this(state, true);
+    }
+
+    TiDBVerticalPartitioningOracle(TiDBGlobalState state, boolean registerVpStatistics) {
         this.state = state;
-        registerVpStatsShutdownHook();
+        if (registerVpStatistics) {
+            registerVpStatsShutdownHook();
+        }
         TiDBErrors.addExpressionErrors(errors);
         errors.add("This version of TiDB doesn't yet support 'LIMIT & IN/ALL/ANY/SOME subquery'");
         errors.add("You have an error in your SQL syntax");

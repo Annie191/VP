@@ -22,7 +22,6 @@ import sqlancer.common.oracle.ecst.EcstRuleLibrary;
 import sqlancer.common.oracle.ecst.EcstTarget;
 import sqlancer.common.oracle.ecst.EcstTransformationConfig;
 import sqlancer.tidb.TiDBOptions;
-import sqlancer.tidb.TiDBProvider;
 import sqlancer.tidb.TiDBProvider.TiDBGlobalState;
 import sqlancer.tidb.TiDBSchema.TiDBTable;
 
@@ -52,7 +51,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         this.state = state;
         this.capabilities = new TiDBEcstCapabilities(state);
         this.targets = capabilities.supportedTargets(state);
-        this.vp = new TiDBVerticalPartitioningOracle(state);
+        this.vp = new TiDBVerticalPartitioningOracle(state, false);
         this.analyzer = new TiDBExecutionContextAnalyzer(state);
     }
 
@@ -100,7 +99,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         bugCandidates = 0;
         comparisonSkips = 0;
         semanticPreconditionRejects = 0;
-        String lastBaseTable = null;
         while (completed < budget && attempts < budget * 4) {
             attempts++;
             TiDBVerticalPartitioningOracle.EcstSeed seed = null;
@@ -149,7 +147,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 vp.cleanupEcstSeed(seed);
                 continue;
             }
-            lastBaseTable = testCase.getBaseTable();
             EcstObservation observation = analyzer.analyze(testCase.getOriginalQuery(), testCase.getTransformedQuery(),
                     testCase.getTargetExpression(), target);
 
@@ -182,9 +179,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         completedCases = completed;
         if (completed == 0) {
             throw new IgnoreMeException();
-        }
-        if (lastBaseTable != null) {
-            TiDBProvider.replaceVerticalPartitioningTableAfterSuccessfulCheck(state, lastBaseTable);
         }
     }
 
