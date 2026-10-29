@@ -1,12 +1,14 @@
 package sqlancer.tidb.oracle;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
 import sqlancer.tidb.oracle.TiDBVerticalPartitioningOracle.DependencyLayout;
+import sqlancer.common.oracle.ecst.EcstTransformationConfig;
 
 public class TiDBDependencyLayoutTest {
     @Test
@@ -30,5 +32,15 @@ public class TiDBDependencyLayoutTest {
         assertEquals(DependencyLayout.OVERLAPPED,
                 TiDBVerticalPartitioningOracle.classifyDependencyLayoutForTest(List.of("a", "b"),
                         List.of("a", "b"), List.of("b")));
+    }
+
+    @Test
+    void semanticPreconditionRejectsRequestedCrossSideWithOverlappedDependency() {
+        List<String> violations = TiDBVerticalPartitioningOracle.dependencyLayoutViolationsForTest(
+                EcstTransformationConfig.PartitionLayout.CROSS_SIDE, List.of("a", "b"),
+                List.of("a", "b"), List.of("b"));
+        assertFalse(violations.isEmpty());
+        assertFalse(violations.stream().noneMatch(value -> value.contains("differs from actual")));
+        assertFalse(violations.stream().noneMatch(value -> value.contains("replicated")));
     }
 }

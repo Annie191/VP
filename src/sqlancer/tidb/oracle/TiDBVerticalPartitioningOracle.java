@@ -167,7 +167,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         private final List<VpColumn> rightColumns;
         private final List<VpColumn> overlapColumns;
         private final BaseShape baseShape;
-        private final SplitStrategy splitStrategy;
+        private SplitStrategy splitStrategy;
         private final boolean usesPhysicalForeignKey;
         private final String stableOrderStrategy;
         private final long baseRowCount;
@@ -292,6 +292,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         private final VpQueryPair pair;
         private final EcstOperation operation;
         private final EcstAccessPathPreparation accessPathPreparation;
+        private final EcstTransformationConfig appliedConfig;
+        private final DependencyLayout actualLayout;
         private final String targetExpression;
         private final String baseTable;
         private final List<String> targetDependencies;
@@ -300,12 +302,15 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         private final String generationInfo;
 
         private EcstCase(VpQueryPair pair, EcstOperation operation, EcstAccessPathPreparation accessPathPreparation,
-                String targetExpression, String baseTable,
+                EcstTransformationConfig appliedConfig, DependencyLayout actualLayout, String targetExpression,
+                String baseTable,
                 List<String> targetDependencies,
                 List<String> leftDependencies, List<String> rightDependencies, String generationInfo) {
             this.pair = pair;
             this.operation = operation;
             this.accessPathPreparation = accessPathPreparation;
+            this.appliedConfig = appliedConfig;
+            this.actualLayout = actualLayout;
             this.targetExpression = targetExpression;
             this.baseTable = baseTable;
             this.targetDependencies = List.copyOf(targetDependencies);
@@ -332,6 +337,14 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
         public EcstAccessPathPreparation getAccessPathPreparation() {
             return accessPathPreparation;
+        }
+
+        public EcstTransformationConfig getAppliedConfig() {
+            return appliedConfig;
+        }
+
+        public DependencyLayout getActualLayout() {
+            return actualLayout;
         }
 
         public String getDescription() {
@@ -931,12 +944,16 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 column.name)).map(column -> column.name).collect(Collectors.toList());
         List<String> rightDependencies = dependencies.stream().filter(column -> containsColumn(controlled.splitPlan.rightColumns,
                 column.name)).map(column -> column.name).collect(Collectors.toList());
+        DependencyLayout actualLayout = dependencyLayout(seed.targetDependencies, controlled.splitPlan.leftColumns,
+                controlled.splitPlan.rightColumns);
         String generationInfo = "rowCount=" + base.rowCount + ",engine=" + base.engine + ",stableOrder="
-                + base.stableOrderStrategy + ",splitStrategy=" + controlled.splitStrategy + ",leftColumns="
+                + base.stableOrderStrategy + ",splitStrategy=" + controlled.splitStrategy + ",requestedLayout="
+                + config.getPartitionLayout() + ",actualLayout=" + actualLayout + ",leftColumns="
                 + columnNames(controlled.splitPlan.leftColumns) + ",rightColumns="
                 + columnNames(controlled.splitPlan.rightColumns) + ",overlapColumns="
                 + columnNames(controlled.splitPlan.overlapColumns);
-        return new EcstCase(pair, seed.operation, seed.accessPathPreparation, targetExpression, base.tableName,
+        return new EcstCase(pair, seed.operation, seed.accessPathPreparation, config, actualLayout, targetExpression,
+                base.tableName,
                 dependencyNames, leftDependencies, rightDependencies, generationInfo);
     }
 
@@ -951,6 +968,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         schema.rightColumns.addAll(splitPlan.rightColumns);
         schema.overlapColumns.clear();
         schema.overlapColumns.addAll(splitPlan.overlapColumns);
+        schema.splitStrategy = strategy;
         // The schema object is retained by the seed, so the selected split is the one used by the case.
         createPartitionTables(schema, helperEngineCandidate(schemaBaseInfo(schema)));
         populatePartitionTables(schema);
@@ -1155,20 +1173,55 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 || !transformed.contains(ecstCase.pair.schema.rightTable.toLowerCase(java.util.Locale.ROOT))) {
             violations.add("transformed query does not reference both materialized partitions");
         }
-        if (ecstCase.pair.schema.splitStrategy == SplitStrategy.ECST_CROSS_SIDE) {
-            if (ecstCase.targetDependencies.size() < 2) {
+        if (ecstCase.appliedConfig == null) {
+            violations.add("missing applied ECST configuration");
+        } else {
+            violations.addAll(dependencyLayoutViolations(ecstCase.appliedConfig.getPartitionLayout(),
+                    ecstCase.actualLayout, ecstCase.targetDependencies, ecstCase.leftDependencies,
+                    ecstCase.rightDependencies));
+        }
+        return new EcstSemanticPreconditionResult(violations);
+    }
+
+    private static List<String> dependencyLayoutViolations(EcstTransformationConfig.PartitionLayout requested,
+            DependencyLayout actual, List<String> targetDependencies, List<String> leftDependencies,
+            List<String> rightDependencies) {
+        List<String> violations = new ArrayList<>();
+        if (requested == null || actual == null) {
+            violations.add("missing requested or actual dependency layout");
+            return violations;
+        }
+        boolean matches = requested == EcstTransformationConfig.PartitionLayout.CROSS_SIDE
+                ? actual == DependencyLayout.CROSS_SIDE
+                : actual == DependencyLayout.SAME_SIDE || actual == DependencyLayout.SINGLE_SIDE;
+        if (!matches) {
+            violations.add("requested dependency layout " + requested + " differs from actual " + actual);
+        }
+        if (requested == EcstTransformationConfig.PartitionLayout.CROSS_SIDE) {
+            if (targetDependencies == null || new java.util.HashSet<>(targetDependencies).size() < 2) {
                 violations.add("CROSS_SIDE requires at least two distinct dependencies");
             }
-            if (ecstCase.leftDependencies.isEmpty() || ecstCase.rightDependencies.isEmpty()) {
+            if (leftDependencies == null || rightDependencies == null || leftDependencies.isEmpty()
+                    || rightDependencies.isEmpty()) {
                 violations.add("CROSS_SIDE has no dependency on one side");
             }
-            for (String dependency : ecstCase.targetDependencies) {
-                if (ecstCase.leftDependencies.contains(dependency) && ecstCase.rightDependencies.contains(dependency)) {
-                    violations.add("CROSS_SIDE dependency is replicated on both sides: " + dependency);
+            if (targetDependencies != null) {
+                for (String dependency : targetDependencies) {
+                    if (leftDependencies.contains(dependency) && rightDependencies.contains(dependency)) {
+                        violations.add("CROSS_SIDE dependency is replicated on both sides: " + dependency);
+                    }
                 }
             }
         }
-        return new EcstSemanticPreconditionResult(violations);
+        return violations;
+    }
+
+    static List<String> dependencyLayoutViolationsForTest(EcstTransformationConfig.PartitionLayout requested,
+            List<String> targetDependencies, List<String> leftDependencies, List<String> rightDependencies) {
+        DependencyLayout actual = dependencyLayout(targetDependencies,
+                leftDependencies.stream().map(name -> new VpColumn(name, null)).collect(Collectors.toList()),
+                rightDependencies.stream().map(name -> new VpColumn(name, null)).collect(Collectors.toList()));
+        return dependencyLayoutViolations(requested, actual, targetDependencies, leftDependencies, rightDependencies);
     }
 
     private static VpColumn findColumn(List<VpColumn> columns, String name) {
