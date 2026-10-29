@@ -119,4 +119,21 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(candidates.stream().anyMatch(c -> c.getExpressionContext()
                 == EcstTransformationConfig.ExpressionContext.HAVING));
     }
+
+    @Test
+    void accessPathTargetRequiresAnExplicitPreparationPlan() {
+        EcstTarget target = new EcstTarget("access", EcstContextDimension.ACCESS_PATH,
+                "TABLEFULLSCAN", "INDEXLOOKUP");
+        sqlancer.common.oracle.ecst.EcstContext context = new sqlancer.common.oracle.ecst.EcstContext(
+                "ROOT", "SELECTION", "NON_PUSHDOWN", "TABLEFULLSCAN", "UNKNOWN");
+        TiDBVerticalPartitioningOracle.EcstAccessPathPreparation unavailable =
+                new TiDBVerticalPartitioningOracle.EcstAccessPathPreparation("source", List.of("c0"), false,
+                        true, true);
+        TiDBVerticalPartitioningOracle.EcstAccessPathPreparation available =
+                new TiDBVerticalPartitioningOracle.EcstAccessPathPreparation("source", List.of("c0"), true,
+                        true, true);
+        assertTrue(!unavailable.supports(target, context, EcstTransformationConfig.ExpressionContext.WHERE));
+        assertTrue(available.supports(target, context, EcstTransformationConfig.ExpressionContext.WHERE));
+        assertTrue(!available.supports(target, context, EcstTransformationConfig.ExpressionContext.SELECT));
+    }
 }

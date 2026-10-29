@@ -71,8 +71,7 @@ public final class TiDBEcstCapabilities {
             return isOneOf(target.getFrom(), "NON_PUSHDOWN", "PUSHDOWN")
                     && isOneOf(target.getTo(), "NON_PUSHDOWN", "PUSHDOWN");
         case ACCESS_PATH:
-            return isOneOf(target.getFrom(), "TABLEFULLSCAN", "INDEXLOOKUP")
-                    && isOneOf(target.getTo(), "TABLEFULLSCAN", "INDEXLOOKUP");
+            return seed.getAccessPathPreparation().supports(target, seedContext, seed.getExpressionContext());
         default:
             return false;
         }

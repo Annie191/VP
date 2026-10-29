@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import sqlancer.common.oracle.ecst.EcstContext;
+import sqlancer.common.oracle.ecst.EcstOperation;
 
 public class TiDBExecutionContextAnalyzerTest {
     private static final String TARGET = "CAST(`a` AS SIGNED)";
@@ -74,7 +75,10 @@ public class TiDBExecutionContextAnalyzerTest {
 
         assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.DUPLICATED_SAME_OPERATION, parsed.status());
         assertEquals(2, parsed.candidates().size());
-        assertEquals("ROOT", parsed.context().getLocation());
+        assertEquals("UNKNOWN", parsed.context().getLocation());
+        assertEquals("UNKNOWN", parsed.context().getBoundary());
+        assertEquals("SELECTION", parsed.context().getOperator());
+        assertEquals(parsed.candidates().get(0).operationFingerprint(), parsed.candidates().get(1).operationFingerprint());
     }
 
     @Test
@@ -179,6 +183,88 @@ public class TiDBExecutionContextAnalyzerTest {
         EcstContext having = TiDBExecutionContextAnalyzer.parse(fixture("two_cast_having"),
                 "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
         assertEquals("UNKNOWN", having.getLocation());
+    }
+
+    @Test
+    void matchesJoinOtherConditionAsAnExpressionInstance() {
+        String plan = "MergeJoin | 12500.00 | root | | inner join, left key:test.l.vp_rowid, "
+                + "right key:test.r.vp_rowid, other cond:gt(plus(cast(test.l.c0, bigint BINARY), "
+                + "cast(test.r.c1, bigint BINARY)), 0)\n"
+                + "├─TableReader(Build) | 10000.00 | root | | data:TableFullScan\n"
+                + "│ └─TableFullScan | 10000.00 | cop[tikv] | table:l\n"
+                + "└─TableReader(Probe) | 10000.00 | root | | data:TableFullScan\n"
+                + "  └─TableFullScan | 10000.00 | cop[tikv] | table:r\n";
+
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "(CAST(`c0` AS SIGNED) + CAST(`c1` AS SIGNED))", "UNKNOWN");
+
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+        assertEquals("ROOT", parsed.context().getLocation());
+        assertEquals("MERGEJOIN", parsed.context().getOperator());
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.JOIN_OTHER_CONDITION,
+                parsed.selectedExpression().role());
+        assertTrue(parsed.selectedExpression().expressionText().contains("plus(cast(test.l.c0"));
+        assertTrue(parsed.evidence().contains("expressionRole=JOIN_OTHER_CONDITION"));
+        assertTrue(parsed.evidence().contains("BUILD=TABLEFULLSCAN"));
+        assertTrue(parsed.evidence().contains("PROBE=TABLEFULLSCAN"));
+        assertEquals("UNKNOWN", parsed.context().getAccessPath());
+    }
+
+    @Test
+    void operationLineageResolvesQualifiedPartitionColumns() {
+        java.util.Map<String, String> lineage = java.util.Map.of("l.c0", "c0", "r.c1", "c1");
+        EcstOperation operation = new EcstOperation("op-1", "(CAST(`c0` AS SIGNED) + CAST(`c1` AS SIGNED))",
+                java.util.Set.of("c0", "c1"),
+                new sqlancer.common.oracle.ecst.EcstExpressionShape(2, "SIGNED", java.util.Set.of("+"),
+                        java.util.Set.of("c0", "c1")), lineage);
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                "MergeJoin | 1.0 | root | | inner join, other cond:gt(plus(cast(l.c0, bigint BINARY), "
+                        + "cast(r.c1, bigint BINARY)), 0)\n",
+                operation, "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+        assertEquals("ROOT", parsed.context().getLocation());
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.JOIN_OTHER_CONDITION,
+                parsed.selectedExpression().role());
+    }
+
+    @Test
+    void keepsProjectionAndHavingExpressionsAsSeparateInstances() throws Exception {
+        TiDBExecutionContextAnalyzer.ParsedContext projection = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                fixture("two_cast_projection"), "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.PROJECTION_ITEM,
+                projection.selectedExpression().role());
+
+        TiDBExecutionContextAnalyzer.ParsedContext having = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                fixture("two_cast_having"), "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.AMBIGUOUS, having.status());
+        assertTrue(having.candidates().stream().anyMatch(candidate ->
+                candidate.expression().role() == TiDBExecutionContextAnalyzer.ExpressionRole.SELECTION_PREDICATE));
+        assertTrue(having.candidates().stream().anyMatch(candidate ->
+                candidate.expression().role() == TiDBExecutionContextAnalyzer.ExpressionRole.PROJECTION_ITEM));
+    }
+
+    @Test
+    void projectionItemMatchIgnoresSiblingRowIdentityProjection() {
+        String plan = "Projection | 10000.00 | root | | vp_rowid, plus(cast(test.t.c0, bigint BINARY), "
+                + "cast(test.t.c1, bigint BINARY))->Column#5\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "(CAST(`c0` AS SIGNED) + CAST(`c1` AS SIGNED))", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.PROJECTION_ITEM,
+                parsed.selectedExpression().role());
+    }
+
+    @Test
+    void expectedHavingPredicateRoleDisambiguatesProjectionCopy() throws Exception {
+        EcstOperation operation = new EcstOperation("having-op",
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))", java.util.Set.of("a", "b"),
+                new sqlancer.common.oracle.ecst.EcstExpressionShape(2, "SIGNED", java.util.Set.of("+"),
+                        java.util.Set.of("a", "b")), java.util.Map.of(), "SELECTION_PREDICATE");
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                fixture("two_cast_having"), operation, "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.SELECTION_PREDICATE,
+                parsed.selectedExpression().role());
     }
 
     @Test
