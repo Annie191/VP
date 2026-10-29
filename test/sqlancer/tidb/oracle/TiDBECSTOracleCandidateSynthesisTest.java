@@ -26,6 +26,24 @@ public class TiDBECSTOracleCandidateSynthesisTest {
     }
 
     @Test
+    void unsupportedTiFlashTargetsAreExcludedFromDefaultRuntimeTargets() {
+        assertTrue(TiDBECSTOracle.defaultTargets().stream().noneMatch(t -> t.getKey().contains("TIFLASH")));
+    }
+
+    @Test
+    void queryShapeGatesHavingAndSelectContexts() {
+        TiDBECSTOracle.QueryShape plain = TiDBECSTOracle.queryShapeFromSql(
+                "SELECT c0 FROM t0 WHERE c0 > 0", 1);
+        TiDBECSTOracle.QueryShape aggregate = TiDBECSTOracle.queryShapeFromSql(
+                "SELECT c0, COUNT(*) FROM t0 GROUP BY c0 HAVING COUNT(*) > 1", 2);
+
+        assertTrue(!plain.hasAggregation());
+        assertTrue(plain.hasProjection());
+        assertTrue(aggregate.hasAggregation());
+        assertTrue(aggregate.hasProjection());
+    }
+
+    @Test
     void enumeratesTheFullTransformationProductBeforeFiltering() {
         List<EcstTransformationConfig> configurations = TiDBECSTOracle.enumerateConfigurationSpace();
 

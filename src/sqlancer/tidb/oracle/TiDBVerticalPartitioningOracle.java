@@ -1095,6 +1095,13 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         return columns != null && columns.stream().anyMatch(column -> column.name.equalsIgnoreCase(name));
     }
 
+    static DependencyLayout classifyDependencyLayoutForTest(List<String> dependencies, List<String> left,
+            List<String> right) {
+        List<VpColumn> leftColumns = left.stream().map(name -> new VpColumn(name, null)).collect(Collectors.toList());
+        List<VpColumn> rightColumns = right.stream().map(name -> new VpColumn(name, null)).collect(Collectors.toList());
+        return dependencyLayout(dependencies, leftColumns, rightColumns);
+    }
+
     private static final class SplitPlan {
         private final List<VpColumn> leftColumns;
         private final List<VpColumn> rightColumns;

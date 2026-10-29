@@ -145,6 +145,37 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void unknownDoesNotIncreaseSuccessRate() {
+        EcstHistory history = new EcstHistory();
+        double before = history.chooseTransformDecision("target", List.of("config")).getSuccessRate();
+        history.observe("target", "config", EcstShiftStatus.UNKNOWN, Set.of(), 1);
+        double after = history.chooseTransformDecision("target", List.of("config")).getSuccessRate();
+        assertEquals(before, after, 0.000001);
+    }
+
+    @Test
+    public void successFailureUnknownCountersRemainConsistent() {
+        EcstHistory history = new EcstHistory();
+        history.observe("target", "config", EcstShiftStatus.SUCCESS, Set.of(), 1);
+        history.observe("target", "config", EcstShiftStatus.FAILURE, Set.of(), 1);
+        history.observe("target", "config", EcstShiftStatus.UNKNOWN, Set.of(), 1);
+
+        String summary = history.formatSummary();
+        assertTrue(summary.contains("success=1,failure=1,unknown=1,trials=3"));
+    }
+
+    @Test
+    public void differentDirectionsHaveIndependentCoverage() {
+        EcstHistory history = new EcstHistory();
+        history.observe("TIDB_LOCATION_ROOT_TO_COP_TIKV", "config", EcstShiftStatus.SUCCESS,
+                Set.of("LOCATION:ROOT->COP_TIKV"), 1);
+
+        assertEquals(1, history.getTargetCoverage("TIDB_LOCATION_ROOT_TO_COP_TIKV"));
+        assertEquals(0, history.getTargetCoverage("TIDB_LOCATION_COP_TIKV_TO_ROOT"));
+        assertEquals(0, history.getTargetCoverage("TIDB_ACCESS_TABLEFULLSCAN_TO_INDEXLOOKUP"));
+    }
+
+    @Test
     public void featureFeedbackUsesAHierarchicalFallback() {
         EcstHistory history = new EcstHistory();
         EcstFeature feature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "NUMERIC_DEPENDENCY");
