@@ -372,18 +372,31 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     public static final class EcstComparison {
+        private final boolean comparable;
         private final boolean equal;
+        private final String reason;
         private final String originalSample;
         private final String transformedSample;
 
-        private EcstComparison(boolean equal, String originalSample, String transformedSample) {
+        private EcstComparison(boolean comparable, boolean equal, String reason, String originalSample,
+                String transformedSample) {
+            this.comparable = comparable;
             this.equal = equal;
+            this.reason = reason == null ? "" : reason;
             this.originalSample = originalSample;
             this.transformedSample = transformedSample;
         }
 
+        public boolean isComparable() {
+            return comparable;
+        }
+
         public boolean isEqual() {
             return equal;
+        }
+
+        public String getReason() {
+            return reason;
         }
 
         public String getOriginalSample() {
@@ -833,14 +846,79 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
     public EcstComparison compareEcstCase(EcstCase ecstCase) throws Exception {
         VpQueryPair pair = ecstCase.pair;
-        for (String setup : pair.extraSetupStatements) {
-            executeNoSchemaRefresh(setup);
-            pair.schema.setupStatements.add(setup);
+        try {
+            for (String setup : pair.extraSetupStatements) {
+                executeNoSchemaRefresh(setup);
+                pair.schema.setupStatements.add(setup);
+            }
+            RowIdValidation rowIds = validateRowIdBijection(pair.schema);
+            if (!rowIds.valid()) {
+                return incomparable("row-id bijection failed: " + rowIds.reason);
+            }
+            QueryResultMultiset original = getResultMultiset(pair.singleQuery);
+            QueryResultMultiset transformed = getResultMultiset(pair.splitQuery);
+            return comparable(resultMultisetsMatch(original, transformed), sample(original.rows),
+                    sample(transformed.rows), "result multisets compared");
+        } catch (IgnoreMeException | SQLException failure) {
+            return incomparable("result comparison unavailable: " + failure.getMessage());
         }
-        QueryResultMultiset original = getResultMultiset(pair.singleQuery);
-        QueryResultMultiset transformed = getResultMultiset(pair.splitQuery);
-        return new EcstComparison(resultMultisetsMatch(original, transformed), sample(original.rows),
-                sample(transformed.rows));
+    }
+
+    private EcstComparison comparable(boolean equal, String originalSample, String transformedSample, String reason) {
+        return new EcstComparison(true, equal, reason, originalSample, transformedSample);
+    }
+
+    private EcstComparison incomparable(String reason) {
+        return new EcstComparison(false, false, reason, "", "");
+    }
+
+    private static final class RowIdValidation {
+        private final boolean valid;
+        private final String reason;
+
+        private RowIdValidation(boolean valid, String reason) {
+            this.valid = valid;
+            this.reason = reason;
+        }
+
+        private boolean valid() {
+            return valid;
+        }
+    }
+
+    private RowIdValidation validateRowIdBijection(VpSchema schema) throws SQLException {
+        long sourceCount = countRows(schema.sourceTable);
+        long leftCount = countRows(schema.leftTable);
+        long rightCount = countRows(schema.rightTable);
+        if (sourceCount != leftCount || sourceCount != rightCount) {
+            return new RowIdValidation(false, "row counts source=" + sourceCount + ", left=" + leftCount
+                    + ", right=" + rightCount);
+        }
+        long missingRight = countMissingRowIds(schema.leftTable, schema.rightTable);
+        if (missingRight != 0) {
+            return new RowIdValidation(false, "left-to-right missing row ids=" + missingRight);
+        }
+        long missingLeft = countMissingRowIds(schema.rightTable, schema.leftTable);
+        if (missingLeft != 0) {
+            return new RowIdValidation(false, "right-to-left missing row ids=" + missingLeft);
+        }
+        return new RowIdValidation(true, "row-id bijection verified");
+    }
+
+    private long countRows(String table) throws SQLException {
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM " + quote(table))) {
+            return result.next() ? result.getLong(1) : -1;
+        }
+    }
+
+    private long countMissingRowIds(String leftTable, String rightTable) throws SQLException {
+        String sql = "SELECT COUNT(*) FROM " + quote(leftTable) + " l LEFT JOIN " + quote(rightTable)
+                + " r ON l." + quote(ROW_ID) + " = r." + quote(ROW_ID) + " WHERE r." + quote(ROW_ID)
+                + " IS NULL";
+        try (Statement statement = state.getConnection().createStatement(); ResultSet result = statement.executeQuery(sql)) {
+            return result.next() ? result.getLong(1) : -1;
+        }
     }
 
     public void cleanupEcstCase(EcstCase ecstCase) throws Exception {

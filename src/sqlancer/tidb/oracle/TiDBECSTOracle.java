@@ -46,6 +46,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int creationSkips;
     private int executionFailures;
     private int bugCandidates;
+    private int comparisonSkips;
 
     public TiDBECSTOracle(TiDBGlobalState state) {
         this.state = state;
@@ -97,6 +98,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         creationSkips = 0;
         executionFailures = 0;
         bugCandidates = 0;
+        comparisonSkips = 0;
         semanticPreconditionRejects = 0;
         String lastBaseTable = null;
         while (completed < budget && attempts < budget * 4) {
@@ -154,7 +156,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             boolean keepArtifacts = false;
             try {
                 TiDBVerticalPartitioningOracle.EcstComparison comparison = vp.compareEcstCase(testCase);
-                // A result comparison, including a mismatch, is a completed test pair.
+                if (!comparison.isComparable()) {
+                    comparisonSkips++;
+                    continue;
+                }
+                // A comparable result comparison, including a mismatch, is a completed test pair.
                 completed++;
                 completedCases = completed;
                 if (!comparison.isEqual()) {
@@ -488,7 +494,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + testCase.getRightDependencies() + System.lineSeparator() + "transformedQuery="
                 + testCase.getTransformedQuery() + System.lineSeparator() + "originalSample="
                 + comparison.getOriginalSample() + System.lineSeparator() + "transformedSample="
-                + comparison.getTransformedSample() + System.lineSeparator() + "history="
+                + comparison.getTransformedSample() + System.lineSeparator() + "comparisonReason="
+                + comparison.getReason() + System.lineSeparator() + "history="
                 + history.formatSummary() + System.lineSeparator() + "generationInfo="
                 + testCase.getGenerationInfo() + System.lineSeparator() + "materializationSetup="
                 + testCase.getMaterializationSetup();
@@ -510,6 +517,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             writer.write("candidateSetSkips=" + candidateSetSkips + System.lineSeparator());
             writer.write("creationSkips=" + creationSkips + System.lineSeparator());
             writer.write("executionFailures=" + executionFailures + System.lineSeparator());
+            writer.write("comparisonSkips=" + comparisonSkips + System.lineSeparator());
             writer.write("bugCandidates=" + bugCandidates + System.lineSeparator());
             writer.write("budgetComplete=" + (completedCases >= requestedBudget) + System.lineSeparator());
             writer.write(history.formatSummary());
