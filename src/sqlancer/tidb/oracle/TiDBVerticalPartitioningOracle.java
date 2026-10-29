@@ -27,6 +27,7 @@ import sqlancer.IgnoreMeException;
 import sqlancer.Main;
 import sqlancer.Randomly;
 import sqlancer.common.oracle.TestOracle;
+import sqlancer.common.oracle.ecst.EcstFeature;
 import sqlancer.common.oracle.ecst.EcstTransformationConfig;
 import sqlancer.common.query.ExpectedErrors;
 import sqlancer.common.query.SQLQueryAdapter;
@@ -276,6 +277,73 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
         public List<String> getMaterializationSetup() {
             return List.copyOf(pair.schema.setupStatements);
+        }
+    }
+
+    /**
+     * The untransformed ECST input.  The source relation and its query are created before
+     * any target or transformation configuration is selected.  The schema is retained
+     * internally so that the selected transformation can reuse the same data snapshot.
+     */
+    public static final class EcstSeed {
+        private final String baseTable;
+        private final String sourceTable;
+        private final String originalQuery;
+        private final String targetExpression;
+        private final List<String> targetDependencies;
+        private final TiDBECSTOracle.QueryShape shape;
+        private final EcstTransformationConfig.ExpressionContext expressionContext;
+        private final BaseTableInfo base;
+        private final VpSchema schema;
+
+        private EcstSeed(String baseTable, String sourceTable, String originalQuery, String targetExpression,
+                List<String> targetDependencies, TiDBECSTOracle.QueryShape shape,
+                EcstTransformationConfig.ExpressionContext expressionContext, BaseTableInfo base, VpSchema schema) {
+            this.baseTable = baseTable;
+            this.sourceTable = sourceTable;
+            this.originalQuery = originalQuery;
+            this.targetExpression = targetExpression;
+            this.targetDependencies = List.copyOf(targetDependencies);
+            this.shape = shape;
+            this.expressionContext = expressionContext;
+            this.base = base;
+            this.schema = schema;
+        }
+
+        public String getBaseTable() {
+            return baseTable;
+        }
+
+        public String getSourceTable() {
+            return sourceTable;
+        }
+
+        public String getOriginalQuery() {
+            return originalQuery;
+        }
+
+        public String getTargetExpression() {
+            return targetExpression;
+        }
+
+        public List<String> getTargetDependencies() {
+            return targetDependencies;
+        }
+
+        public TiDBECSTOracle.QueryShape getShape() {
+            return shape;
+        }
+
+        public EcstTransformationConfig.ExpressionContext getExpressionContext() {
+            return expressionContext;
+        }
+
+        /** A stable feature vector for target scheduling before a transformed case exists. */
+        public EcstFeature features() {
+            String expressionKind = targetExpression.toUpperCase(Locale.ROOT).contains("CAST(") ? "CAST_ARITHMETIC"
+                    : "ARITHMETIC";
+            String dependencyKind = targetDependencies.size() > 1 ? "CROSS_SIDE_DEPENDENCY" : "SINGLE_DEPENDENCY";
+            return new EcstFeature("TiDB", expressionKind, expressionContext.name(), dependencyKind);
         }
     }
 
@@ -556,13 +624,98 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         }
     }
 
-    /**
-     * Creates one bounded, dependency-aware ECST case while reusing the existing VP materializer and reconstruction
-     * code. The random VP schedule never calls this method.
-     */
-    public EcstCase createEcstCase(EcstTransformationConfig config) throws Exception {
+    /** Materializes only the source snapshot used by an ECST seed. */
+    private VpSchema materializeSourceSeed(BaseTableInfo base, SplitPlan splitPlan, SplitStrategy splitStrategy)
+            throws Exception {
+        String prefix = "vp_" + sanitizeIdentifier(state.getDatabaseName()) + "_" + ORACLE_RUN_ID.incrementAndGet()
+                + "_";
+        VpSchema schema = new VpSchema(prefix, base.tableName, prefix + "source", prefix + "l", prefix + "r",
+                prefix + "v", prefix + "joined", base.columns, new ArrayList<>(splitPlan.leftColumns),
+                new ArrayList<>(splitPlan.rightColumns), new ArrayList<>(splitPlan.overlapColumns), base.shape,
+                splitStrategy, false, base.stableOrderStrategy, base.rowCount, base.engine);
+        try {
+            initializeColumnCollations(schema);
+            dropArtifacts(schema);
+            createSourceTable(schema, helperEngineCandidate(base));
+            populateSourceTable(schema, base.stableOrderStrategy);
+            copyBaseSchemaObjectsToSource(schema);
+            return schema;
+        } catch (Throwable failure) {
+            try {
+                dropArtifacts(schema);
+            } catch (Exception cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+            if (failure instanceof Exception) {
+                throw (Exception) failure;
+            }
+            if (failure instanceof Error) {
+                throw (Error) failure;
+            }
+            throw new RuntimeException(failure);
+        }
+    }
+
+    /** Creates the source relation and original ECST query without applying a transformation. */
+    public EcstSeed createEcstSeed() throws Exception {
+        EcstTransformationConfig.ExpressionContext context = Randomly.fromOptions(
+                EcstTransformationConfig.ExpressionContext.WHERE,
+                EcstTransformationConfig.ExpressionContext.SELECT,
+                EcstTransformationConfig.ExpressionContext.HAVING);
+        return createEcstSeed(context);
+    }
+
+    private EcstSeed createEcstSeed(EcstTransformationConfig.ExpressionContext context) throws Exception {
+        resetSessionForVerticalPartitioningOracle();
+        TiDBProvider.ensureVerticalPartitioningBaseTables(state, 2);
+        BaseTableInfo base = selectBaseTable();
+        List<VpColumn> numeric = base.columns.stream().filter(c -> c.type.isNumeric()).collect(Collectors.toList());
+        List<VpColumn> dependencies = numeric.size() >= 2 ? numeric : base.columns;
+        if (dependencies.isEmpty()) {
+            throw new IgnoreMeException();
+        }
+        if (dependencies.size() > 2) {
+            dependencies = dependencies.subList(0, 2);
+        }
+        ControlledSplitPlan initial = createControlledSplitPlan(base.columns, dependencies,
+                EcstTransformationConfig.PartitionLayout.SAME_SIDE);
+        VpSchema schema = materializeSourceSeed(base, initial.splitPlan, initial.splitStrategy);
+        String left = quote(dependencies.get(0).name);
+        String right = quote(dependencies.size() > 1 ? dependencies.get(1).name : dependencies.get(0).name);
+        String targetExpression = "(CAST(" + left + " AS SIGNED) + CAST(" + right + " AS SIGNED))";
+        String originalQuery = buildEcstSeedQuery(schema, targetExpression, context);
+        TiDBECSTOracle.QueryShape shape = TiDBECSTOracle.queryShapeFromSql(originalQuery, dependencies.size());
+        List<String> dependencyNames = dependencies.stream().map(column -> column.name).collect(Collectors.toList());
+        return new EcstSeed(base.tableName, schema.sourceTable, originalQuery, targetExpression, dependencyNames, shape,
+                context, base, schema);
+    }
+
+    private String buildEcstSeedQuery(VpSchema schema, String targetExpression,
+            EcstTransformationConfig.ExpressionContext context) {
+        String predicate = targetExpression + " > 0";
+        switch (context) {
+        case WHERE:
+            return "SELECT " + quote(ROW_ID) + " FROM " + quote(schema.sourceTable) + " WHERE " + predicate;
+        case SELECT:
+            return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
+                    + quote(schema.sourceTable);
+        case HAVING:
+            return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
+                    + quote(schema.sourceTable) + " GROUP BY " + quote(ROW_ID) + ", " + targetExpression
+                    + " HAVING " + predicate;
+        default:
+            throw new IllegalArgumentException("Unsupported ECST seed context: " + context);
+        }
+    }
+
+    /** Applies the selected ECST transformation to an existing source seed. */
+    public EcstCase applyEcstTransformation(EcstSeed seed, EcstTransformationConfig config) throws Exception {
+        Objects.requireNonNull(seed, "seed");
         if (config.getRepresentation() != EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
                 || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.ON) {
+            throw new IgnoreMeException();
+        }
+        if (config.getExpressionContext() != seed.expressionContext) {
             throw new IgnoreMeException();
         }
         ReconstructionStrategy reconstructionStrategy;
@@ -576,17 +729,10 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         default:
             throw new IgnoreMeException();
         }
-        resetSessionForVerticalPartitioningOracle();
-        TiDBProvider.ensureVerticalPartitioningBaseTables(state, 2);
-        BaseTableInfo base = selectBaseTable();
-        List<VpColumn> numeric = base.columns.stream().filter(c -> c.type.isNumeric()).collect(Collectors.toList());
-        List<VpColumn> dependencies = numeric.size() >= 2 ? numeric : base.columns;
-        if (dependencies.isEmpty()) {
-            throw new IgnoreMeException();
-        }
-        if (dependencies.size() > 2) {
-            dependencies = dependencies.subList(0, 2);
-        }
+        BaseTableInfo base = seed.base;
+        List<VpColumn> dependencies = seed.schema.columns.stream()
+                .filter(column -> seed.targetDependencies.stream().anyMatch(name -> name.equals(column.name)))
+                .collect(Collectors.toList());
         if (config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE
                 && dependencies.size() < 2) {
             throw new IgnoreMeException();
@@ -594,34 +740,15 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
         ControlledSplitPlan controlled = createControlledSplitPlan(base.columns, dependencies,
                 config.getPartitionLayout());
-        VpSchema vp = materializeTable(base, controlled.splitPlan, controlled.splitStrategy, false);
-        String left = quote(dependencies.get(0).name);
-        String right = quote(dependencies.size() > 1 ? dependencies.get(1).name : dependencies.get(0).name);
-        String targetExpression = "(CAST(" + left + " AS SIGNED) + CAST(" + right + " AS SIGNED))";
-        String predicate = targetExpression + " > 0";
-        String singleQuery;
-        switch (config.getExpressionContext()) {
-        case WHERE:
-            singleQuery = "SELECT " + quote(ROW_ID) + " FROM " + vp.sourceTable + " WHERE " + predicate;
-            break;
-        case SELECT:
-            singleQuery = "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
-                    + vp.sourceTable;
-            break;
-        case HAVING:
-            singleQuery = "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
-                    + vp.sourceTable + " GROUP BY " + quote(ROW_ID) + ", " + targetExpression + " HAVING "
-                    + predicate;
-            break;
-        default:
-            throw new IgnoreMeException();
-        }
+        VpSchema vp = reconfigureSeedPartitions(seed.schema, controlled.splitPlan, controlled.splitStrategy);
+        String targetExpression = seed.targetExpression;
+        String singleQuery = seed.originalQuery;
         List<String> extraSetup = new ArrayList<>();
         String relation = buildReconstructionRelation(vp, reconstructionStrategy, extraSetup);
         String splitQuery = replaceSourceFrom(singleQuery, vp.sourceTable, relation);
         VpQueryPair pair = new VpQueryPair(vp, reconstructionStrategy, singleQuery, splitQuery, extraSetup,
                 "ECST config=" + config.stableKey() + ", target=" + targetExpression, false);
-        List<String> dependencyNames = dependencies.stream().map(column -> column.name).collect(Collectors.toList());
+        List<String> dependencyNames = seed.targetDependencies;
         List<String> leftDependencies = dependencies.stream().filter(column -> containsColumn(controlled.splitPlan.leftColumns,
                 column.name)).map(column -> column.name).collect(Collectors.toList());
         List<String> rightDependencies = dependencies.stream().filter(column -> containsColumn(controlled.splitPlan.rightColumns,
@@ -633,6 +760,51 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 + columnNames(controlled.splitPlan.overlapColumns);
         return new EcstCase(pair, targetExpression, base.tableName,
                 dependencyNames, leftDependencies, rightDependencies, generationInfo);
+    }
+
+    private VpSchema reconfigureSeedPartitions(VpSchema schema, SplitPlan splitPlan, SplitStrategy strategy)
+            throws Exception {
+        executeNoSchemaRefresh("DROP TABLE IF EXISTS " + quote(schema.rightTable));
+        executeNoSchemaRefresh("DROP TABLE IF EXISTS " + quote(schema.leftTable));
+        schema.leftColumns.clear();
+        schema.leftColumns.addAll(splitPlan.leftColumns);
+        schema.rightColumns.clear();
+        schema.rightColumns.addAll(splitPlan.rightColumns);
+        schema.overlapColumns.clear();
+        schema.overlapColumns.addAll(splitPlan.overlapColumns);
+        // The schema object is retained by the seed, so the selected split is the one used by the case.
+        createPartitionTables(schema, helperEngineCandidate(schemaBaseInfo(schema)));
+        populatePartitionTables(schema);
+        maybeCreateHelperIndexes(schema);
+        schema.setupStatements.add("ECST_RECONFIGURE_SPLIT=" + strategy);
+        return schema;
+    }
+
+    private BaseTableInfo schemaBaseInfo(VpSchema schema) {
+        return new BaseTableInfo(schema.baseTable, schema.columns, schema.baseShape, schema.stableOrderStrategy,
+                schema.baseRowCount, schema.baseEngine);
+    }
+
+    /** Drops all source and helper objects owned by a seed. */
+    public void cleanupEcstSeed(EcstSeed seed) throws Exception {
+        if (seed != null && seed.schema != null) {
+            dropArtifacts(seed.schema);
+        }
+    }
+
+    /** Compatibility wrapper for callers that still use the old one-stage API. */
+    public EcstCase createEcstCase(EcstTransformationConfig config) throws Exception {
+        if (config.getRepresentation() != EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
+                || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.ON) {
+            throw new IgnoreMeException();
+        }
+        EcstSeed seed = createEcstSeed(config.getExpressionContext());
+        try {
+            return applyEcstTransformation(seed, config);
+        } catch (Exception | Error failure) {
+            cleanupEcstSeed(seed);
+            throw failure;
+        }
     }
 
     public EcstComparison compareEcstCase(EcstCase ecstCase) throws Exception {
@@ -1763,10 +1935,14 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
     private String replaceSourceFrom(String singleQuery, String sourceTable, String relation) {
         String needle = " FROM " + sourceTable;
-        if (!singleQuery.contains(needle)) {
-            throw new IgnoreMeException();
+        if (singleQuery.contains(needle)) {
+            return singleQuery.replace(needle, " FROM " + relation);
         }
-        return singleQuery.replace(needle, " FROM " + relation);
+        String quotedNeedle = " FROM " + quote(sourceTable);
+        if (singleQuery.contains(quotedNeedle)) {
+            return singleQuery.replace(quotedNeedle, " FROM " + relation);
+        }
+        throw new IgnoreMeException();
     }
 
     private String buildReconstructionRelation(VpSchema vp, ReconstructionStrategy strategy, List<String> extraSetup)

@@ -15,6 +15,7 @@ import java.util.stream.Collectors;
 import sqlancer.IgnoreMeException;
 import sqlancer.Main;
 import sqlancer.common.oracle.TestOracle;
+import sqlancer.common.oracle.ecst.EcstContext;
 import sqlancer.common.oracle.ecst.EcstContextDimension;
 import sqlancer.common.oracle.ecst.EcstFeature;
 import sqlancer.common.oracle.ecst.EcstHistory;
@@ -95,28 +96,50 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         String lastBaseTable = null;
         while (completed < budget && attempts < budget * 4) {
             attempts++;
-            Map<String, List<EcstTransformationConfig>> candidateSets = synthesizeCandidateSets();
-            if (candidateSets.isEmpty()) {
-                candidateSetSkips++;
-                continue;
-            }
-            EcstTarget target = chooseTarget(candidateSets);
-            List<EcstTransformationConfig> applicable = candidateSets.get(target.getKey());
-            EcstTransformationConfig config = chooseConfig(target, applicable);
-            EcstFeature feature;
-            long started = System.nanoTime();
-            TiDBVerticalPartitioningOracle.EcstCase testCase;
+            TiDBVerticalPartitioningOracle.EcstSeed seed = null;
+            EcstContext seedContext;
             try {
-                testCase = vp.createEcstCase(config);
+                seed = vp.createEcstSeed();
+                seedContext = analyzer.extractContext(seed.getOriginalQuery(), seed.getTargetExpression());
             } catch (IgnoreMeException | IllegalArgumentException ignored) {
                 creationSkips++;
                 continue;
+            } catch (Exception failure) {
+                creationSkips++;
+                if (seed != null) {
+                    vp.cleanupEcstSeed(seed);
+                }
+                throw failure;
+            }
+            List<EcstTarget> validTargets = supportedTargets(seed, seedContext);
+            Map<String, List<EcstTransformationConfig>> candidateSets = synthesizeCandidateSets(seed, seedContext,
+                    validTargets);
+            if (candidateSets.isEmpty()) {
+                candidateSetSkips++;
+                vp.cleanupEcstSeed(seed);
+                continue;
+            }
+            EcstTarget target = chooseTarget(candidateSets, seed.features());
+            List<EcstTransformationConfig> applicable = candidateSets.get(target.getKey());
+            EcstTransformationConfig config = chooseConfig(target, applicable);
+            EcstFeature feature = seed.features();
+            long started = System.nanoTime();
+            TiDBVerticalPartitioningOracle.EcstCase testCase;
+            try {
+                testCase = vp.applyEcstTransformation(seed, config);
+            } catch (IgnoreMeException | IllegalArgumentException ignored) {
+                creationSkips++;
+                vp.cleanupEcstSeed(seed);
+                continue;
+            } catch (Exception failure) {
+                vp.cleanupEcstSeed(seed);
+                throw failure;
             }
             TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult semantic = vp
                     .checkSemanticPreconditions(testCase);
             if (!semantic.isValid()) {
                 semanticPreconditionRejects++;
-                vp.cleanupEcstCase(testCase);
+                vp.cleanupEcstSeed(seed);
                 continue;
             }
             feature = featureFor(testCase, config);
@@ -142,7 +165,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 history.observe(target.getKey(), config.stableKey(), observation.getStatus(),
                         observation.getObservedShifts(), System.nanoTime() - started, feature);
                 if (!keepArtifacts) {
-                    vp.cleanupEcstCase(testCase);
+                    vp.cleanupEcstSeed(seed);
                 }
             }
         }
@@ -155,11 +178,12 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         }
     }
 
-    private Map<String, List<EcstTransformationConfig>> synthesizeCandidateSets() {
+    Map<String, List<EcstTransformationConfig>> synthesizeCandidateSets(
+            TiDBVerticalPartitioningOracle.EcstSeed seed, EcstContext seedContext, List<EcstTarget> validTargets) {
         Map<String, List<EcstTransformationConfig>> result = new LinkedHashMap<>();
         List<String> synthesis = new ArrayList<>();
-        QueryShape shape = inspectQueryShape();
-        for (EcstTarget target : targets) {
+        QueryShape shape = seed.getShape();
+        for (EcstTarget target : validTargets) {
             int generated = 0;
             int ruleAccepted = 0;
             int legal = 0;
@@ -175,7 +199,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     continue;
                 }
                 legal++;
-                if (!isApplicableToTiDb(config, shape)) {
+                if (!isApplicableToTiDb(config, shape, seedContext, seed.getExpressionContext())) {
                     continue;
                 }
                 applicableCount++;
@@ -196,7 +220,26 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         return result;
     }
 
-    private QueryShape inspectQueryShape() {
+    /** Resolves S_valid from the actual seed execution context, including direction. */
+    List<EcstTarget> supportedTargets(TiDBVerticalPartitioningOracle.EcstSeed seed, EcstContext context) {
+        if (seed == null || context == null) {
+            return List.of();
+        }
+        List<EcstTarget> valid = new ArrayList<>();
+        for (EcstTarget target : targets) {
+            String observed = context.value(target.getDimension());
+            if ("UNKNOWN".equals(observed)) {
+                continue;
+            }
+            if (target.getFrom().equals(observed)) {
+                valid.add(target);
+            }
+        }
+        return valid;
+    }
+
+    /** Compatibility helper retained for diagnostics; production synthesis always consumes a seed. */
+    QueryShape inspectQueryShape() {
         int tables = 0;
         int maxColumns = 0;
         try {
@@ -334,6 +377,18 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     }
 
     /** TiDB currently has a VP materializer for these contexts; other legal configs remain visible as future work. */
+    private static boolean isApplicableToTiDb(EcstTransformationConfig config, QueryShape shape,
+            EcstContext seedContext, EcstTransformationConfig.ExpressionContext seedExpressionContext) {
+        return config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
+                && (config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
+                        || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE)
+                && config.getExpressionContext() == seedExpressionContext
+                && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.SELECT
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING)
+                && shape.hasBaseTable;
+    }
+
     private static boolean isApplicableToTiDb(EcstTransformationConfig config, QueryShape shape) {
         return config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
                 && (config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
@@ -344,7 +399,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 && shape.hasBaseTable;
     }
 
-    static final class QueryShape {
+    public static final class QueryShape {
         private final boolean hasBaseTable;
         private final boolean hasProjection;
         private final boolean hasAggregation;
@@ -370,33 +425,45 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     + hasAggregation + ",join=" + hasJoin + ",maxDependencies=" + maxDependencies;
         }
 
-        boolean hasAggregation() {
+        public boolean hasAggregation() {
             return hasAggregation;
         }
 
-        boolean hasProjection() {
+        public boolean hasProjection() {
             return hasProjection;
         }
 
-        boolean hasJoin() {
+        public boolean hasJoin() {
             return hasJoin;
+        }
+
+        public boolean hasBaseTable() {
+            return hasBaseTable;
+        }
+
+        public int getMaxDependencies() {
+            return maxDependencies;
         }
     }
 
-    private EcstTarget chooseTarget(Map<String, List<EcstTransformationConfig>> candidateSets) {
+    private EcstTarget chooseTarget(Map<String, List<EcstTransformationConfig>> candidateSets, EcstFeature targetFeature) {
         Map<String, List<String>> keys = new LinkedHashMap<>();
         for (Map.Entry<String, List<EcstTransformationConfig>> entry : candidateSets.entrySet()) {
             keys.put(entry.getKey(), entry.getValue().stream().map(EcstTransformationConfig::stableKey)
                     .collect(Collectors.toList()));
         }
-        EcstFeature targetFeature = featureForTargetSelection(candidateSets);
         String chosen = history.chooseTargetDecision(keys, targetFeature).getKey();
         for (EcstTarget target : targets) {
             if (target.getKey().equals(chosen)) {
                 return target;
             }
         }
-        return targets.get(state.getRandomly().getInteger(0, targets.size()));
+        for (EcstTarget target : targets) {
+            if (candidateSets.containsKey(target.getKey())) {
+                return target;
+            }
+        }
+        throw new IllegalStateException("Target scheduler selected a target outside S_valid: " + chosen);
     }
 
     private EcstTransformationConfig chooseConfig(EcstTarget target, List<EcstTransformationConfig> applicable) {
@@ -449,19 +516,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         }
         return dependencies.stream().allMatch(testCase.getLeftDependencies()::contains)
                 ? "SAME_SIDE_DEPENDENCY" : "INVALID_DEPENDENCY_LAYOUT";
-    }
-
-    private EcstFeature featureForTargetSelection(Map<String, List<EcstTransformationConfig>> candidateSets) {
-        String clause = "UNKNOWN";
-        for (List<EcstTransformationConfig> configs : candidateSets.values()) {
-            if (!configs.isEmpty()) {
-                clause = configs.get(0).getExpressionContext().name();
-                break;
-            }
-        }
-        // The controlled ECST generator has a stable CAST arithmetic seed operation. Keep dependency
-        // layout coarse here because the concrete layout is selected only after the target is chosen.
-        return new EcstFeature("TiDB", "CAST_ARITHMETIC", clause, "UNKNOWN_DEPENDENCY");
     }
 
     private EcstFeature featureForConfig(EcstTransformationConfig config) {

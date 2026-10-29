@@ -47,6 +47,17 @@ public final class TiDBExecutionContextAnalyzer {
         return analyze(originalQuery, transformedQuery, targetExpression, null);
     }
 
+    /** Extracts the execution context of the untransformed seed query. */
+    public EcstContext extractContext(String originalQuery, String targetExpression) {
+        try {
+            ParsedContext parsed = parsePlan(explain(originalQuery), targetExpression,
+                    readEvaluationContext(targetExpression));
+            return parsed.context;
+        } catch (SQLException ignored) {
+            return new EcstContext("UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN");
+        }
+    }
+
     public EcstObservation analyze(String originalQuery, String transformedQuery, String targetExpression,
             EcstTarget target) {
         String originalPlan = "";
