@@ -105,6 +105,10 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         ROLLUP, CORRELATED_SUBQUERY, GROUP_CONCAT, ASYMMETRIC_INDEX, CHARSET_COLLATION_COLUMN, BOUNDARY_MUTATION
     }
 
+    public enum DependencyLayout {
+        SINGLE_SIDE, SAME_SIDE, CROSS_SIDE, OVERLAPPED, INVALID
+    }
+
     private static final List<ReconstructionStrategy> SUPPORTED_RECONSTRUCTION_STRATEGIES = List.of(
             ReconstructionStrategy.JOIN, ReconstructionStrategy.LEFT_RIGHT_JOIN,
             ReconstructionStrategy.FULL_OUTER_SIMULATION, ReconstructionStrategy.SCALAR_SUBQUERY,
@@ -338,13 +342,33 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             return expressionContext;
         }
 
+        public String getExpressionType() {
+            return targetExpression.toUpperCase(Locale.ROOT).contains("CAST(") ? "CAST_ARITHMETIC" : "ARITHMETIC";
+        }
+
+        public String getDependencyLayout() {
+            return dependencyLayout(targetDependencies, schema.leftColumns, schema.rightColumns).name();
+        }
+
+        public String getDependencyLayout(EcstTransformationConfig.PartitionLayout layout) {
+            if (layout == EcstTransformationConfig.PartitionLayout.CROSS_SIDE) {
+                return targetDependencies.size() >= 2 ? DependencyLayout.CROSS_SIDE.name()
+                        : DependencyLayout.INVALID.name();
+            }
+            return targetDependencies.size() < 2 ? DependencyLayout.SINGLE_SIDE.name()
+                    : DependencyLayout.SAME_SIDE.name();
+        }
+
+        public String getQueryShape() {
+            return shape.toString();
+        }
+
         /** A stable feature vector for target scheduling before a transformed case exists. */
         public EcstFeature features() {
-            String expressionKind = targetExpression.toUpperCase(Locale.ROOT).contains("CAST(") ? "CAST_ARITHMETIC"
-                    : "ARITHMETIC";
-            String dependencyKind = targetDependencies.size() > 1 ? "CROSS_SIDE_DEPENDENCY" : "SINGLE_DEPENDENCY";
-            return new EcstFeature("TiDB", expressionKind, expressionContext.name(), dependencyKind);
+            return new EcstFeature("TiDB", getExpressionType(), expressionContext.name(), getDependencyLayout(),
+                    getQueryShape());
         }
+
     }
 
     public static final class EcstComparison {
@@ -936,11 +960,6 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                     right.add(column);
                 }
             }
-            if (right.isEmpty()) {
-                VpColumn replicated = dependencies.get(0);
-                right.add(replicated);
-                overlap.add(replicated);
-            }
             return new ControlledSplitPlan(new SplitPlan(left, right, overlap), SplitStrategy.ECST_SAME_SIDE);
         }
 
@@ -961,6 +980,35 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             }
         }
         return new ControlledSplitPlan(new SplitPlan(left, right, overlap), SplitStrategy.ECST_CROSS_SIDE);
+    }
+
+    private static DependencyLayout dependencyLayout(List<String> dependencies, List<VpColumn> left,
+            List<VpColumn> right) {
+        if (dependencies == null || dependencies.size() < 2) {
+            return DependencyLayout.SINGLE_SIDE;
+        }
+        boolean allLeft = dependencies.stream().allMatch(dependency -> containsColumnStatic(left, dependency));
+        boolean allRight = dependencies.stream().allMatch(dependency -> containsColumnStatic(right, dependency));
+        boolean anyBoth = dependencies.stream().anyMatch(dependency -> containsColumnStatic(left, dependency)
+                && containsColumnStatic(right, dependency));
+        if (anyBoth) {
+            return DependencyLayout.OVERLAPPED;
+        }
+        boolean eachExactlyOne = dependencies.stream().allMatch(dependency ->
+                containsColumnStatic(left, dependency) ^ containsColumnStatic(right, dependency));
+        boolean hasLeft = dependencies.stream().anyMatch(dependency -> containsColumnStatic(left, dependency));
+        boolean hasRight = dependencies.stream().anyMatch(dependency -> containsColumnStatic(right, dependency));
+        if (eachExactlyOne && hasLeft && hasRight) {
+            return DependencyLayout.CROSS_SIDE;
+        }
+        if (allLeft && !hasRight || allRight && !hasLeft) {
+            return DependencyLayout.SAME_SIDE;
+        }
+        return DependencyLayout.INVALID;
+    }
+
+    private static boolean containsColumnStatic(List<VpColumn> columns, String name) {
+        return columns != null && columns.stream().anyMatch(column -> column.name.equalsIgnoreCase(name));
     }
 
     private static final class SplitPlan {

@@ -3,6 +3,10 @@ package sqlancer.tidb.oracle;
 import sqlancer.common.oracle.ecst.EcstContext;
 import sqlancer.common.oracle.ecst.EcstTarget;
 import sqlancer.common.oracle.ecst.EcstTransformationConfig;
+import sqlancer.tidb.TiDBProvider.TiDBGlobalState;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * The currently implemented TiDB ECST capability set.  This is deliberately
@@ -11,6 +15,26 @@ import sqlancer.common.oracle.ecst.EcstTransformationConfig;
  */
 public final class TiDBEcstCapabilities {
     public static final String DESCRIPTION = "TiDB ECST prototype capability set";
+    private final boolean tiflashEnabled;
+
+    public TiDBEcstCapabilities() {
+        this.tiflashEnabled = false;
+    }
+
+    public TiDBEcstCapabilities(TiDBGlobalState state) {
+        this.tiflashEnabled = state != null && state.getDbmsSpecificOptions().tiflash;
+    }
+
+    public List<EcstTarget> supportedTargets(TiDBGlobalState state) {
+        List<EcstTarget> result = new ArrayList<>();
+        for (EcstTarget target : TiDBECSTOracle.allTargets()) {
+            if (!tiflashEnabled && target.getKey().contains("TIFLASH")) {
+                continue;
+            }
+            result.add(target);
+        }
+        return result;
+    }
 
     public boolean supportsRepresentation(EcstTransformationConfig.Representation representation) {
         return representation == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED;
@@ -67,8 +91,11 @@ public final class TiDBEcstCapabilities {
     }
 
     private boolean supportsLocation(EcstTarget target) {
-        return isOneOf(target.getFrom(), "ROOT", "COP_TIKV")
-                && isOneOf(target.getTo(), "ROOT", "COP_TIKV");
+        boolean sourceSupported = isOneOf(target.getFrom(), "ROOT", "COP_TIKV")
+                || tiflashEnabled && "COP_TIFLASH".equals(target.getFrom());
+        boolean destinationSupported = isOneOf(target.getTo(), "ROOT", "COP_TIKV")
+                || tiflashEnabled && "COP_TIFLASH".equals(target.getTo());
+        return sourceSupported && destinationSupported;
     }
 
     private static boolean isOneOf(String value, String first, String second) {

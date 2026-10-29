@@ -132,6 +132,19 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void unknownTrialsReduceTransformExploration() {
+        EcstHistory history = new EcstHistory();
+        double initialExploration = history.chooseTransformDecision("target", List.of("config"))
+                .getExploration();
+        for (int i = 0; i < 5; i++) {
+            history.observe("target", "config", EcstShiftStatus.UNKNOWN, Set.of(), 1);
+        }
+        double afterUnknowns = history.chooseTransformDecision("target", List.of("config"))
+                .getExploration();
+        assertTrue(afterUnknowns < initialExploration);
+    }
+
+    @Test
     public void featureFeedbackUsesAHierarchicalFallback() {
         EcstHistory history = new EcstHistory();
         EcstFeature feature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "NUMERIC_DEPENDENCY");

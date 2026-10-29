@@ -34,9 +34,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private final TiDBGlobalState state;
     private final TiDBVerticalPartitioningOracle vp;
     private final TiDBExecutionContextAnalyzer analyzer;
-    private final TiDBEcstCapabilities capabilities = new TiDBEcstCapabilities();
+    private final TiDBEcstCapabilities capabilities;
     private final EcstHistory history = new EcstHistory();
-    private final List<EcstTarget> targets = defaultTargets();
+    private final List<EcstTarget> targets;
     private volatile String lastSynthesisSummary = "<none>";
     private long semanticPreconditionRejects;
     private int requestedBudget;
@@ -49,11 +49,17 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
     public TiDBECSTOracle(TiDBGlobalState state) {
         this.state = state;
+        this.capabilities = new TiDBEcstCapabilities(state);
+        this.targets = capabilities.supportedTargets(state);
         this.vp = new TiDBVerticalPartitioningOracle(state);
         this.analyzer = new TiDBExecutionContextAnalyzer(state);
     }
 
     static List<EcstTarget> defaultTargets() {
+        return allTargets().stream().filter(target -> !target.getKey().contains("TIFLASH")).collect(Collectors.toList());
+    }
+
+    static List<EcstTarget> allTargets() {
         return Arrays.asList(
                 new EcstTarget("TIDB_LOCATION_ROOT_TO_COP_TIKV", EcstContextDimension.LOCATION, "ROOT", "COP_TIKV"),
                 new EcstTarget("TIDB_LOCATION_ROOT_TO_COP_TIFLASH", EcstContextDimension.LOCATION, "ROOT",
@@ -120,8 +126,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             }
             EcstTarget target = chooseTarget(candidateSets, seed.features());
             List<EcstTransformationConfig> applicable = candidateSets.get(target.getKey());
-            EcstTransformationConfig config = chooseConfig(target, applicable);
-            EcstFeature feature = seed.features();
+            EcstTransformationConfig config = chooseConfig(target, applicable, seed);
+            EcstFeature feature = featureForSeed(seed, config);
             long started = System.nanoTime();
             TiDBVerticalPartitioningOracle.EcstCase testCase;
             try {
@@ -141,7 +147,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 vp.cleanupEcstSeed(seed);
                 continue;
             }
-            feature = featureFor(testCase, config);
             lastBaseTable = testCase.getBaseTable();
             EcstObservation observation = analyzer.analyze(testCase.getOriginalQuery(), testCase.getTransformedQuery(),
                     testCase.getTargetExpression(), target);
@@ -199,6 +204,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 }
                 legal++;
                 if (!isApplicableToSeed(config, shape, seed.getExpressionContext())) {
+                    continue;
+                }
+                if (!isDependencyLayoutApplicable(seed, config)) {
                     continue;
                 }
                 if (!capabilities.supports(config, target, seed, seedContext)) {
@@ -350,6 +358,15 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         return config.getExpressionContext() == seedExpressionContext && shape.hasBaseTable;
     }
 
+    private static boolean isDependencyLayoutApplicable(TiDBVerticalPartitioningOracle.EcstSeed seed,
+            EcstTransformationConfig config) {
+        String actual = seed.getDependencyLayout(config.getPartitionLayout());
+        if (config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE) {
+            return "CROSS_SIDE".equals(actual);
+        }
+        return "SAME_SIDE".equals(actual) || "SINGLE_SIDE".equals(actual);
+    }
+
     private static boolean isApplicableToTiDb(EcstTransformationConfig config, QueryShape shape) {
         return config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
                 && (config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
@@ -427,13 +444,14 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         throw new IllegalStateException("Target scheduler selected a target outside S_valid: " + chosen);
     }
 
-    private EcstTransformationConfig chooseConfig(EcstTarget target, List<EcstTransformationConfig> applicable) {
+    private EcstTransformationConfig chooseConfig(EcstTarget target, List<EcstTransformationConfig> applicable,
+            TiDBVerticalPartitioningOracle.EcstSeed seed) {
         if (applicable.isEmpty()) {
             throw new IllegalStateException("No applicable ECST configuration for target " + target.getKey());
         }
         Map<String, EcstFeature> features = new LinkedHashMap<>();
         for (EcstTransformationConfig candidate : applicable) {
-            features.put(candidate.stableKey(), featureForConfig(candidate));
+            features.put(candidate.stableKey(), featureForSeed(seed, candidate));
         }
         String chosen = history.chooseTransformDecision(target.getKey(), features).getKey();
         for (EcstTransformationConfig candidate : applicable) {
@@ -444,46 +462,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         return applicable.get(state.getRandomly().getInteger(0, applicable.size()));
     }
 
-    private EcstFeature featureFor(TiDBVerticalPartitioningOracle.EcstCase testCase,
+    private EcstFeature featureForSeed(TiDBVerticalPartitioningOracle.EcstSeed seed,
             EcstTransformationConfig config) {
-        String expression = testCase.getTargetExpression().toUpperCase(java.util.Locale.ROOT);
-        String expressionType = expression.contains("CAST(") ? "CAST_ARITHMETIC"
-                : expression.contains("+") || expression.contains("-") || expression.contains("*") ? "ARITHMETIC"
-                        : expression.contains("(") ? "FUNCTION" : "COLUMN_REFERENCE";
-        String dependencyClass = dependencyLayoutClass(testCase, config);
-        return new EcstFeature("TiDB", expressionType, config.getExpressionContext().name(), dependencyClass);
-    }
-
-    private String dependencyLayoutClass(TiDBVerticalPartitioningOracle.EcstCase testCase,
-            EcstTransformationConfig config) {
-        List<String> dependencies = testCase.getTargetDependencies();
-        if (dependencies.size() < 2) {
-            return "SINGLE_DEPENDENCY";
-        }
-        boolean missing = dependencies.stream().anyMatch(dependency -> !testCase.getLeftDependencies().contains(dependency)
-                && !testCase.getRightDependencies().contains(dependency));
-        if (missing) {
-            return "INVALID_DEPENDENCY_LAYOUT";
-        }
-        boolean overlap = dependencies.stream().anyMatch(
-                dependency -> testCase.getLeftDependencies().contains(dependency)
-                        && testCase.getRightDependencies().contains(dependency));
-        if (overlap) {
-            return "OVERLAPPED_DEPENDENCY";
-        }
-        if (config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE) {
-            return testCase.getLeftDependencies().isEmpty() || testCase.getRightDependencies().isEmpty()
-                    ? "INVALID_DEPENDENCY_LAYOUT" : "CROSS_SIDE_DEPENDENCY";
-        }
-        return dependencies.stream().allMatch(testCase.getLeftDependencies()::contains)
-                ? "SAME_SIDE_DEPENDENCY" : "INVALID_DEPENDENCY_LAYOUT";
-    }
-
-    private EcstFeature featureForConfig(EcstTransformationConfig config) {
-        String dependencyClass = config.getPartitionLayout()
-                == EcstTransformationConfig.PartitionLayout.CROSS_SIDE ? "CROSS_SIDE_DEPENDENCY"
-                        : "SAME_SIDE_DEPENDENCY";
-        return new EcstFeature("TiDB", "CAST_ARITHMETIC", config.getExpressionContext().name(), dependencyClass);
+        return new EcstFeature("TiDB", seed.getExpressionType(), config.getExpressionContext().name(),
+                seed.getDependencyLayout(config.getPartitionLayout()), seed.getQueryShape());
     }
 
     private String formatBug(EcstTarget target, TiDBVerticalPartitioningOracle.EcstCase testCase,

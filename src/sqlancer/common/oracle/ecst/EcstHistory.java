@@ -16,6 +16,123 @@ public final class EcstHistory {
     private static final double SMOOTHING_B = 1.0;
     private static final long MIN_FEATURE_TRIALS = 3;
 
+    /** Typed direction key used for target trial and coverage accounting. */
+    public static final class TargetKey {
+        private final String dimension;
+        private final String from;
+        private final String to;
+        private final String display;
+
+        public TargetKey(String dimension, String from, String to) {
+            this(dimension, from, to, dimension + ":" + from + "->" + to);
+        }
+
+        private TargetKey(String dimension, String from, String to, String display) {
+            this.dimension = normalizeKey(dimension);
+            this.from = normalizeKey(from);
+            this.to = normalizeKey(to);
+            this.display = display == null ? this.dimension + ":" + this.from + "->" + this.to : display;
+        }
+
+        public String getDimension() { return dimension; }
+        public String getFrom() { return from; }
+        public String getTo() { return to; }
+
+        static TargetKey parse(String value) {
+            if (value == null || value.trim().isEmpty()) {
+                return new TargetKey("UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN_TARGET");
+            }
+            String key = value.trim();
+            String concrete = targetConcreteShift(key);
+            if (concrete != null) {
+                return parseShift(concrete, key);
+            }
+            return new TargetKey(targetDimension(key), key, key, key);
+        }
+
+        static TargetKey parseShift(String value, String display) {
+            int colon = value.indexOf(':');
+            int arrow = value.indexOf("->");
+            if (colon > 0 && arrow > colon) {
+                return new TargetKey(value.substring(0, colon), value.substring(colon + 1, arrow),
+                        value.substring(arrow + 2), display);
+            }
+            return new TargetKey("UNKNOWN", value, value, display);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (!(other instanceof TargetKey)) return false;
+            TargetKey that = (TargetKey) other;
+            return dimension.equals(that.dimension) && from.equals(that.from) && to.equals(that.to);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(dimension, from, to);
+        }
+
+        @Override
+        public String toString() { return display; }
+    }
+
+    public static final class ConfigTargetKey {
+        private final String config;
+        private final TargetKey target;
+
+        public ConfigTargetKey(String config, TargetKey target) {
+            this.config = config == null ? "UNKNOWN_TRANSFORM" : config;
+            this.target = target;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (!(other instanceof ConfigTargetKey)) return false;
+            ConfigTargetKey that = (ConfigTargetKey) other;
+            return config.equals(that.config) && target.equals(that.target);
+        }
+
+        @Override
+        public int hashCode() { return java.util.Objects.hash(config, target); }
+
+        @Override
+        public String toString() { return config + "|" + target; }
+    }
+
+    public static final class ShiftKey {
+        private final String dimension;
+        private final String from;
+        private final String to;
+
+        public ShiftKey(String dimension, String from, String to) {
+            this.dimension = normalizeKey(dimension);
+            this.from = normalizeKey(from);
+            this.to = normalizeKey(to);
+        }
+
+        static ShiftKey parse(String value) {
+            TargetKey key = TargetKey.parseShift(value, value);
+            return new ShiftKey(key.dimension, key.from, key.to);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (!(other instanceof ShiftKey)) return false;
+            ShiftKey that = (ShiftKey) other;
+            return dimension.equals(that.dimension) && from.equals(that.from) && to.equals(that.to);
+        }
+
+        @Override
+        public int hashCode() { return java.util.Objects.hash(dimension, from, to); }
+
+        @Override
+        public String toString() { return dimension + ":" + from + "->" + to; }
+    }
+
+    private static String normalizeKey(String value) {
+        return value == null || value.trim().isEmpty() ? "UNKNOWN" : value.trim().toUpperCase(java.util.Locale.ROOT);
+    }
+
     private static final class Stats {
         private long success;
         private long failure;
@@ -45,16 +162,36 @@ public final class EcstHistory {
             costNanos += Math.max(0, cost);
         }
 
+        private synchronized void recordTrial() {
+            trials++;
+        }
+
+        private synchronized void recordStatus(EcstShiftStatus status, boolean covered, long cost) {
+            switch (status) {
+            case SUCCESS:
+                success++;
+                break;
+            case FAILURE:
+                failure++;
+                break;
+            case UNKNOWN:
+                unknown++;
+                break;
+            default:
+                throw new AssertionError(status);
+            }
+            if (covered) {
+                coverage++;
+            }
+            costNanos += Math.max(0, cost);
+        }
+
         private synchronized double successRate() {
             return (success + SMOOTHING_A) / (success + failure + SMOOTHING_A + SMOOTHING_B);
         }
 
         private synchronized long trials() {
             return trials;
-        }
-
-        private synchronized long decidableTrials() {
-            return success + failure;
         }
 
         private synchronized long costNanos() {
@@ -67,15 +204,15 @@ public final class EcstHistory {
         }
     }
 
-    private final ConcurrentMap<String, Stats> transformStats = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, Stats> targetStats = new ConcurrentHashMap<>();
+    private final ConcurrentMap<ConfigTargetKey, Stats> configStats = new ConcurrentHashMap<>();
+    private final ConcurrentMap<TargetKey, Stats> targetStats = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Stats> featureTransformStats = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Stats> featureTargetStats = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Stats> coarseFeatureTransformStats = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Stats> coarseFeatureTargetStats = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, Boolean> observedShifts = new ConcurrentHashMap<>();
+    private final ConcurrentMap<ShiftKey, Boolean> observedShifts = new ConcurrentHashMap<>();
     /** N_cov[s]: count of tests in which the concrete migration s was confirmed. */
-    private final ConcurrentMap<String, Long> shiftCoverage = new ConcurrentHashMap<>();
+    private final ConcurrentMap<ShiftKey, Long> shiftCoverage = new ConcurrentHashMap<>();
     private volatile long totalTrials;
     private volatile String lastTargetDecision = "<none>";
     private volatile String lastTransformDecision = "<none>";
@@ -103,6 +240,14 @@ public final class EcstHistory {
             return score;
         }
 
+        public double getSuccessRate() {
+            return successRate;
+        }
+
+        public double getExploration() {
+            return exploration;
+        }
+
         @Override
         public String toString() {
             return key + "{score=" + score + ",p=" + successRate + ",explore=" + exploration + ",costSeconds="
@@ -113,6 +258,54 @@ public final class EcstHistory {
     public void observe(String targetKey, String transformKey, EcstShiftStatus status, Collection<String> shifts,
             long costNanos) {
         observe(targetKey, transformKey, status, shifts, costNanos, null);
+    }
+
+    public void recordTrial(String targetKey) {
+        targetStats.computeIfAbsent(TargetKey.parse(targetKey), ignored -> new Stats()).recordTrial();
+        totalTrials++;
+    }
+
+    public void recordTrial(EcstTarget target) {
+        recordTrial(target == null ? null : target.getKey());
+    }
+
+    public void recordSuccess(String targetKey, String transformKey) {
+        recordOutcome(targetKey, transformKey, EcstShiftStatus.SUCCESS);
+    }
+
+    public void recordSuccess(EcstTarget target, String transformKey) {
+        recordSuccess(target == null ? null : target.getKey(), transformKey);
+    }
+
+    public void recordFailure(String targetKey, String transformKey) {
+        recordOutcome(targetKey, transformKey, EcstShiftStatus.FAILURE);
+    }
+
+    public void recordFailure(EcstTarget target, String transformKey) {
+        recordFailure(target == null ? null : target.getKey(), transformKey);
+    }
+
+    public void recordUnknown(String targetKey, String transformKey) {
+        recordOutcome(targetKey, transformKey, EcstShiftStatus.UNKNOWN);
+    }
+
+    public void recordUnknown(EcstTarget target, String transformKey) {
+        recordUnknown(target == null ? null : target.getKey(), transformKey);
+    }
+
+    public void recordCoverage(String shift) {
+        ShiftKey key = ShiftKey.parse(shift);
+        observedShifts.put(key, Boolean.TRUE);
+        shiftCoverage.merge(key, 1L, Long::sum);
+    }
+
+    private void recordOutcome(String targetKey, String transformKey, EcstShiftStatus status) {
+        TargetKey target = TargetKey.parse(targetKey);
+        ConfigTargetKey config = new ConfigTargetKey(transformKey, target);
+        targetStats.computeIfAbsent(target, ignored -> new Stats()).recordStatus(status, false, 0);
+        Stats configStatsForKey = configStats.computeIfAbsent(config, ignored -> new Stats());
+        configStatsForKey.recordTrial();
+        configStatsForKey.recordStatus(status, false, 0);
     }
 
     public void observe(String targetKey, String transformKey, EcstShiftStatus status, Collection<String> shifts,
@@ -127,10 +320,11 @@ public final class EcstHistory {
                 }
             }
         }
-        boolean covered = hasTargetShift(target, distinctShifts);
-        transformStats.computeIfAbsent(target + "|" + transform, ignored -> new Stats()).observe(status, covered,
+        TargetKey typedTarget = TargetKey.parse(target);
+        boolean covered = hasTargetShift(typedTarget, distinctShifts);
+        configStats.computeIfAbsent(new ConfigTargetKey(transform, typedTarget), ignored -> new Stats()).observe(status, covered,
                 costNanos);
-        targetStats.computeIfAbsent(target, ignored -> new Stats()).observe(status, covered, costNanos);
+        targetStats.computeIfAbsent(typedTarget, ignored -> new Stats()).observe(status, covered, costNanos);
         if (feature != null) {
             featureTransformStats.computeIfAbsent(featureTransformKey(target, transform, feature), ignored -> new Stats())
                     .observe(status, covered, costNanos);
@@ -142,8 +336,7 @@ public final class EcstHistory {
                     .observe(status, covered, costNanos);
         }
         for (String shift : distinctShifts) {
-            observedShifts.put(shift, Boolean.TRUE);
-            shiftCoverage.merge(shift, 1L, Long::sum);
+            recordCoverage(shift);
         }
         totalTrials++;
     }
@@ -180,16 +373,15 @@ public final class EcstHistory {
         }
         Decision selected = null;
         double best = Double.NEGATIVE_INFINITY;
-        Stats target = targetStats.get(targetKey);
+        Stats target = targetStats.get(TargetKey.parse(targetKey));
         long targetTrials = target == null ? 0 : target.trials();
         for (Map.Entry<String, EcstFeature> candidateEntry : candidates.entrySet()) {
             String candidate = candidateEntry.getKey();
             Stats stats = selectTransformStats(targetKey, candidate, candidateEntry.getValue());
             double rate = stats == null ? 0.5 : stats.successRate();
-            long decidableTrials = stats == null ? 0 : stats.decidableTrials();
             long allTrials = stats == null ? 0 : stats.trials();
             double exploration = Math.sqrt(
-                    2.0 * Math.log(2.0 + Math.max(1, targetTrials)) / (1.0 + decidableTrials));
+                    2.0 * Math.log(2.0 + Math.max(1, targetTrials)) / (1.0 + allTrials));
             double costPenalty = stats == null || allTrials == 0 ? 0.0
                     : ((double) stats.costNanos() / allTrials) / 1_000_000_000.0;
             double score = rate + 0.25 * exploration - 0.01 * costPenalty;
@@ -246,7 +438,7 @@ public final class EcstHistory {
 
     private double maxReachability(String targetKey, Collection<String> candidates, EcstFeature feature) {
         if (candidates == null || candidates.isEmpty()) {
-            Stats target = targetStats.get(targetKey);
+            Stats target = targetStats.get(TargetKey.parse(targetKey));
             return target == null ? 0.5 : target.successRate();
         }
         double best = Double.NEGATIVE_INFINITY;
@@ -262,7 +454,7 @@ public final class EcstHistory {
     }
 
     public boolean hasObservedShift(String shift) {
-        return observedShifts.containsKey(shift);
+        return observedShifts.containsKey(ShiftKey.parse(shift));
     }
 
     public int observedShiftCount() {
@@ -271,7 +463,7 @@ public final class EcstHistory {
 
     /** Returns N_cov for one concrete observed migration key. */
     public long getShiftCoverage(String shift) {
-        return shiftCoverage.getOrDefault(shift, 0L);
+        return shiftCoverage.getOrDefault(ShiftKey.parse(shift), 0L);
     }
 
     /** Returns N_cov for the migration dimension represented by a target key. */
@@ -280,17 +472,21 @@ public final class EcstHistory {
     }
 
     public Map<String, Boolean> observedShiftsSnapshot() {
-        return Collections.unmodifiableMap(observedShifts);
+        Map<String, Boolean> snapshot = new LinkedHashMap<>();
+        observedShifts.forEach((key, value) -> snapshot.put(key.toString(), value));
+        return Collections.unmodifiableMap(snapshot);
     }
 
     public Map<String, Long> shiftCoverageSnapshot() {
-        return Collections.unmodifiableMap(new LinkedHashMap<>(shiftCoverage));
+        Map<String, Long> snapshot = new LinkedHashMap<>();
+        shiftCoverage.forEach((key, value) -> snapshot.put(key.toString(), value));
+        return Collections.unmodifiableMap(snapshot);
     }
 
     public String formatSummary() {
         StringBuilder sb = new StringBuilder();
         sb.append("totalTrials=").append(totalTrials).append(System.lineSeparator());
-        for (Map.Entry<String, Stats> entry : transformStats.entrySet()) {
+        for (Map.Entry<ConfigTargetKey, Stats> entry : configStats.entrySet()) {
             sb.append(entry.getKey()).append(':').append(entry.getValue().summary()).append(System.lineSeparator());
         }
         for (Map.Entry<String, Stats> entry : featureTransformStats.entrySet()) {
@@ -304,45 +500,44 @@ public final class EcstHistory {
     }
 
     public LinkedHashSet<String> observedShiftKeys() {
-        return new LinkedHashSet<>(observedShifts.keySet());
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        observedShifts.keySet().forEach(key -> result.add(key.toString()));
+        return result;
     }
 
     private long targetCoverage(String targetKey) {
         if (targetKey == null || targetKey.isEmpty()) {
             return 0;
         }
-        long exact = shiftCoverage.getOrDefault(targetKey, 0L);
+        String direct = targetKey;
+        long exact = shiftCoverage.getOrDefault(ShiftKey.parse(direct), 0L);
         if (exact > 0) {
             return exact;
         }
         String concreteShift = targetConcreteShift(targetKey);
         if (concreteShift != null) {
-            return shiftCoverage.getOrDefault(concreteShift, 0L);
+            return shiftCoverage.getOrDefault(ShiftKey.parse(concreteShift), 0L);
         }
         String dimension = targetDimension(targetKey);
         if (dimension == null) {
             return 0;
         }
         long total = 0;
-        for (Map.Entry<String, Long> entry : shiftCoverage.entrySet()) {
-            if (entry.getKey().startsWith(dimension + ":")) {
+        for (Map.Entry<ShiftKey, Long> entry : shiftCoverage.entrySet()) {
+            if (entry.getKey().toString().startsWith(dimension + ":")) {
                 total += entry.getValue();
             }
         }
         return total;
     }
 
-    private static boolean hasTargetShift(String targetKey, Collection<String> shifts) {
+    private static boolean hasTargetShift(TargetKey targetKey, Collection<String> shifts) {
         if (shifts == null || shifts.isEmpty() || targetKey == null) {
             return false;
         }
-        String concreteShift = targetConcreteShift(targetKey);
-        if (concreteShift != null) {
-            return shifts.contains(concreteShift);
-        }
-        String dimension = targetDimension(targetKey);
+        ShiftKey expected = new ShiftKey(targetKey.dimension, targetKey.from, targetKey.to);
         for (String shift : shifts) {
-            if (targetKey.equals(shift) || dimension != null && shift.startsWith(dimension + ":")) {
+            if (expected.equals(ShiftKey.parse(shift))) {
                 return true;
             }
         }
@@ -410,7 +605,7 @@ public final class EcstHistory {
                 return coarse;
             }
         }
-        return transformStats.get(targetKey + "|" + transformKey);
+        return configStats.get(new ConfigTargetKey(transformKey, TargetKey.parse(targetKey)));
     }
 
     private Stats selectTargetStats(String targetKey, EcstFeature feature) {
@@ -424,7 +619,7 @@ public final class EcstHistory {
                 return coarse;
             }
         }
-        return targetStats.get(targetKey);
+        return targetStats.get(TargetKey.parse(targetKey));
     }
 
     private static boolean hasEnoughFeatureSamples(Stats stats) {
