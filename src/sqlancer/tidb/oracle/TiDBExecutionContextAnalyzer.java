@@ -668,6 +668,9 @@ public final class TiDBExecutionContextAnalyzer {
                 continue;
             }
             String mapped = target.lineage.get(token);
+            if (mapped == null) {
+                mapped = target.lineage.get(token.toLowerCase(Locale.ROOT));
+            }
             if (mapped == null && token.indexOf('.') < 0 && target.references.contains(leaf)) {
                 mapped = leaf;
             }
