@@ -54,6 +54,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int seedMappingSkips;
     private int noValidTargetSkips;
     private int noConfigurationSkips;
+    private int seedRefreshes;
     private final List<String> candidateRejectReasons = new ArrayList<>();
 
     public TiDBECSTOracle(TiDBGlobalState state) {
@@ -111,15 +112,17 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         seedMappingSkips = 0;
         noValidTargetSkips = 0;
         noConfigurationSkips = 0;
+        seedRefreshes = 0;
         candidateRejectReasons.clear();
         semanticPreconditionRejects = 0;
+        EcstSeedPool seedPool = new EcstSeedPool(vp);
         while (completed < budget && attempts < budget * 4) {
             attempts++;
             TiDBVerticalPartitioningOracle.EcstSeed seed = null;
             EcstContext seedContext;
             TiDBExecutionContextAnalyzer.ParsedContext seedParsed;
             try {
-                seed = vp.createEcstSeed();
+                seed = seedPool.nextSeed();
                 seedParsed = analyzer.extractContext(seed.getOriginalQuery(), seed.getOperation());
                 seedContext = seedParsed.context();
             } catch (IgnoreMeException | IllegalArgumentException ignored) {
@@ -279,6 +282,25 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             }
         }
         return true;
+    }
+
+    private final class EcstSeedPool {
+        private static final int REFRESH_INTERVAL = 8;
+        private final TiDBVerticalPartitioningOracle backend;
+        private int issued;
+
+        private EcstSeedPool(TiDBVerticalPartitioningOracle backend) {
+            this.backend = backend;
+        }
+
+        private TiDBVerticalPartitioningOracle.EcstSeed nextSeed() throws Exception {
+            if (issued > 0 && issued % REFRESH_INTERVAL == 0) {
+                backend.refreshEcstBaseRelations();
+                seedRefreshes++;
+            }
+            issued++;
+            return backend.createEcstSeed();
+        }
     }
 
     Map<String, List<EcstTransformationConfig>> synthesizeCandidateSets(
@@ -720,6 +742,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             writer.write("seedMappingSkips=" + seedMappingSkips + System.lineSeparator());
             writer.write("noValidTargetSkips=" + noValidTargetSkips + System.lineSeparator());
             writer.write("noConfigurationSkips=" + noConfigurationSkips + System.lineSeparator());
+            writer.write("seedRefreshes=" + seedRefreshes + System.lineSeparator());
             writer.write("budgetComplete=" + (completedCases >= requestedBudget) + System.lineSeparator());
             writer.write(history.formatSummary());
         } catch (IOException ignored) {

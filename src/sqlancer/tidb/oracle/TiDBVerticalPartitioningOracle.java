@@ -154,6 +154,16 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         }
     }
 
+    private static final class EcstExpressionSpec {
+        private final String expression;
+        private final List<VpColumn> dependencies;
+
+        private EcstExpressionSpec(String expression, List<VpColumn> dependencies) {
+            this.expression = expression;
+            this.dependencies = dependencies;
+        }
+    }
+
     private static final class VpSchema {
         private final String prefix;
         private final String baseTable;
@@ -410,8 +420,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             }
             this.operation = new EcstOperation("TIDB_ECST:" + sourceTable + ":" + targetExpression,
                     targetExpression, new LinkedHashSet<>(targetDependencies),
-                    new sqlancer.common.oracle.ecst.EcstExpressionShape(2, "SIGNED", Set.of("+"),
-                            new LinkedHashSet<>(targetDependencies)), lineage,
+                    ecstExpressionShape(targetExpression, targetDependencies), lineage,
                     expressionContext == EcstTransformationConfig.ExpressionContext.SELECT ? "PROJECTION_ITEM"
                             : "SELECTION_PREDICATE");
             this.accessPathPreparation = accessPathPreparation;
@@ -420,6 +429,25 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             this.expressionContext = expressionContext;
             this.base = base;
             this.schema = schema;
+        }
+
+        private static sqlancer.common.oracle.ecst.EcstExpressionShape ecstExpressionShape(String expression,
+                List<String> dependencies) {
+            String normalized = expression == null ? "" : expression.toUpperCase(Locale.ROOT);
+            int casts = 0;
+            for (int index = normalized.indexOf("CAST("); index >= 0; index = normalized.indexOf("CAST(", index + 5)) {
+                casts++;
+            }
+            Set<String> operators = new LinkedHashSet<>();
+            for (String operator : List.of("+", "-", "*", "/", "CASE", "IF", "COALESCE", "CHAR_LENGTH", "YEAR")) {
+                if (normalized.contains(operator)) {
+                    operators.add(operator);
+                }
+            }
+            String castTarget = normalized.contains("DECIMAL") ? "DECIMAL" : normalized.contains("CAST(") ? "SIGNED"
+                    : "NONE";
+            return new sqlancer.common.oracle.ecst.EcstExpressionShape(casts, castTarget, operators,
+                    new LinkedHashSet<>(dependencies));
         }
 
         public String getBaseTable() {
@@ -459,7 +487,17 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         }
 
         public String getExpressionType() {
-            return targetExpression.toUpperCase(Locale.ROOT).contains("CAST(") ? "CAST_ARITHMETIC" : "ARITHMETIC";
+            String normalized = targetExpression.toUpperCase(Locale.ROOT);
+            if (normalized.contains("CHAR_LENGTH")) {
+                return "STRING_LENGTH";
+            }
+            if (normalized.contains("YEAR(")) {
+                return "DATE_YEAR";
+            }
+            if (normalized.contains("CASE")) {
+                return "CASE_EXPRESSION";
+            }
+            return normalized.contains("CAST(") ? "CAST_ARITHMETIC" : "ARITHMETIC";
         }
 
         public String getDependencyLayout() {
@@ -824,24 +862,28 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         return createEcstSeed(context);
     }
 
+    /** Refreshes the pool of ECST input relations without replacing any base table. */
+    public void refreshEcstBaseRelations() throws Exception {
+        state.updateSchema();
+        int current = (int) state.getSchema().getDatabaseTables().stream().filter(table -> !table.isView())
+                .filter(table -> !table.getName().startsWith("vp_")).filter(table -> !table.getColumns().isEmpty())
+                .count();
+        TiDBProvider.ensureVerticalPartitioningBaseTables(state, current + 1);
+    }
+
     private EcstSeed createEcstSeed(EcstTransformationConfig.ExpressionContext context) throws Exception {
         resetSessionForVerticalPartitioningOracle();
         TiDBProvider.ensureVerticalPartitioningBaseTables(state, 2);
         BaseTableInfo base = selectBaseTable();
-        List<VpColumn> numeric = base.columns.stream().filter(c -> c.type.isNumeric()).collect(Collectors.toList());
-        List<VpColumn> dependencies = numeric.size() >= 2 ? numeric : base.columns;
-        if (dependencies.isEmpty()) {
+        EcstExpressionSpec expression = chooseEcstExpression(base.columns);
+        if (expression == null || expression.dependencies.isEmpty()) {
             throw new IgnoreMeException();
         }
-        if (dependencies.size() > 2) {
-            dependencies = dependencies.subList(0, 2);
-        }
+        List<VpColumn> dependencies = expression.dependencies;
         ControlledSplitPlan initial = createControlledSplitPlan(base.columns, dependencies,
                 EcstTransformationConfig.PartitionLayout.SAME_SIDE);
         VpSchema schema = materializeSourceSeed(base, initial.splitPlan, initial.splitStrategy);
-        String left = quote(dependencies.get(0).name);
-        String right = quote(dependencies.size() > 1 ? dependencies.get(1).name : dependencies.get(0).name);
-        String targetExpression = "(CAST(" + left + " AS SIGNED) + CAST(" + right + " AS SIGNED))";
+        String targetExpression = expression.expression;
         EcstAccessPathPreparation accessPathPreparation = prepareEcstSourceAccessPath(schema, dependencies,
                 targetExpression);
         String originalQuery = buildEcstSeedQuery(schema, targetExpression, context);
@@ -849,6 +891,55 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         List<String> dependencyNames = dependencies.stream().map(column -> column.name).collect(Collectors.toList());
         return new EcstSeed(base.tableName, schema.sourceTable, originalQuery, targetExpression, dependencyNames, shape,
                 context, base, schema, accessPathPreparation);
+    }
+
+    private EcstExpressionSpec chooseEcstExpression(List<VpColumn> columns) {
+        List<VpColumn> numeric = columns.stream().filter(column -> column.type.isNumeric()).collect(Collectors.toList());
+        List<VpColumn> strings = columns.stream().filter(column -> column.type == TiDBDataType.CHAR
+                || column.type == TiDBDataType.TEXT || column.type == TiDBDataType.BLOB).collect(Collectors.toList());
+        List<VpColumn> dates = columns.stream().filter(column -> column.type == TiDBDataType.DATE
+                || column.type == TiDBDataType.DATETIME).collect(Collectors.toList());
+        if (!strings.isEmpty() && Randomly.getBooleanWithRatherLowProbability()) {
+            VpColumn column = Randomly.fromList(strings);
+            return new EcstExpressionSpec("CHAR_LENGTH(" + quote(column.name) + ")", List.of(column));
+        }
+        if (!dates.isEmpty() && Randomly.getBooleanWithRatherLowProbability()) {
+            VpColumn column = Randomly.fromList(dates);
+            return new EcstExpressionSpec("YEAR(" + quote(column.name) + ")", List.of(column));
+        }
+        if (numeric.size() >= 2) {
+            VpColumn left = numeric.get(0);
+            VpColumn right = numeric.get(1);
+            String l = "CAST(" + quote(left.name) + " AS SIGNED)";
+            String r = "CAST(" + quote(right.name) + " AS SIGNED)";
+            String expression;
+            switch (Randomly.fromOptions(0, 1, 2, 3)) {
+            case 1:
+                expression = "(" + l + " - " + r + ")";
+                break;
+            case 2:
+                expression = "CASE WHEN " + quote(left.name) + " IS NULL THEN " + r + " ELSE " + l + " END";
+                break;
+            case 3:
+                expression = "IF(" + l + " > 0, " + r + ", 0)";
+                break;
+            default:
+                expression = "(" + l + " + " + r + ")";
+                break;
+            }
+            return new EcstExpressionSpec(expression, List.of(left, right));
+        }
+        if (!numeric.isEmpty()) {
+            VpColumn column = numeric.get(0);
+            return new EcstExpressionSpec("COALESCE(CAST(" + quote(column.name) + " AS SIGNED), 0)",
+                    List.of(column));
+        }
+        if (!columns.isEmpty()) {
+            VpColumn column = columns.get(0);
+            return new EcstExpressionSpec("CHAR_LENGTH(CAST(" + quote(column.name) + " AS CHAR))",
+                    List.of(column));
+        }
+        return null;
     }
 
     private EcstAccessPathPreparation prepareEcstSourceAccessPath(VpSchema schema, List<VpColumn> dependencies,
@@ -948,7 +1039,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 column.name)).map(column -> column.name).collect(Collectors.toList());
         DependencyLayout actualLayout = dependencyLayout(seed.targetDependencies, controlled.splitPlan.leftColumns,
                 controlled.splitPlan.rightColumns);
-        String generationInfo = "rowCount=" + base.rowCount + ",engine=" + base.engine + ",stableOrder="
+        String generationInfo = "rowCount=" + base.rowCount + ",engine=" + base.engine + ",expressionType="
+                + seed.getExpressionType() + ",dependencyCount=" + seed.targetDependencies.size() + ",stableOrder="
                 + base.stableOrderStrategy + ",splitStrategy=" + controlled.splitStrategy + ",requestedLayout="
                 + config.getPartitionLayout() + ",actualLayout=" + actualLayout + ",leftColumns="
                 + columnNames(controlled.splitPlan.leftColumns) + ",rightColumns="
