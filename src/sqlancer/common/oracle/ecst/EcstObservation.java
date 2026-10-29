@@ -6,6 +6,9 @@ import java.util.Set;
 
 /** Result of comparing the plans of an original and transformed query. */
 public final class EcstObservation {
+    public enum UnknownReason {
+        NONE, UNKNOWN_BECAUSE_PLAN, UNKNOWN_BECAUSE_EVALUATION_EVIDENCE, UNKNOWN_BECAUSE_OPERATION_MAPPING
+    }
     private final EcstContext original;
     private final EcstContext transformed;
     private final EcstShiftStatus status;
@@ -17,6 +20,7 @@ public final class EcstObservation {
     private final String transformedMatchedNode;
     private final String originalEvidence;
     private final String transformedEvidence;
+    private final UnknownReason unknownReason;
 
     public EcstObservation(EcstContext original, EcstContext transformed, EcstShiftStatus status,
             Set<String> observedShifts, String reason) {
@@ -27,6 +31,14 @@ public final class EcstObservation {
             Set<String> observedShifts, String reason, String originalPlan, String transformedPlan,
             String originalMatchedNode, String transformedMatchedNode, String originalEvidence,
             String transformedEvidence) {
+        this(original, transformed, status, observedShifts, reason, originalPlan, transformedPlan, originalMatchedNode,
+                transformedMatchedNode, originalEvidence, transformedEvidence, UnknownReason.NONE);
+    }
+
+    public EcstObservation(EcstContext original, EcstContext transformed, EcstShiftStatus status,
+            Set<String> observedShifts, String reason, String originalPlan, String transformedPlan,
+            String originalMatchedNode, String transformedMatchedNode, String originalEvidence,
+            String transformedEvidence, UnknownReason unknownReason) {
         this.original = original;
         this.transformed = transformed;
         this.status = status;
@@ -38,6 +50,7 @@ public final class EcstObservation {
         this.transformedMatchedNode = transformedMatchedNode == null ? "" : transformedMatchedNode;
         this.originalEvidence = originalEvidence == null ? "" : originalEvidence;
         this.transformedEvidence = transformedEvidence == null ? "" : transformedEvidence;
+        this.unknownReason = unknownReason == null ? UnknownReason.NONE : unknownReason;
     }
 
     public EcstContext getOriginal() {
@@ -82,5 +95,9 @@ public final class EcstObservation {
 
     public String getTransformedEvidence() {
         return transformedEvidence;
+    }
+
+    public UnknownReason getUnknownReason() {
+        return unknownReason;
     }
 }

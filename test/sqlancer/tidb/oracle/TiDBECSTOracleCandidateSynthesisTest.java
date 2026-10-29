@@ -13,6 +13,37 @@ import sqlancer.common.oracle.ecst.EcstTransformationConfig;
 
 public class TiDBECSTOracleCandidateSynthesisTest {
     @Test
+    void declaresTheImplementedTidbPrototypeCapabilitySet() {
+        TiDBEcstCapabilities capabilities = new TiDBEcstCapabilities();
+
+        assertTrue(capabilities.supportsRepresentation(EcstTransformationConfig.Representation.VERTICAL_PARTITIONED));
+        assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.JOIN));
+        assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.DERIVED_TABLE));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.WHERE));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.SELECT));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.HAVING));
+        assertEquals("TiDB ECST prototype capability set", capabilities.describe());
+    }
+
+    @Test
+    void unsupportedTiFlashTargetsAreExcludedFromDefaultRuntimeTargets() {
+        assertTrue(TiDBECSTOracle.defaultTargets().stream().noneMatch(t -> t.getKey().contains("TIFLASH")));
+    }
+
+    @Test
+    void queryShapeGatesHavingAndSelectContexts() {
+        TiDBECSTOracle.QueryShape plain = TiDBECSTOracle.queryShapeFromSql(
+                "SELECT c0 FROM t0 WHERE c0 > 0", 1);
+        TiDBECSTOracle.QueryShape aggregate = TiDBECSTOracle.queryShapeFromSql(
+                "SELECT c0, COUNT(*) FROM t0 GROUP BY c0 HAVING COUNT(*) > 1", 2);
+
+        assertTrue(!plain.hasAggregation());
+        assertTrue(plain.hasProjection());
+        assertTrue(aggregate.hasAggregation());
+        assertTrue(aggregate.hasProjection());
+    }
+
+    @Test
     void enumeratesTheFullTransformationProductBeforeFiltering() {
         List<EcstTransformationConfig> configurations = TiDBECSTOracle.enumerateConfigurationSpace();
 
@@ -71,5 +102,21 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(all.stream().map(c -> c.getPartitionLayout()).distinct().count() >= 2);
         assertTrue(all.stream().map(c -> c.getReconstruction()).distinct().count() >= 2);
         assertTrue(all.stream().map(c -> c.getExpressionContext()).distinct().count() >= 2);
+    }
+
+    @Test
+    void productionGeneratorShapeKeepsAllImplementedClausesReachable() {
+        TiDBECSTOracle.QueryShape shape = TiDBECSTOracle.generatorQueryShape(true, 4);
+        assertTrue(shape.hasProjection());
+        assertTrue(shape.hasAggregation());
+        assertTrue(!shape.hasJoin());
+        EcstTarget target = new EcstTarget("TIDB_LOCATION_SHIFT", EcstContextDimension.LOCATION, "ROOT", "COP_TIKV");
+        List<EcstTransformationConfig> candidates = TiDBECSTOracle.applicableConfigurations(target);
+        assertTrue(candidates.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.WHERE));
+        assertTrue(candidates.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.SELECT));
+        assertTrue(candidates.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.HAVING));
     }
 }

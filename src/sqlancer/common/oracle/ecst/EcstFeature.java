@@ -9,12 +9,18 @@ public final class EcstFeature {
     private final String expressionType;
     private final String clause;
     private final String dependencyClass;
+    private final String queryShape;
 
     public EcstFeature(String dbms, String expressionType, String clause, String dependencyClass) {
+        this(dbms, expressionType, clause, dependencyClass, "UNKNOWN");
+    }
+
+    public EcstFeature(String dbms, String expressionType, String clause, String dependencyClass, String queryShape) {
         this.dbms = normalize(dbms);
         this.expressionType = normalize(expressionType);
         this.clause = normalize(clause);
         this.dependencyClass = normalize(dependencyClass);
+        this.queryShape = normalize(queryShape);
     }
 
     private static String normalize(String value) {
@@ -37,14 +43,20 @@ public final class EcstFeature {
         return dependencyClass;
     }
 
+    public String getQueryShape() {
+        return queryShape;
+    }
+
     /** Full feature bucket. */
     public String key() {
-        return dbms + ":" + expressionType + ":" + clause + ":" + dependencyClass;
+        return "UNKNOWN".equals(queryShape) ? dbms + ":" + expressionType + ":" + clause + ":" + dependencyClass
+                : dbms + ":" + expressionType + ":" + clause + ":" + dependencyClass + ":" + queryShape;
     }
 
     /** Coarser fallback bucket used when the full feature has too few samples. */
     public String coarseKey() {
-        return dbms + ":" + expressionType + ":" + clause;
+        return "UNKNOWN".equals(queryShape) ? dbms + ":" + expressionType + ":" + clause
+                : dbms + ":" + expressionType + ":" + clause + ":" + queryShape;
     }
 
     @Override
@@ -54,7 +66,7 @@ public final class EcstFeature {
 
     @Override
     public int hashCode() {
-        return Objects.hash(dbms, expressionType, clause, dependencyClass);
+        return Objects.hash(dbms, expressionType, clause, dependencyClass, queryShape);
     }
 
     @Override
@@ -64,6 +76,7 @@ public final class EcstFeature {
         }
         EcstFeature that = (EcstFeature) other;
         return dbms.equals(that.dbms) && expressionType.equals(that.expressionType)
-                && clause.equals(that.clause) && dependencyClass.equals(that.dependencyClass);
+                && clause.equals(that.clause) && dependencyClass.equals(that.dependencyClass)
+                && queryShape.equals(that.queryShape);
     }
 }

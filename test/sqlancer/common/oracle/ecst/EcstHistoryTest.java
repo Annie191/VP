@@ -105,6 +105,23 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void reachabilityUsesObservedSuccessRateBelowPriorFloor() {
+        EcstHistory history = new EcstHistory();
+        for (int i = 0; i < 8; i++) {
+            history.observe("hard", "theta1", EcstShiftStatus.FAILURE, Set.of(), 1);
+            history.observe("slightly-easier", "theta2", EcstShiftStatus.FAILURE, Set.of(), 1);
+        }
+        history.observe("slightly-easier", "theta2", EcstShiftStatus.SUCCESS, Set.of("LOCATION"), 1);
+
+        EcstHistory.Decision hard = history.chooseTargetDecision(
+                Map.of("hard", List.of("theta1")));
+        EcstHistory.Decision slightlyEasier = history.chooseTargetDecision(
+                Map.of("slightly-easier", List.of("theta2")));
+        assertTrue(slightlyEasier.getScore() > hard.getScore());
+        assertTrue(hard.getScore() < 2.1, "reachability must not be forced to the 0.5 prior");
+    }
+
+    @Test
     public void transformSelectionUsesObservedSuccessRateAndCost() {
         EcstHistory history = new EcstHistory();
         for (int i = 0; i < 12; i++) {
@@ -112,6 +129,50 @@ public class EcstHistoryTest {
             history.observe("target", "fast-success", EcstShiftStatus.SUCCESS, Set.of("LOCATION"), 1L);
         }
         assertEquals("fast-success", history.chooseTransform("target", List.of("slow-failing", "fast-success")));
+    }
+
+    @Test
+    public void unknownTrialsReduceTransformExploration() {
+        EcstHistory history = new EcstHistory();
+        double initialExploration = history.chooseTransformDecision("target", List.of("config"))
+                .getExploration();
+        for (int i = 0; i < 5; i++) {
+            history.observe("target", "config", EcstShiftStatus.UNKNOWN, Set.of(), 1);
+        }
+        double afterUnknowns = history.chooseTransformDecision("target", List.of("config"))
+                .getExploration();
+        assertTrue(afterUnknowns < initialExploration);
+    }
+
+    @Test
+    public void unknownDoesNotIncreaseSuccessRate() {
+        EcstHistory history = new EcstHistory();
+        double before = history.chooseTransformDecision("target", List.of("config")).getSuccessRate();
+        history.observe("target", "config", EcstShiftStatus.UNKNOWN, Set.of(), 1);
+        double after = history.chooseTransformDecision("target", List.of("config")).getSuccessRate();
+        assertEquals(before, after, 0.000001);
+    }
+
+    @Test
+    public void successFailureUnknownCountersRemainConsistent() {
+        EcstHistory history = new EcstHistory();
+        history.observe("target", "config", EcstShiftStatus.SUCCESS, Set.of(), 1);
+        history.observe("target", "config", EcstShiftStatus.FAILURE, Set.of(), 1);
+        history.observe("target", "config", EcstShiftStatus.UNKNOWN, Set.of(), 1);
+
+        String summary = history.formatSummary();
+        assertTrue(summary.contains("success=1,failure=1,unknown=1,trials=3"));
+    }
+
+    @Test
+    public void differentDirectionsHaveIndependentCoverage() {
+        EcstHistory history = new EcstHistory();
+        history.observe("TIDB_LOCATION_ROOT_TO_COP_TIKV", "config", EcstShiftStatus.SUCCESS,
+                Set.of("LOCATION:ROOT->COP_TIKV"), 1);
+
+        assertEquals(1, history.getTargetCoverage("TIDB_LOCATION_ROOT_TO_COP_TIKV"));
+        assertEquals(0, history.getTargetCoverage("TIDB_LOCATION_COP_TIKV_TO_ROOT"));
+        assertEquals(0, history.getTargetCoverage("TIDB_ACCESS_TABLEFULLSCAN_TO_INDEXLOOKUP"));
     }
 
     @Test

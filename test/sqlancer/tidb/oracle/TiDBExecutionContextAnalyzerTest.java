@@ -22,7 +22,7 @@ public class TiDBExecutionContextAnalyzerTest {
         assertEquals("ROOT", context.getLocation());
         assertEquals("SELECTION", context.getOperator());
         assertEquals("NON_PUSHDOWN", context.getBoundary());
-        assertEquals("UNKNOWN", context.getAccessPath());
+        assertEquals("TABLEFULLSCAN", context.getAccessPath());
     }
 
     @Test
@@ -62,6 +62,30 @@ public class TiDBExecutionContextAnalyzerTest {
 
         assertEquals("UNKNOWN", context.getLocation());
         assertEquals("UNKNOWN", context.getBoundary());
+    }
+
+    @Test
+    void duplicatedPhysicalInstancesRetainAllCandidatesAndSelectBestMatch() {
+        String plan = "Selection_2 1 root gt(cast(test.t.a, signed), 0)\n"
+                + "└─Selection_1 1 cop[tikv] gt(cast(test.t.a, signed), 0)\n";
+
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan, TARGET,
+                "UNKNOWN");
+
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.DUPLICATED_SAME_OPERATION, parsed.status());
+        assertEquals(2, parsed.candidates().size());
+        assertEquals("ROOT", parsed.context().getLocation());
+    }
+
+    @Test
+    void evaluationEnvironmentRetainsStructuredMetadataAndEvidenceState() {
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                "Selection_2 1 root gt(cast(test.t.a, signed), 0)\n", TARGET,
+                "sql_mode=STRICT_TRANS_TABLES;collation=utf8mb4_bin;charset=utf8mb4;targetTypeConversion=CAST");
+
+        assertEquals("STRICT_TRANS_TABLES", parsed.context().getEvaluationEnvironment().getSqlMode());
+        assertEquals("utf8mb4_bin", parsed.context().getEvaluationEnvironment().getCollation());
+        assertTrue(!parsed.context().getEvaluationEnvironment().isEvidenceAvailable());
     }
 
     @Test
@@ -106,6 +130,55 @@ public class TiDBExecutionContextAnalyzerTest {
                 .getLocation());
         assertEquals("UNKNOWN", TiDBExecutionContextAnalyzer.parse(fixture("selection"), "CAST(`v` AS UNSIGNED)")
                 .getLocation());
+    }
+
+    @Test
+    void matchesTidbInternalArithmeticFingerprintAfterRewrite() {
+        String plan = "Projection_1 1 root plus(cast(test.t.a, bigint BINARY), cast(test.t.b, bigint BINARY))\n";
+        EcstContext context = TiDBExecutionContextAnalyzer.parse(plan,
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
+        assertEquals("ROOT", context.getLocation());
+        assertEquals("PROJECTION", context.getOperator());
+    }
+
+    @Test
+    void rewrittenFingerprintStillReturnsUnknownWhenTwoNodesMatch() {
+        String plan = "Projection_1 1 root plus(cast(test.t.a, bigint BINARY), cast(test.t.b, bigint BINARY))\n"
+                + "└─Selection_2 1 cop[tikv] plus(cast(test.t.a, bigint BINARY), cast(test.t.b, bigint BINARY)) > 0\n";
+        EcstContext context = TiDBExecutionContextAnalyzer.parse(plan,
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
+        assertEquals("UNKNOWN", context.getLocation());
+    }
+
+    @Test
+    void accessPathIsResolvedFromMatchedNodeSubtree() {
+        String plan = "Selection_5 1 root gt(cast(test.t.a, signed), 0)\n"
+                + "  └─IndexLookUp_4 1 root \n"
+                + "    ├─IndexRangeScan_2 1 cop[tikv] table:t index:a\n"
+                + "    └─TableRowIDScan_3 1 cop[tikv] table:t\n";
+        EcstContext context = TiDBExecutionContextAnalyzer.parse(plan, "CAST(`a` AS SIGNED)");
+        assertEquals("SELECTION", context.getOperator());
+        assertEquals("INDEXLOOKUP", context.getAccessPath());
+    }
+
+    @Test
+    void realTwoCastArithmeticPlansAreLocatable() throws Exception {
+        EcstContext projection = TiDBExecutionContextAnalyzer.parse(fixture("two_cast_projection"),
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
+        EcstContext selection = TiDBExecutionContextAnalyzer.parse(fixture("two_cast_selection"),
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
+        assertEquals("PROJECTION", projection.getOperator());
+        assertEquals("ROOT", projection.getLocation());
+        assertEquals("SELECTION", selection.getOperator());
+        assertEquals("COP_TIKV", selection.getLocation());
+        assertEquals("TABLEFULLSCAN", selection.getAccessPath());
+    }
+
+    @Test
+    void realTwoCastHavingPlanReportsAmbiguousRelocation() throws Exception {
+        EcstContext having = TiDBExecutionContextAnalyzer.parse(fixture("two_cast_having"),
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");
+        assertEquals("UNKNOWN", having.getLocation());
     }
 
     @Test
