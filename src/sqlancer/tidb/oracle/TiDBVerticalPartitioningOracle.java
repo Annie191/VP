@@ -1183,6 +1183,22 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         if (missingLeft != 0) {
             return new RowIdValidation(false, "right-to-left missing row ids=" + missingLeft);
         }
+        long sourceMissingLeft = countMissingRowIds(schema.sourceTable, schema.leftTable);
+        if (sourceMissingLeft != 0) {
+            return new RowIdValidation(false, "source-to-left missing row ids=" + sourceMissingLeft);
+        }
+        long leftMissingSource = countMissingRowIds(schema.leftTable, schema.sourceTable);
+        if (leftMissingSource != 0) {
+            return new RowIdValidation(false, "left-to-source missing row ids=" + leftMissingSource);
+        }
+        long sourceMissingRight = countMissingRowIds(schema.sourceTable, schema.rightTable);
+        if (sourceMissingRight != 0) {
+            return new RowIdValidation(false, "source-to-right missing row ids=" + sourceMissingRight);
+        }
+        long rightMissingSource = countMissingRowIds(schema.rightTable, schema.sourceTable);
+        if (rightMissingSource != 0) {
+            return new RowIdValidation(false, "right-to-source missing row ids=" + rightMissingSource);
+        }
         return new RowIdValidation(true, "row-id bijection verified");
     }
 
