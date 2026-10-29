@@ -5,10 +5,8 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Set;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -29,13 +27,14 @@ import sqlancer.tidb.TiDBProvider.TiDBGlobalState;
 import sqlancer.tidb.TiDBSchema.TiDBTable;
 
 /**
- * TiDB MVP for ECST. It deliberately uses a separate oracle entry point and the controlled VP seam, leaving the
- * existing random VP oracle untouched.
+ * TiDB ECST prototype. The implemented capability set is deliberately smaller than the
+ * full ECST product and uses a separate oracle entry point plus the controlled VP seam.
  */
 public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private final TiDBGlobalState state;
     private final TiDBVerticalPartitioningOracle vp;
     private final TiDBExecutionContextAnalyzer analyzer;
+    private final TiDBEcstCapabilities capabilities = new TiDBEcstCapabilities();
     private final EcstHistory history = new EcstHistory();
     private final List<EcstTarget> targets = defaultTargets();
     private volatile String lastSynthesisSummary = "<none>";
@@ -199,24 +198,24 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     continue;
                 }
                 legal++;
-                if (!isApplicableToTiDb(config, shape, seedContext, seed.getExpressionContext())) {
+                if (!isApplicableToSeed(config, shape, seed.getExpressionContext())) {
+                    continue;
+                }
+                if (!capabilities.supports(config, target, seed, seedContext)) {
                     continue;
                 }
                 applicableCount++;
                 applicable.add(config);
             }
-            int maxCandidates = Math.max(1, state.getDbmsSpecificOptions().ecstMaxCandidates);
-            if (applicable.size() > maxCandidates) {
-                applicable = diversifyCandidates(applicable, maxCandidates);
-            }
             if (!applicable.isEmpty()) {
                 result.put(target.getKey(), applicable);
             }
             synthesis.add(target.getKey() + "{generated=" + generated + ",ruleAccepted=" + ruleAccepted
-                    + ",legal=" + legal + ",applicable=" + applicableCount + ",selected=" + applicable.size()
+                    + ",legal=" + legal + ",applicable=" + applicableCount + ",allCandidates=" + applicable.size()
                     + "}");
         }
-        lastSynthesisSummary = "queryShape=" + shape + "; " + String.join("; ", synthesis);
+        lastSynthesisSummary = "capabilities=" + capabilities.describe() + "; queryShape=" + shape + "; "
+                + String.join("; ", synthesis);
         return result;
     }
 
@@ -228,7 +227,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         List<EcstTarget> valid = new ArrayList<>();
         for (EcstTarget target : targets) {
             String observed = context.value(target.getDimension());
-            if ("UNKNOWN".equals(observed)) {
+            if ("UNKNOWN".equals(observed) || !capabilities.supportsTarget(target, seed, context)) {
                 continue;
             }
             if (target.getFrom().equals(observed)) {
@@ -271,37 +270,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         boolean hasJoin = normalized.matches(".*\\b(join|union)\\b.*");
         boolean hasBaseTable = normalized.contains(" from ");
         return new QueryShape(hasBaseTable, hasProjection, hasAggregation, hasJoin, maxDependencies);
-    }
-
-    private static List<EcstTransformationConfig> diversifyCandidates(List<EcstTransformationConfig> candidates,
-            int limit) {
-        List<EcstTransformationConfig> remaining = new ArrayList<>(candidates);
-        List<EcstTransformationConfig> selected = new ArrayList<>();
-        Set<String> seenRepresentations = new HashSet<>();
-        Set<String> seenLayouts = new HashSet<>();
-        Set<String> seenReconstructions = new HashSet<>();
-        Set<String> seenContexts = new HashSet<>();
-        while (selected.size() < limit && !remaining.isEmpty()) {
-            EcstTransformationConfig best = remaining.get(0);
-            int bestNovelty = -1;
-            for (EcstTransformationConfig candidate : remaining) {
-                int novelty = (seenRepresentations.contains(candidate.getRepresentation().name()) ? 0 : 1)
-                        + (seenLayouts.contains(candidate.getPartitionLayout().name()) ? 0 : 1)
-                        + (seenReconstructions.contains(candidate.getReconstruction().name()) ? 0 : 1)
-                        + (seenContexts.contains(candidate.getExpressionContext().name()) ? 0 : 1);
-                if (novelty > bestNovelty) {
-                    best = candidate;
-                    bestNovelty = novelty;
-                }
-            }
-            selected.add(best);
-            remaining.remove(best);
-            seenRepresentations.add(best.getRepresentation().name());
-            seenLayouts.add(best.getPartitionLayout().name());
-            seenReconstructions.add(best.getReconstruction().name());
-            seenContexts.add(best.getExpressionContext().name());
-        }
-        return selected;
     }
 
     /** Full bounded product before target, semantic, and TiDB capability filtering. */
@@ -377,16 +345,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     }
 
     /** TiDB currently has a VP materializer for these contexts; other legal configs remain visible as future work. */
-    private static boolean isApplicableToTiDb(EcstTransformationConfig config, QueryShape shape,
-            EcstContext seedContext, EcstTransformationConfig.ExpressionContext seedExpressionContext) {
-        return config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
-                && (config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
-                        || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE)
-                && config.getExpressionContext() == seedExpressionContext
-                && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
-                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.SELECT
-                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING)
-                && shape.hasBaseTable;
+    private static boolean isApplicableToSeed(EcstTransformationConfig config, QueryShape shape,
+            EcstTransformationConfig.ExpressionContext seedExpressionContext) {
+        return config.getExpressionContext() == seedExpressionContext && shape.hasBaseTable;
     }
 
     private static boolean isApplicableToTiDb(EcstTransformationConfig config, QueryShape shape) {

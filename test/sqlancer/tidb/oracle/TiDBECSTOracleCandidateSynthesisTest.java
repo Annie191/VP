@@ -13,6 +13,19 @@ import sqlancer.common.oracle.ecst.EcstTransformationConfig;
 
 public class TiDBECSTOracleCandidateSynthesisTest {
     @Test
+    void declaresTheImplementedTidbPrototypeCapabilitySet() {
+        TiDBEcstCapabilities capabilities = new TiDBEcstCapabilities();
+
+        assertTrue(capabilities.supportsRepresentation(EcstTransformationConfig.Representation.VERTICAL_PARTITIONED));
+        assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.JOIN));
+        assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.DERIVED_TABLE));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.WHERE));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.SELECT));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.HAVING));
+        assertEquals("TiDB ECST prototype capability set", capabilities.describe());
+    }
+
+    @Test
     void enumeratesTheFullTransformationProductBeforeFiltering() {
         List<EcstTransformationConfig> configurations = TiDBECSTOracle.enumerateConfigurationSpace();
 
