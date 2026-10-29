@@ -14,10 +14,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
@@ -28,6 +30,7 @@ import sqlancer.Main;
 import sqlancer.Randomly;
 import sqlancer.common.oracle.TestOracle;
 import sqlancer.common.oracle.ecst.EcstFeature;
+import sqlancer.common.oracle.ecst.EcstOperation;
 import sqlancer.common.oracle.ecst.EcstTransformationConfig;
 import sqlancer.common.query.ExpectedErrors;
 import sqlancer.common.query.SQLQueryAdapter;
@@ -225,6 +228,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     /** A controlled VP query pair owned by this oracle so the existing VP machinery can be reused by ECST. */
     public static final class EcstCase {
         private final VpQueryPair pair;
+        private final EcstOperation operation;
         private final String targetExpression;
         private final String baseTable;
         private final List<String> targetDependencies;
@@ -232,9 +236,11 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         private final List<String> rightDependencies;
         private final String generationInfo;
 
-        private EcstCase(VpQueryPair pair, String targetExpression, String baseTable, List<String> targetDependencies,
+        private EcstCase(VpQueryPair pair, EcstOperation operation, String targetExpression, String baseTable,
+                List<String> targetDependencies,
                 List<String> leftDependencies, List<String> rightDependencies, String generationInfo) {
             this.pair = pair;
+            this.operation = operation;
             this.targetExpression = targetExpression;
             this.baseTable = baseTable;
             this.targetDependencies = List.copyOf(targetDependencies);
@@ -253,6 +259,10 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
         public String getTargetExpression() {
             return targetExpression;
+        }
+
+        public EcstOperation getOperation() {
+            return operation;
         }
 
         public String getDescription() {
@@ -294,6 +304,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         private final String sourceTable;
         private final String originalQuery;
         private final String targetExpression;
+        private final EcstOperation operation;
         private final List<String> targetDependencies;
         private final TiDBECSTOracle.QueryShape shape;
         private final EcstTransformationConfig.ExpressionContext expressionContext;
@@ -307,6 +318,16 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             this.sourceTable = sourceTable;
             this.originalQuery = originalQuery;
             this.targetExpression = targetExpression;
+            Map<String, String> lineage = new LinkedHashMap<>();
+            for (String dependency : targetDependencies) {
+                lineage.put(sourceTable + "." + dependency, dependency);
+                lineage.put("l." + dependency, dependency);
+                lineage.put("r." + dependency, dependency);
+            }
+            this.operation = new EcstOperation("TIDB_ECST:" + sourceTable + ":" + targetExpression,
+                    targetExpression, new LinkedHashSet<>(targetDependencies),
+                    new sqlancer.common.oracle.ecst.EcstExpressionShape(2, "SIGNED", Set.of("+"),
+                            new LinkedHashSet<>(targetDependencies)), lineage);
             this.targetDependencies = List.copyOf(targetDependencies);
             this.shape = shape;
             this.expressionContext = expressionContext;
@@ -328,6 +349,10 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
         public String getTargetExpression() {
             return targetExpression;
+        }
+
+        public EcstOperation getOperation() {
+            return operation;
         }
 
         public List<String> getTargetDependencies() {
@@ -801,7 +826,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 + columnNames(controlled.splitPlan.leftColumns) + ",rightColumns="
                 + columnNames(controlled.splitPlan.rightColumns) + ",overlapColumns="
                 + columnNames(controlled.splitPlan.overlapColumns);
-        return new EcstCase(pair, targetExpression, base.tableName,
+        return new EcstCase(pair, seed.operation, targetExpression, base.tableName,
                 dependencyNames, leftDependencies, rightDependencies, generationInfo);
     }
 

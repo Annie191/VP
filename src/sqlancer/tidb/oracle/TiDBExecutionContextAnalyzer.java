@@ -10,12 +10,14 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import sqlancer.common.oracle.ecst.EcstContext;
 import sqlancer.common.oracle.ecst.EcstEvaluationEnvironment;
+import sqlancer.common.oracle.ecst.EcstOperation;
 import sqlancer.common.oracle.ecst.EcstObservation.UnknownReason;
 import sqlancer.common.oracle.ecst.EcstObservation;
 import sqlancer.common.oracle.ecst.EcstShiftStatus;
@@ -53,9 +55,13 @@ public final class TiDBExecutionContextAnalyzer {
 
     /** Extracts the execution context of the untransformed seed query. */
     public EcstContext extractContext(String originalQuery, String targetExpression) {
+        return extractContext(originalQuery, operationFor(targetExpression));
+    }
+
+    public EcstContext extractContext(String originalQuery, EcstOperation operation) {
         try {
-            ParsedContext parsed = parsePlan(explain(originalQuery), targetExpression,
-                    readEvaluationContext(targetExpression));
+            ParsedContext parsed = parsePlan(explain(originalQuery), operation,
+                    readEvaluationContext(operation == null ? null : operation.getNormalizedExpression()));
             return parsed.context();
         } catch (SQLException ignored) {
             return new EcstContext("UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN");
@@ -64,6 +70,11 @@ public final class TiDBExecutionContextAnalyzer {
 
     public EcstObservation analyze(String originalQuery, String transformedQuery, String targetExpression,
             EcstTarget target) {
+        return analyze(originalQuery, transformedQuery, operationFor(targetExpression), target);
+    }
+
+    public EcstObservation analyze(String originalQuery, String transformedQuery, EcstOperation operation,
+            EcstTarget target) {
         String originalPlan = "";
         String transformedPlan = "";
         try {
@@ -71,13 +82,13 @@ public final class TiDBExecutionContextAnalyzer {
             transformedPlan = explain(transformedQuery);
             String evaluation;
             try {
-                evaluation = readEvaluationContext(targetExpression);
+                evaluation = readEvaluationContext(operation == null ? null : operation.getNormalizedExpression());
             } catch (SQLException ignored) {
                 // Session metadata is supplementary evidence; a failed metadata probe must not discard plan matches.
                 evaluation = "UNKNOWN";
             }
-            ParsedContext original = parsePlan(originalPlan, targetExpression, evaluation);
-            ParsedContext transformed = parsePlan(transformedPlan, targetExpression, evaluation);
+            ParsedContext original = parsePlan(originalPlan, operation, evaluation);
+            ParsedContext transformed = parsePlan(transformedPlan, operation, evaluation);
             if (!original.matched || !transformed.matched) {
                 UnknownReason unknownReason = original.status == MatchStatus.NOT_FOUND
                         || transformed.status == MatchStatus.NOT_FOUND ? UnknownReason.UNKNOWN_BECAUSE_PLAN
@@ -130,14 +141,18 @@ public final class TiDBExecutionContextAnalyzer {
 
     /** Package-visible parser entry point for focused analyzer tests. */
     static EcstContext parse(String plan, String targetExpression) {
-        ParsedContext parsed = parsePlan(plan, targetExpression, "UNKNOWN");
+        ParsedContext parsed = parsePlan(plan, operationFor(targetExpression), "UNKNOWN");
         return parsed.status == MatchStatus.UNIQUE ? parsed.context() : ParsedContext.unknown(plan,
                 parsed.reason).context();
     }
 
     /** Package-visible evidence entry point for focused analyzer tests. */
     static ParsedContext parseWithEvidence(String plan, String targetExpression, String evaluation) {
-        return parsePlan(plan, targetExpression, evaluation);
+        return parsePlan(plan, operationFor(targetExpression), evaluation);
+    }
+
+    static ParsedContext parseWithEvidence(String plan, EcstOperation operation, String evaluation) {
+        return parsePlan(plan, operation, evaluation);
     }
 
     private EcstObservation observation(ParsedContext original, ParsedContext transformed, EcstShiftStatus status,
@@ -165,9 +180,9 @@ public final class TiDBExecutionContextAnalyzer {
         }
     }
 
-    private static ParsedContext parsePlan(String plan, String targetExpression, String evaluation) {
+    private static ParsedContext parsePlan(String plan, EcstOperation operation, String evaluation) {
         List<PlanNode> nodes = parseNodes(plan);
-        TargetPattern target = TargetPattern.create(targetExpression);
+        TargetPattern target = TargetPattern.create(operation);
         if (target == null || nodes.isEmpty()) {
             return ParsedContext.unknown(plan, "no target expression or no explain nodes", MatchStatus.NOT_FOUND);
         }
@@ -193,18 +208,18 @@ public final class TiDBExecutionContextAnalyzer {
         MatchStatus status = MatchStatus.UNIQUE;
         if (candidates.size() > 1) {
             Candidate second = candidates.get(1);
-            if (best.score == second.score) {
-                status = allCandidatesRepresentSameOperation(candidates, target)
-                        ? MatchStatus.DUPLICATED_SAME_OPERATION : MatchStatus.AMBIGUOUS;
-            } else if (!allCandidatesHaveSameRole(candidates)) {
+            if (!allCandidatesHaveSameRole(candidates)) {
                 // A projection and a predicate can contain the same expression, but
                 // they are different operation instances until an AST/source
                 // correspondence identifies which one is the target.
                 status = MatchStatus.AMBIGUOUS;
+            } else if (best.score == second.score) {
+                status = allCandidatesRepresentSameOperation(candidates)
+                        ? MatchStatus.DUPLICATED_SAME_OPERATION : MatchStatus.AMBIGUOUS;
             }
         }
         EcstEvaluationEnvironment environment = parseEvaluationEnvironment(evaluation);
-        EcstContext context = contextFor(best.expression.owner, environment, target);
+        EcstContext context = contextForCandidates(candidates, environment, target);
         String evidence = "sessionMetadata=" + evaluation + "; executorEvaluation=UNOBSERVED; matchStatus=" + status
                 + "; candidates=" + candidates.size() + "; line=" + best.expression.owner.line + ", score="
                 + best.score + ", signals=" + String.join("+", best.signals) + ", normalizedTarget="
@@ -215,8 +230,12 @@ public final class TiDBExecutionContextAnalyzer {
         return new ParsedContext(context, plan, best.expression.owner.raw, evidence, status, reason, candidates);
     }
 
-    private static boolean allCandidatesRepresentSameOperation(List<Candidate> candidates, TargetPattern target) {
-        return candidates.stream().allMatch(candidate -> candidate.operationFingerprint.equals(target.operationFingerprint));
+    private static boolean allCandidatesRepresentSameOperation(List<Candidate> candidates) {
+        if (candidates.isEmpty()) {
+            return true;
+        }
+        String fingerprint = candidates.get(0).operationFingerprint;
+        return candidates.stream().allMatch(candidate -> candidate.operationFingerprint.equals(fingerprint));
     }
 
     private static boolean allCandidatesHaveSameRole(List<Candidate> candidates) {
@@ -418,7 +437,7 @@ public final class TiDBExecutionContextAnalyzer {
 
     private static Candidate score(PlanExpression expression, TargetPattern target) {
         String text = expression.normalized;
-        Set<String> nodeReferences = references(expression.expressionText);
+        Set<String> nodeReferences = logicalReferences(expression.expressionText, target);
         List<String> signals = new ArrayList<>();
         int score = 0;
         int first = text.indexOf(target.normalized);
@@ -426,8 +445,7 @@ public final class TiDBExecutionContextAnalyzer {
         boolean exactStructure = exact && nodeReferences.equals(target.references);
         // Multiple occurrences (including distinct table columns with the same leaf name) are ambiguous.
         if (exact && text.indexOf(target.normalized, first + target.normalized.length()) >= 0) {
-            return new Candidate(expression, Integer.MAX_VALUE, List.of("ambiguous-expression-occurrences"),
-                    target.operationFingerprint);
+            return new Candidate(expression, Integer.MAX_VALUE, List.of("ambiguous-expression-occurrences"));
         }
         boolean allReferences = !target.references.isEmpty() && nodeReferences.equals(target.references);
         boolean equivalent = allReferences && equivalentExpressionShape(text, target);
@@ -457,7 +475,7 @@ public final class TiDBExecutionContextAnalyzer {
             return null;
         }
         signals.add("role=" + expression.role.name());
-        return new Candidate(expression, score, signals, target.operationFingerprint);
+        return new Candidate(expression, score, signals);
     }
 
     private static boolean equivalentExpressionShape(String text, TargetPattern target) {
@@ -497,6 +515,37 @@ public final class TiDBExecutionContextAnalyzer {
                 : "COP_TIKV".equals(location) || "COP_TIFLASH".equals(location) ? "PUSHDOWN" : "UNKNOWN";
         // Session variables and CAST syntax do not establish executor evaluation semantics.
         return new EcstContext(location, node.operator, boundary, accessPath(node), evaluation);
+    }
+
+    private static EcstContext contextForCandidates(List<Candidate> candidates,
+            EcstEvaluationEnvironment evaluation, TargetPattern target) {
+        List<EcstContext> contexts = new ArrayList<>();
+        for (Candidate candidate : candidates) {
+            contexts.add(contextFor(candidate.expression.owner, evaluation, target));
+        }
+        EcstContext first = contexts.get(0);
+        return new EcstContext(resolveDimension(contexts, sqlancer.common.oracle.ecst.EcstContextDimension.LOCATION),
+                resolveDimension(contexts, sqlancer.common.oracle.ecst.EcstContextDimension.OPERATOR),
+                resolveDimension(contexts, sqlancer.common.oracle.ecst.EcstContextDimension.BOUNDARY),
+                resolveDimension(contexts, sqlancer.common.oracle.ecst.EcstContextDimension.ACCESS_PATH),
+                first.getEvaluationEnvironment());
+    }
+
+    private static String resolveDimension(List<EcstContext> contexts,
+            sqlancer.common.oracle.ecst.EcstContextDimension dimension) {
+        String resolved = null;
+        for (EcstContext context : contexts) {
+            String value = context.value(dimension);
+            if ("UNKNOWN".equals(value)) {
+                return "UNKNOWN";
+            }
+            if (resolved == null) {
+                resolved = value;
+            } else if (!resolved.equals(value)) {
+                return "UNKNOWN";
+            }
+        }
+        return resolved == null ? "UNKNOWN" : resolved;
     }
 
     private static EcstEvaluationEnvironment parseEvaluationEnvironment(String evaluation) {
@@ -579,6 +628,12 @@ public final class TiDBExecutionContextAnalyzer {
         return normalized.replaceAll("cast\\(([a-z_][a-z0-9_$]*),bigintbinary\\)", "cast($1,signed)");
     }
 
+    private static String expressionFingerprint(String expression) {
+        String normalized = normalize(expression);
+        return normalized + "|refs=" + references(expression) + "|casts=" + countOccurrences(normalized, "cast(")
+                + "|ops=" + operatorShape(normalized);
+    }
+
     private static Set<String> references(String value) {
         if (value == null) {
             return Set.of();
@@ -598,6 +653,34 @@ public final class TiDBExecutionContextAnalyzer {
         return result;
     }
 
+    private static Set<String> logicalReferences(String value, TargetPattern target) {
+        if (value == null) {
+            return Set.of();
+        }
+        String clean = value.toLowerCase(Locale.ROOT).replace("`", "").replace("\"", "");
+        Set<String> result = new LinkedHashSet<>();
+        Matcher matcher = TOKEN.matcher(clean);
+        while (matcher.find()) {
+            String token = matcher.group(1);
+            String leaf = token.substring(token.lastIndexOf('.') + 1);
+            boolean function = matcher.end() < clean.length() && clean.charAt(matcher.end()) == '(';
+            if (STOP_WORDS.contains(leaf) || function || leaf.matches("[-+]?\\d+(?:\\.\\d+)?")) {
+                continue;
+            }
+            String mapped = target.lineage.get(token);
+            if (mapped == null && token.indexOf('.') < 0 && target.references.contains(leaf)) {
+                mapped = leaf;
+            }
+            if (mapped == null && token.indexOf('.') >= 0 && target.references.contains(leaf)) {
+                // Only collapse a qualifier when the logical target dependency
+                // confirms that the leaf belongs to this operation.
+                mapped = leaf;
+            }
+            result.add(mapped == null ? token : mapped);
+        }
+        return result;
+    }
+
     private String readEvaluationContext(String targetExpression) throws SQLException {
         try (Statement statement = state.getConnection().createStatement(); ResultSet result = statement.executeQuery(
                 "SELECT @@sql_mode, @@collation_connection, @@character_set_connection")) {
@@ -613,6 +696,11 @@ public final class TiDBExecutionContextAnalyzer {
 
     private static String safe(String value) {
         return value == null || value.isEmpty() ? "UNKNOWN" : value;
+    }
+
+    private static EcstOperation operationFor(String targetExpression) {
+        String normalized = normalize(targetExpression);
+        return new EcstOperation("ECST_TARGET:" + normalized, normalized, references(targetExpression), "ARITHMETIC");
     }
 
     enum MatchStatus {
@@ -727,7 +815,7 @@ public final class TiDBExecutionContextAnalyzer {
             this.owner = owner;
             this.role = role;
             this.expressionText = expressionText;
-            this.fingerprint = normalized;
+            this.fingerprint = expressionFingerprint(expressionText);
             this.normalized = normalized;
         }
 
@@ -750,15 +838,19 @@ public final class TiDBExecutionContextAnalyzer {
         private final List<String> signals;
         private final String operationFingerprint;
 
-        private Candidate(PlanExpression expression, int score, List<String> signals, String operationFingerprint) {
+        private Candidate(PlanExpression expression, int score, List<String> signals) {
             this.expression = expression;
             this.score = score;
             this.signals = signals;
-            this.operationFingerprint = operationFingerprint;
+            this.operationFingerprint = expression.fingerprint;
         }
 
         PlanExpression expression() {
             return expression;
+        }
+
+        String operationFingerprint() {
+            return operationFingerprint;
         }
     }
 
@@ -772,10 +864,11 @@ public final class TiDBExecutionContextAnalyzer {
         private final String castMode;
         private final int castCount;
         private final String operatorShape;
-        private final String operationFingerprint;
+        private final Map<String, String> lineage;
 
         private TargetPattern(String normalized, Set<String> references, boolean hasCast, boolean hasArithmetic,
-                boolean hasFunction, String functionName, String castMode, int castCount, String operatorShape) {
+                boolean hasFunction, String functionName, String castMode, int castCount, String operatorShape,
+                Map<String, String> lineage) {
             this.normalized = normalized;
             this.references = references;
             this.hasCast = hasCast;
@@ -785,12 +878,11 @@ public final class TiDBExecutionContextAnalyzer {
             this.castMode = castMode;
             this.castCount = castCount;
             this.operatorShape = operatorShape;
-            this.operationFingerprint = normalized + "|refs=" + references + "|casts=" + castCount + "|ops="
-                    + operatorShape + "|castMode=" + castMode;
+            this.lineage = lineage == null ? Map.of() : lineage;
         }
 
-        private static TargetPattern create(String expression) {
-            String normalized = normalize(expression);
+        private static TargetPattern create(EcstOperation operation) {
+            String normalized = normalize(operation == null ? "" : operation.getNormalizedExpression());
             if (normalized.isEmpty()) {
                 return null;
             }
@@ -803,9 +895,9 @@ public final class TiDBExecutionContextAnalyzer {
                 function = matcher.group(1);
             }
             String mode = normalized.contains("unsigned") ? "unsigned" : normalized.contains("signed") ? "signed" : null;
-            Set<String> dependencies = references(expression);
+            Set<String> dependencies = operation.getDependencies();
             return new TargetPattern(normalized, dependencies, cast, arithmetic, hasFunction, function, mode,
-                    countOccurrences(normalized, "cast("), operatorShape(normalized));
+                    countOccurrences(normalized, "cast("), operatorShape(normalized), operation.getDependencyLineage());
         }
     }
 }

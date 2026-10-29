@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import sqlancer.common.oracle.ecst.EcstContext;
+import sqlancer.common.oracle.ecst.EcstOperation;
 
 public class TiDBExecutionContextAnalyzerTest {
     private static final String TARGET = "CAST(`a` AS SIGNED)";
@@ -74,7 +75,10 @@ public class TiDBExecutionContextAnalyzerTest {
 
         assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.DUPLICATED_SAME_OPERATION, parsed.status());
         assertEquals(2, parsed.candidates().size());
-        assertEquals("ROOT", parsed.context().getLocation());
+        assertEquals("UNKNOWN", parsed.context().getLocation());
+        assertEquals("UNKNOWN", parsed.context().getBoundary());
+        assertEquals("SELECTION", parsed.context().getOperator());
+        assertEquals(parsed.candidates().get(0).operationFingerprint(), parsed.candidates().get(1).operationFingerprint());
     }
 
     @Test
@@ -197,6 +201,23 @@ public class TiDBExecutionContextAnalyzerTest {
                 parsed.selectedExpression().role());
         assertTrue(parsed.selectedExpression().expressionText().contains("plus(cast(test.l.c0"));
         assertTrue(parsed.evidence().contains("expressionRole=JOIN_OTHER_CONDITION"));
+    }
+
+    @Test
+    void operationLineageResolvesQualifiedPartitionColumns() {
+        java.util.Map<String, String> lineage = java.util.Map.of("l.c0", "c0", "r.c1", "c1");
+        EcstOperation operation = new EcstOperation("op-1", "(CAST(`c0` AS SIGNED) + CAST(`c1` AS SIGNED))",
+                java.util.Set.of("c0", "c1"),
+                new sqlancer.common.oracle.ecst.EcstExpressionShape(2, "SIGNED", java.util.Set.of("+"),
+                        java.util.Set.of("c0", "c1")), lineage);
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                "MergeJoin | 1.0 | root | | inner join, other cond:gt(plus(cast(l.c0, bigint BINARY), "
+                        + "cast(r.c1, bigint BINARY)), 0)\n",
+                operation, "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+        assertEquals("ROOT", parsed.context().getLocation());
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.JOIN_OTHER_CONDITION,
+                parsed.selectedExpression().role());
     }
 
     @Test

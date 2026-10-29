@@ -111,7 +111,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             EcstContext seedContext;
             try {
                 seed = vp.createEcstSeed();
-                seedContext = analyzer.extractContext(seed.getOriginalQuery(), seed.getTargetExpression());
+                seedContext = analyzer.extractContext(seed.getOriginalQuery(), seed.getOperation());
             } catch (IgnoreMeException | IllegalArgumentException ignored) {
                 creationSkips++;
                 recordFailure(EcstPhase.SEED_GENERATION, seed, null, null, ignored);
@@ -178,7 +178,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             EcstObservation observation;
             try {
                 observation = analyzer.analyze(testCase.getOriginalQuery(), testCase.getTransformedQuery(),
-                        testCase.getTargetExpression(), target);
+                        testCase.getOperation(), target);
             } catch (Exception | AssertionError failure) {
                 recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config, testCase, failure);
                 cleanupSeed(seed);
