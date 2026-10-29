@@ -148,7 +148,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             long started = System.nanoTime();
             TiDBVerticalPartitioningOracle.EcstCase testCase;
             try {
-                testCase = vp.applyEcstTransformation(seed, config);
+                testCase = vp.applyEcstTransformation(seed, config, target);
             } catch (IgnoreMeException | IllegalArgumentException ignored) {
                 creationSkips++;
                 recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, ignored);
@@ -156,6 +156,22 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 continue;
             } catch (Exception failure) {
                 recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, failure);
+                cleanupSeed(seed);
+                if (isRecoverable(failure)) continue;
+                throw failure;
+            }
+            try {
+                EcstContext refreshedSeedContext = analyzer.extractContext(testCase.getOriginalQuery(),
+                        testCase.getOperation());
+                if (!sameContext(seedContext, refreshedSeedContext)) {
+                    recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config, testCase,
+                            new IllegalStateException("SEED_CONTEXT_CHANGED: seed=" + seedContext + ", refreshed="
+                                    + refreshedSeedContext));
+                    cleanupSeed(seed);
+                    continue;
+                }
+            } catch (Exception failure) {
+                recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config, testCase, failure);
                 cleanupSeed(seed);
                 if (isRecoverable(failure)) continue;
                 throw failure;
@@ -222,6 +238,23 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         }
     }
 
+    private static boolean sameContext(EcstContext before, EcstContext after) {
+        if (before == null || after == null) {
+            return false;
+        }
+        for (EcstContextDimension dimension : EcstContextDimension.values()) {
+            String left = before.value(dimension);
+            String right = after.value(dimension);
+            if ("UNKNOWN".equals(left) && "UNKNOWN".equals(right)) {
+                continue;
+            }
+            if (!left.equals(right)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     Map<String, List<EcstTransformationConfig>> synthesizeCandidateSets(
             TiDBVerticalPartitioningOracle.EcstSeed seed, EcstContext seedContext, List<EcstTarget> validTargets) {
         Map<String, List<EcstTransformationConfig>> result = new LinkedHashMap<>();
@@ -262,7 +295,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     + ",legal=" + legal + ",applicable=" + applicableCount + ",allCandidates=" + applicable.size()
                     + "}");
         }
-        lastSynthesisSummary = "capabilities=" + capabilities.describe() + "; queryShape=" + shape + "; "
+        lastSynthesisSummary = "capabilities=" + capabilities.describe() + "; queryShape=" + shape
+                + "; accessPathPreparation=" + seed.getAccessPathPreparation() + "; "
                 + String.join("; ", synthesis);
         return result;
     }
