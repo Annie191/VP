@@ -65,6 +65,30 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void duplicatedPhysicalInstancesRetainAllCandidatesAndSelectBestMatch() {
+        String plan = "Selection_2 1 root gt(cast(test.t.a, signed), 0)\n"
+                + "└─Selection_1 1 cop[tikv] gt(cast(test.t.a, signed), 0)\n";
+
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan, TARGET,
+                "UNKNOWN");
+
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.DUPLICATED_SAME_OPERATION, parsed.status());
+        assertEquals(2, parsed.candidates().size());
+        assertEquals("ROOT", parsed.context().getLocation());
+    }
+
+    @Test
+    void evaluationEnvironmentRetainsStructuredMetadataAndEvidenceState() {
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                "Selection_2 1 root gt(cast(test.t.a, signed), 0)\n", TARGET,
+                "sql_mode=STRICT_TRANS_TABLES;collation=utf8mb4_bin;charset=utf8mb4;targetTypeConversion=CAST");
+
+        assertEquals("STRICT_TRANS_TABLES", parsed.context().getEvaluationEnvironment().getSqlMode());
+        assertEquals("utf8mb4_bin", parsed.context().getEvaluationEnvironment().getCollation());
+        assertTrue(!parsed.context().getEvaluationEnvironment().isEvidenceAvailable());
+    }
+
+    @Test
     void preservesEvaluationEnvironmentOnMatchedNode() {
         String plan = "Selection_2 1 root gt(cast(test.t.a, signed), 0)\n";
 

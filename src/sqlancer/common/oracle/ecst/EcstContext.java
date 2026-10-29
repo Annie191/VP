@@ -7,13 +7,29 @@ public final class EcstContext {
     private final String boundary;
     private final String accessPath;
     private final String evaluation;
+    private final EcstEvaluationEnvironment evaluationEnvironment;
 
     public EcstContext(String location, String operator, String boundary, String accessPath, String evaluation) {
+        this(location, operator, boundary, accessPath, evaluation, EcstEvaluationEnvironment.unavailable());
+    }
+
+    public EcstContext(String location, String operator, String boundary, String accessPath,
+            EcstEvaluationEnvironment evaluationEnvironment) {
+        this(location, operator, boundary, accessPath,
+                evaluationEnvironment == null || !evaluationEnvironment.isEvidenceAvailable() ? "UNKNOWN"
+                        : evaluationEnvironment.toString(),
+                evaluationEnvironment);
+    }
+
+    private EcstContext(String location, String operator, String boundary, String accessPath, String evaluation,
+            EcstEvaluationEnvironment evaluationEnvironment) {
         this.location = normalize(location);
         this.operator = normalize(operator);
         this.boundary = normalize(boundary);
         this.accessPath = normalize(accessPath);
         this.evaluation = normalize(evaluation);
+        this.evaluationEnvironment = evaluationEnvironment == null ? EcstEvaluationEnvironment.unavailable()
+                : evaluationEnvironment;
     }
 
     private static String normalize(String value) {
@@ -38,6 +54,10 @@ public final class EcstContext {
 
     public String getEvaluation() {
         return evaluation;
+    }
+
+    public EcstEvaluationEnvironment getEvaluationEnvironment() {
+        return evaluationEnvironment;
     }
 
     public String value(EcstContextDimension dimension) {
