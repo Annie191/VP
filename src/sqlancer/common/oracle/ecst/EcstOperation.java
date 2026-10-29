@@ -13,6 +13,7 @@ public final class EcstOperation {
     private final Set<String> dependencies;
     private final EcstExpressionShape shape;
     private final Map<String, String> dependencyLineage;
+    private final String expectedRole;
 
     public EcstOperation(String operationId, String normalizedExpression, Set<String> dependencies, String shape) {
         this(operationId, normalizedExpression, dependencies, new EcstExpressionShape(0, "UNKNOWN", Set.of(),
@@ -26,12 +27,18 @@ public final class EcstOperation {
 
     public EcstOperation(String operationId, String normalizedExpression, Set<String> dependencies,
             EcstExpressionShape shape, Map<String, String> dependencyLineage) {
+        this(operationId, normalizedExpression, dependencies, shape, dependencyLineage, "UNKNOWN");
+    }
+
+    public EcstOperation(String operationId, String normalizedExpression, Set<String> dependencies,
+            EcstExpressionShape shape, Map<String, String> dependencyLineage, String expectedRole) {
         this.operationId = operationId == null ? "UNKNOWN" : operationId;
         this.normalizedExpression = normalizedExpression == null ? "" : normalizedExpression;
         this.dependencies = Collections.unmodifiableSet(new LinkedHashSet<>(dependencies == null ? Set.of() : dependencies));
         this.shape = shape == null ? new EcstExpressionShape(0, "UNKNOWN", Set.of(), dependencies) : shape;
         this.dependencyLineage = Collections.unmodifiableMap(new LinkedHashMap<>(
                 dependencyLineage == null ? Map.of() : dependencyLineage));
+        this.expectedRole = expectedRole == null ? "UNKNOWN" : expectedRole;
     }
 
     public String getOperationId() { return operationId; }
@@ -39,4 +46,5 @@ public final class EcstOperation {
     public Set<String> getDependencies() { return dependencies; }
     public EcstExpressionShape getShape() { return shape; }
     public Map<String, String> getDependencyLineage() { return dependencyLineage; }
+    public String getExpectedRole() { return expectedRole; }
 }

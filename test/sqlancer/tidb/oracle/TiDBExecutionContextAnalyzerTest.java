@@ -244,6 +244,30 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void projectionItemMatchIgnoresSiblingRowIdentityProjection() {
+        String plan = "Projection | 10000.00 | root | | vp_rowid, plus(cast(test.t.c0, bigint BINARY), "
+                + "cast(test.t.c1, bigint BINARY))->Column#5\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "(CAST(`c0` AS SIGNED) + CAST(`c1` AS SIGNED))", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.PROJECTION_ITEM,
+                parsed.selectedExpression().role());
+    }
+
+    @Test
+    void expectedHavingPredicateRoleDisambiguatesProjectionCopy() throws Exception {
+        EcstOperation operation = new EcstOperation("having-op",
+                "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))", java.util.Set.of("a", "b"),
+                new sqlancer.common.oracle.ecst.EcstExpressionShape(2, "SIGNED", java.util.Set.of("+"),
+                        java.util.Set.of("a", "b")), java.util.Map.of(), "SELECTION_PREDICATE");
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                fixture("two_cast_having"), operation, "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.SELECTION_PREDICATE,
+                parsed.selectedExpression().role());
+    }
+
+    @Test
     void realPlansConfirmOnlyRequestedDirection() throws Exception {
         EcstContext root = TiDBExecutionContextAnalyzer.parse(fixture("projection"), "CAST(`v` AS SIGNED)");
         EcstContext cop = TiDBExecutionContextAnalyzer.parse(fixture("selection"), "CAST(`v` AS SIGNED)");

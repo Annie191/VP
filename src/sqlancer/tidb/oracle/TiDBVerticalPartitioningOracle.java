@@ -411,7 +411,9 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             this.operation = new EcstOperation("TIDB_ECST:" + sourceTable + ":" + targetExpression,
                     targetExpression, new LinkedHashSet<>(targetDependencies),
                     new sqlancer.common.oracle.ecst.EcstExpressionShape(2, "SIGNED", Set.of("+"),
-                            new LinkedHashSet<>(targetDependencies)), lineage);
+                            new LinkedHashSet<>(targetDependencies)), lineage,
+                    expressionContext == EcstTransformationConfig.ExpressionContext.SELECT ? "PROJECTION_ITEM"
+                            : "SELECTION_PREDICATE");
             this.accessPathPreparation = accessPathPreparation;
             this.targetDependencies = List.copyOf(targetDependencies);
             this.shape = shape;
