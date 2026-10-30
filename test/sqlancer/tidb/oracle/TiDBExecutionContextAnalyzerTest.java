@@ -345,6 +345,33 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void matchesRealTidbCasePlan() {
+        String plan = "Projection | 1 root | | case(isnull(test.t.c0), cast(test.t.c1, bigint BINARY), "
+                + "cast(test.t.c0, bigint BINARY))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CASE WHEN `c0` IS NULL THEN CAST(`c1` AS SIGNED) ELSE CAST(`c0` AS SIGNED) END", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+    }
+
+    @Test
+    void rejectsSwappedCaseBranches() {
+        String plan = "Projection | 1 root | | case(isnull(test.t.c0), cast(test.t.c0, bigint BINARY), "
+                + "cast(test.t.c1, bigint BINARY))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CASE WHEN `c0` IS NULL THEN CAST(`c1` AS SIGNED) ELSE CAST(`c0` AS SIGNED) END", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void rejectsDifferentCaseCondition() {
+        String plan = "Projection | 1 root | | case(isnull(test.t.c1), cast(test.t.c1, bigint BINARY), "
+                + "cast(test.t.c0, bigint BINARY))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CASE WHEN `c0` IS NULL THEN CAST(`c1` AS SIGNED) ELSE CAST(`c0` AS SIGNED) END", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
     void doesNotEraseFromBinaryCastMapping() {
         String plan = "Projection | 1 root | | char_length(cast(from_binary(test.t.c0), var_string(19)))->Column#1\n";
         TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,

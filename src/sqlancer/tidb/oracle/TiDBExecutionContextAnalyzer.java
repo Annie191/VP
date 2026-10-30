@@ -1103,6 +1103,7 @@ public final class TiDBExecutionContextAnalyzer {
                     kind = "DIV";
                     break;
                 case "casewhen":
+                case "case":
                     kind = "CASE_WHEN";
                     break;
                 case "isnull":
@@ -1111,6 +1112,9 @@ public final class TiDBExecutionContextAnalyzer {
                 default:
                     kind = name.toUpperCase(Locale.ROOT);
                     break;
+                }
+                if ("CASE_WHEN".equals(kind) && arguments.size() != 3) {
+                    return new ExprFingerprint("UNSUPPORTED_REWRITE", "UNKNOWN", List.of(), null, value);
                 }
                 List<ExprFingerprint> children = new ArrayList<>();
                 for (String argument : arguments) {
