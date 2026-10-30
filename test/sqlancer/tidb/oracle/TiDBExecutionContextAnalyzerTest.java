@@ -268,6 +268,23 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void rejectsReorderedSubtractionOperands() {
+        String plan = "Projection | 1 root | | minus(cast(test.t.c1, bigint BINARY), "
+                + "cast(test.t.c0, bigint BINARY))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "(CAST(`c0` AS SIGNED) - CAST(`c1` AS SIGNED))", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void rejectsSignedUnsignedCastMismatch() {
+        String plan = "Projection | 1 root | | cast(test.t.c0, bigint UNSIGNED)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CAST(`c0` AS SIGNED)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
     void realPlansConfirmOnlyRequestedDirection() throws Exception {
         EcstContext root = TiDBExecutionContextAnalyzer.parse(fixture("projection"), "CAST(`v` AS SIGNED)");
         EcstContext cop = TiDBExecutionContextAnalyzer.parse(fixture("selection"), "CAST(`v` AS SIGNED)");

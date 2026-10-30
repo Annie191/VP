@@ -472,7 +472,7 @@ public final class TiDBExecutionContextAnalyzer {
             return new Candidate(expression, Integer.MAX_VALUE, List.of("ambiguous-expression-occurrences"));
         }
         boolean allReferences = !target.references.isEmpty() && nodeReferences.equals(target.references);
-        boolean equivalent = allReferences && equivalentExpressionShape(text, target);
+        boolean equivalent = allReferences && equivalentExpressionShape(expression.expressionText, target);
         boolean predicate = containsPredicateMarker(text) || expression.role == ExpressionRole.SELECTION_PREDICATE
                 || expression.role == ExpressionRole.JOIN_OTHER_CONDITION;
         if (exactStructure) {
@@ -502,20 +502,9 @@ public final class TiDBExecutionContextAnalyzer {
         return new Candidate(expression, score, signals);
     }
 
-    private static boolean equivalentExpressionShape(String text, TargetPattern target) {
-        if (countOccurrences(text, "cast(") != target.castCount) {
-            return false;
-        }
-        if (target.castMode != null && !text.contains(target.castMode)) {
-            return false;
-        }
-        if (!target.operatorShape.equals(operatorShape(text))) {
-            return false;
-        }
-        if (target.hasFunction && !text.contains(target.functionName + "(")) {
-            return false;
-        }
-        return target.hasCast || target.hasArithmetic || target.hasFunction;
+    private static boolean equivalentExpressionShape(String expression, TargetPattern target) {
+        ExprFingerprint candidate = ExprFingerprint.parse(expression);
+        return candidate != null && target.fingerprint != null && candidate.contains(target.fingerprint);
     }
 
     private static int countOccurrences(String text, String needle) {
@@ -907,33 +896,166 @@ public final class TiDBExecutionContextAnalyzer {
         }
     }
 
+    /** Structural expression fingerprint; unlike operator text, child order and types are significant. */
+    public static final class ExprFingerprint {
+        private final String kind;
+        private final String resultType;
+        private final List<ExprFingerprint> children;
+        private final String column;
+        private final String constant;
+
+        private ExprFingerprint(String kind, String resultType, List<ExprFingerprint> children, String column,
+                String constant) {
+            this.kind = kind;
+            this.resultType = resultType;
+            this.children = List.copyOf(children == null ? List.of() : children);
+            this.column = column;
+            this.constant = constant;
+        }
+
+        static ExprFingerprint parse(String expression) {
+            String normalized = normalize(expression);
+            return normalized.isEmpty() ? null : parseNormalized(normalized);
+        }
+
+        private static ExprFingerprint parseNormalized(String expression) {
+            String value = stripOuterParentheses(expression);
+            int operator = topLevelOperator(value);
+            if (operator > 0) {
+                String symbol = String.valueOf(value.charAt(operator));
+                String kind = symbol.equals("+") ? "ADD" : symbol.equals("-") ? "SUB"
+                        : symbol.equals("*") ? "MUL" : "DIV";
+                return new ExprFingerprint(kind, "UNKNOWN",
+                        List.of(parseNormalized(value.substring(0, operator)),
+                                parseNormalized(value.substring(operator + 1))), null, null);
+            }
+            int open = value.indexOf('(');
+            if (open > 0 && value.endsWith(")")) {
+                String name = value.substring(0, open);
+                List<String> arguments = splitNormalizedArguments(value.substring(open + 1, value.length() - 1));
+                if ("cast".equals(name) && !arguments.isEmpty()) {
+                    String type = arguments.size() > 1 ? castType(arguments.get(1)) : "UNKNOWN";
+                    return new ExprFingerprint("CAST", type, List.of(parseNormalized(arguments.get(0))), null, null);
+                }
+                String kind;
+                switch (name) {
+                case "plus":
+                    kind = "ADD";
+                    break;
+                case "minus":
+                    kind = "SUB";
+                    break;
+                case "mul":
+                    kind = "MUL";
+                    break;
+                case "div":
+                    kind = "DIV";
+                    break;
+                default:
+                    kind = name.toUpperCase(Locale.ROOT);
+                    break;
+                }
+                List<ExprFingerprint> children = new ArrayList<>();
+                for (String argument : arguments) {
+                    children.add(parseNormalized(argument));
+                }
+                return new ExprFingerprint(kind, "UNKNOWN", children, null, null);
+            }
+            if (value.matches("[-+]?\\d+(?:\\.\\d+)?")) {
+                return new ExprFingerprint("CONSTANT", numericType(value), List.of(), null, value);
+            }
+            if (value.matches("[a-z_][a-z0-9_$]*(?:\\.[a-z_][a-z0-9_$]*)?")) {
+                return new ExprFingerprint("COLUMN", "UNKNOWN", List.of(),
+                        value.substring(value.lastIndexOf('.') + 1), null);
+            }
+            // CASE and unsupported optimizer rewrites are intentionally opaque. They
+            // can match only when their normalized structure is exactly preserved.
+            return new ExprFingerprint("UNSUPPORTED_REWRITE", "UNKNOWN", List.of(), null, value);
+        }
+
+        private static String castType(String type) {
+            if (type.contains("unsigned")) {
+                return "UNSIGNED";
+            }
+            if (type.contains("signed") || type.contains("bigintbinary")) {
+                return "SIGNED";
+            }
+            return type.toUpperCase(Locale.ROOT);
+        }
+
+        private static String numericType(String value) {
+            return value.contains(".") ? "DECIMAL" : "INTEGER";
+        }
+
+        private static String stripOuterParentheses(String value) {
+            while (value.startsWith("(") && value.endsWith(")") && matchingOuterParentheses(value)) {
+                value = value.substring(1, value.length() - 1);
+            }
+            return value;
+        }
+
+        private static boolean matchingOuterParentheses(String value) {
+            int depth = 0;
+            for (int i = 0; i < value.length(); i++) {
+                char c = value.charAt(i);
+                if (c == '(') depth++;
+                if (c == ')' && --depth == 0 && i != value.length() - 1) return false;
+            }
+            return depth == 0;
+        }
+
+        private static int topLevelOperator(String value) {
+            int depth = 0;
+            for (int i = value.length() - 1; i >= 0; i--) {
+                char c = value.charAt(i);
+                if (c == ')') depth++;
+                else if (c == '(') depth--;
+                else if (depth == 0 && (c == '+' || c == '-' || c == '*' || c == '/') && i > 0) return i;
+            }
+            return -1;
+        }
+
+        private static List<String> splitNormalizedArguments(String value) {
+            return splitTopLevel(value, ',');
+        }
+
+        private boolean contains(ExprFingerprint target) {
+            if (equals(target)) return true;
+            for (ExprFingerprint child : children) {
+                if (child.contains(target)) return true;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (!(other instanceof ExprFingerprint)) return false;
+            ExprFingerprint that = (ExprFingerprint) other;
+            return kind.equals(that.kind) && resultType.equals(that.resultType)
+                    && children.equals(that.children) && java.util.Objects.equals(column, that.column)
+                    && java.util.Objects.equals(constant, that.constant);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(kind, resultType, children, column, constant);
+        }
+    }
+
     private static final class TargetPattern {
         private final String normalized;
         private final Set<String> references;
-        private final boolean hasCast;
-        private final boolean hasArithmetic;
-        private final boolean hasFunction;
-        private final String functionName;
-        private final String castMode;
-        private final int castCount;
-        private final String operatorShape;
         private final Map<String, String> lineage;
         private final String expectedRole;
+        private final ExprFingerprint fingerprint;
 
-        private TargetPattern(String normalized, Set<String> references, boolean hasCast, boolean hasArithmetic,
-                boolean hasFunction, String functionName, String castMode, int castCount, String operatorShape,
-                Map<String, String> lineage, String expectedRole) {
+        private TargetPattern(String normalized, Set<String> references, Map<String, String> lineage,
+                String expectedRole) {
             this.normalized = normalized;
             this.references = references;
-            this.hasCast = hasCast;
-            this.hasArithmetic = hasArithmetic;
-            this.hasFunction = hasFunction;
-            this.functionName = functionName;
-            this.castMode = castMode;
-            this.castCount = castCount;
-            this.operatorShape = operatorShape;
             this.lineage = lineage == null ? Map.of() : lineage;
             this.expectedRole = expectedRole == null ? "UNKNOWN" : expectedRole;
+            this.fingerprint = ExprFingerprint.parse(normalized);
         }
 
         private static TargetPattern create(EcstOperation operation) {
@@ -941,18 +1063,8 @@ public final class TiDBExecutionContextAnalyzer {
             if (normalized.isEmpty()) {
                 return null;
             }
-            boolean cast = normalized.contains("cast(");
-            boolean arithmetic = normalized.contains("+") || normalized.contains("-") || normalized.contains("*");
-            String function = "";
-            Matcher matcher = Pattern.compile("^([a-z_][a-z0-9_$]*)\\(").matcher(normalized);
-            boolean hasFunction = matcher.find() && !"cast".equals(matcher.group(1));
-            if (hasFunction) {
-                function = matcher.group(1);
-            }
-            String mode = normalized.contains("unsigned") ? "unsigned" : normalized.contains("signed") ? "signed" : null;
             Set<String> dependencies = operation.getDependencies();
-            return new TargetPattern(normalized, dependencies, cast, arithmetic, hasFunction, function, mode,
-                    countOccurrences(normalized, "cast("), operatorShape(normalized), operation.getDependencyLineage(),
+            return new TargetPattern(normalized, dependencies, operation.getDependencyLineage(),
                     operation.getExpectedRole());
         }
 
