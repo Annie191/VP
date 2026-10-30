@@ -156,11 +156,16 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
     private static final class EcstExpressionSpec {
         private final String expression;
+        private final String filterPredicate;
         private final List<VpColumn> dependencies;
+        private final String family;
 
-        private EcstExpressionSpec(String expression, List<VpColumn> dependencies) {
+        private EcstExpressionSpec(String expression, String filterPredicate, List<VpColumn> dependencies,
+                String family) {
             this.expression = expression;
+            this.filterPredicate = filterPredicate;
             this.dependencies = dependencies;
+            this.family = family;
         }
     }
 
@@ -396,6 +401,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         private final String sourceTable;
         private final String originalQuery;
         private final String targetExpression;
+        private final String filterPredicate;
+        private final String expressionFamily;
         private final EcstOperation operation;
         private final EcstAccessPathPreparation accessPathPreparation;
         private final List<String> targetDependencies;
@@ -405,6 +412,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         private final VpSchema schema;
 
         private EcstSeed(String baseTable, String sourceTable, String originalQuery, String targetExpression,
+                String filterPredicate, String expressionFamily,
                 List<String> targetDependencies, TiDBECSTOracle.QueryShape shape,
                 EcstTransformationConfig.ExpressionContext expressionContext, BaseTableInfo base, VpSchema schema,
                 EcstAccessPathPreparation accessPathPreparation) {
@@ -412,6 +420,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             this.sourceTable = sourceTable;
             this.originalQuery = originalQuery;
             this.targetExpression = targetExpression;
+            this.filterPredicate = filterPredicate;
+            this.expressionFamily = expressionFamily;
             Map<String, String> lineage = new LinkedHashMap<>();
             for (String dependency : targetDependencies) {
                 lineage.put(sourceTable + "." + dependency, dependency);
@@ -466,6 +476,14 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             return targetExpression;
         }
 
+        public String getFilterPredicate() {
+            return filterPredicate;
+        }
+
+        public String getExpressionFamily() {
+            return expressionFamily;
+        }
+
         public EcstOperation getOperation() {
             return operation;
         }
@@ -496,6 +514,9 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             }
             if (normalized.contains("CASE")) {
                 return "CASE_EXPRESSION";
+            }
+            if (normalized.matches(".*[<>]=?.*")) {
+                return "DIRECT_COMPARISON";
             }
             return normalized.contains("CAST(") ? "CAST_ARITHMETIC" : "ARITHMETIC";
         }
@@ -885,11 +906,13 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         VpSchema schema = materializeSourceSeed(base, initial.splitPlan, initial.splitStrategy);
         String targetExpression = expression.expression;
         EcstAccessPathPreparation accessPathPreparation = prepareEcstSourceAccessPath(schema, dependencies,
-                targetExpression);
-        String originalQuery = buildEcstSeedQuery(schema, targetExpression, context, dependencies);
+                expression.filterPredicate);
+        String originalQuery = buildEcstSeedQuery(schema, targetExpression, expression.filterPredicate, context,
+                dependencies);
         TiDBECSTOracle.QueryShape shape = TiDBECSTOracle.queryShapeFromSql(originalQuery, dependencies.size());
         List<String> dependencyNames = dependencies.stream().map(column -> column.name).collect(Collectors.toList());
-        return new EcstSeed(base.tableName, schema.sourceTable, originalQuery, targetExpression, dependencyNames, shape,
+        return new EcstSeed(base.tableName, schema.sourceTable, originalQuery, targetExpression,
+                expression.filterPredicate, expression.family, dependencyNames, shape,
                 context, base, schema, accessPathPreparation);
     }
 
@@ -899,13 +922,20 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 || column.type == TiDBDataType.TEXT || column.type == TiDBDataType.BLOB).collect(Collectors.toList());
         List<VpColumn> dates = columns.stream().filter(column -> column.type == TiDBDataType.DATE
                 || column.type == TiDBDataType.DATETIME).collect(Collectors.toList());
+        if (!numeric.isEmpty() && Randomly.getBooleanWithSmallProbability()) {
+            VpColumn column = Randomly.fromList(numeric);
+            String predicate = quote(column.name) + " > 0";
+            return new EcstExpressionSpec(predicate, predicate, List.of(column), "DIRECT_COMPARISON");
+        }
         if (!strings.isEmpty() && Randomly.getBooleanWithRatherLowProbability()) {
             VpColumn column = Randomly.fromList(strings);
-            return new EcstExpressionSpec("CHAR_LENGTH(" + quote(column.name) + ")", List.of(column));
+            String op = "CHAR_LENGTH(" + quote(column.name) + ")";
+            return new EcstExpressionSpec(op, op + " > 0", List.of(column), "STRING_LENGTH");
         }
         if (!dates.isEmpty() && Randomly.getBooleanWithRatherLowProbability()) {
             VpColumn column = Randomly.fromList(dates);
-            return new EcstExpressionSpec("YEAR(" + quote(column.name) + ")", List.of(column));
+            String op = "YEAR(" + quote(column.name) + ")";
+            return new EcstExpressionSpec(op, op + " > 0", List.of(column), "DATE_YEAR");
         }
         if (numeric.size() >= 2) {
             VpColumn left = numeric.get(0);
@@ -927,24 +957,24 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 expression = "(" + l + " + " + r + ")";
                 break;
             }
-            return new EcstExpressionSpec(expression, List.of(left, right));
+            return new EcstExpressionSpec(expression, expression + " > 0", List.of(left, right), "CAST_ARITHMETIC");
         }
         if (!numeric.isEmpty()) {
             VpColumn column = numeric.get(0);
-            return new EcstExpressionSpec("COALESCE(CAST(" + quote(column.name) + " AS SIGNED), 0)",
-                    List.of(column));
+            String op = "COALESCE(CAST(" + quote(column.name) + " AS SIGNED), 0)";
+            return new EcstExpressionSpec(op, op + " > 0", List.of(column), "CAST_ARITHMETIC");
         }
         if (!columns.isEmpty()) {
             VpColumn column = columns.get(0);
-            return new EcstExpressionSpec("CHAR_LENGTH(CAST(" + quote(column.name) + " AS CHAR))",
-                    List.of(column));
+            String op = "CHAR_LENGTH(CAST(" + quote(column.name) + " AS CHAR))";
+            return new EcstExpressionSpec(op, op + " > 0", List.of(column), "STRING_LENGTH");
         }
         return null;
     }
 
     private EcstAccessPathPreparation prepareEcstSourceAccessPath(VpSchema schema, List<VpColumn> dependencies,
-            String targetExpression) throws Exception {
-        boolean predicateSupported = isSargableAccessPredicate(targetExpression, dependencies);
+            String filterPredicate) throws Exception {
+        boolean predicateSupported = isSargableAccessPredicate(filterPredicate, dependencies);
         boolean indexable = !dependencies.isEmpty() && dependencies.stream().allMatch(column ->
                 isTiDBHelperIndexableStatic(column.type));
         if (!predicateSupported || !indexable) {
@@ -960,7 +990,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 dependencies.stream().map(column -> column.name).collect(Collectors.toList()), true, true, true);
     }
 
-    private boolean isSargableAccessPredicate(String expression, List<VpColumn> dependencies) {
+    private static boolean isSargableAccessPredicate(String expression, List<VpColumn> dependencies) {
         if (expression == null || dependencies.size() != 1) {
             return false;
         }
@@ -968,9 +998,13 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         return expression.matches("(?i)\\(?\\s*(?:`?" + column + "`?)\\s*(?:=|>|<|>=|<=)\\s*[-+]?\\d+(?:\\.\\d+)?\\s*\\)?");
     }
 
-    private String buildEcstSeedQuery(VpSchema schema, String targetExpression,
+    static boolean isSargableAccessPredicateForTest(String expression, String dependency) {
+        return isSargableAccessPredicate(expression, List.of(new VpColumn(dependency, TiDBDataType.INT)));
+    }
+
+    private String buildEcstSeedQuery(VpSchema schema, String targetExpression, String filterPredicate,
             EcstTransformationConfig.ExpressionContext context, List<VpColumn> dependencies) {
-        String predicate = targetExpression + " > 0";
+        String predicate = filterPredicate;
         switch (context) {
         case WHERE:
             return "SELECT " + quote(ROW_ID) + " FROM " + quote(schema.sourceTable) + " WHERE " + predicate;
@@ -1049,7 +1083,9 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         DependencyLayout actualLayout = dependencyLayout(seed.targetDependencies, controlled.splitPlan.leftColumns,
                 controlled.splitPlan.rightColumns);
         String generationInfo = "rowCount=" + base.rowCount + ",engine=" + base.engine + ",expressionType="
-                + seed.getExpressionType() + ",dependencyCount=" + seed.targetDependencies.size() + ",stableOrder="
+                + seed.getExpressionType() + ",expressionFamily=" + seed.getExpressionFamily()
+                + ",filterPredicate=" + seed.getFilterPredicate() + ",dependencyCount="
+                + seed.targetDependencies.size() + ",stableOrder="
                 + base.stableOrderStrategy + ",splitStrategy=" + controlled.splitStrategy + ",requestedLayout="
                 + config.getPartitionLayout() + ",actualLayout=" + actualLayout + ",leftColumns="
                 + columnNames(controlled.splitPlan.leftColumns) + ",rightColumns="

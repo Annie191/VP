@@ -136,4 +136,11 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(available.supports(target, context, EcstTransformationConfig.ExpressionContext.WHERE));
         assertTrue(!available.supports(target, context, EcstTransformationConfig.ExpressionContext.SELECT));
     }
+
+    @Test
+    void directComparisonFilterCanPrepareAnAccessPath() {
+        assertTrue(TiDBVerticalPartitioningOracle.isSargableAccessPredicateForTest("`c0` > 0", "c0"));
+        assertTrue(!TiDBVerticalPartitioningOracle.isSargableAccessPredicateForTest(
+                "CAST(`c0` AS SIGNED) + CAST(`c1` AS SIGNED) > 0", "c0"));
+    }
 }
