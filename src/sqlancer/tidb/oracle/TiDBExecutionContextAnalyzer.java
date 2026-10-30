@@ -1022,23 +1022,57 @@ public final class TiDBExecutionContextAnalyzer {
 
         private static ExprFingerprint parseNormalized(String expression) {
             String value = stripOuterParentheses(expression);
-            int operator = topLevelOperator(value);
+            ComparisonOperator comparison = topLevelComparison(value);
+            if (comparison != null) {
+                String kind;
+                switch (comparison.operator) {
+                case ">": kind = "GT"; break;
+                case "<": kind = "LT"; break;
+                case ">=": kind = "GE"; break;
+                case "<=": kind = "LE"; break;
+                case "!=": kind = "NE"; break;
+                case "<>": kind = "NE"; break;
+                case "<=>": kind = "NULL_SAFE_EQ"; break;
+                default: kind = "EQ"; break;
+                }
+                return new ExprFingerprint(kind, "BOOLEAN",
+                        List.of(parseNormalized(value.substring(0, comparison.index)),
+                                parseNormalized(value.substring(comparison.index + comparison.operator.length()))), null, null);
+            }
+            return parseAdditive(value);
+        }
+
+        private static ExprFingerprint parseAdditive(String value) {
+            int operator = topLevelBinaryOperator(value, "+-");
             if (operator > 0) {
                 String symbol = String.valueOf(value.charAt(operator));
-                String kind = symbol.equals("+") ? "ADD" : symbol.equals("-") ? "SUB"
-                        : symbol.equals("*") ? "MUL" : "DIV";
-                return new ExprFingerprint(kind, "UNKNOWN",
-                        List.of(parseNormalized(value.substring(0, operator)),
-                                parseNormalized(value.substring(operator + 1))), null, null);
+                return new ExprFingerprint(symbol.equals("+") ? "ADD" : "SUB", "UNKNOWN",
+                        List.of(parseAdditive(value.substring(0, operator)),
+                                parseMultiplicative(value.substring(operator + 1))), null, null);
             }
-            int comparison = topLevelComparison(value);
-            if (comparison > 0) {
-                String symbol = String.valueOf(value.charAt(comparison));
-                String kind = symbol.equals(">") ? "GT" : symbol.equals("<") ? "LT" : "COMPARE";
-                return new ExprFingerprint(kind, "BOOLEAN",
-                        List.of(parseNormalized(value.substring(0, comparison)),
-                                parseNormalized(value.substring(comparison + 1))), null, null);
+            return parseMultiplicative(value);
+        }
+
+        private static ExprFingerprint parseMultiplicative(String value) {
+            int operator = topLevelBinaryOperator(value, "*/");
+            if (operator > 0) {
+                String symbol = String.valueOf(value.charAt(operator));
+                return new ExprFingerprint(symbol.equals("*") ? "MUL" : "DIV", "UNKNOWN",
+                        List.of(parseMultiplicative(value.substring(0, operator)),
+                                parseUnary(value.substring(operator + 1))), null, null);
             }
+            return parseUnary(value);
+        }
+
+        private static ExprFingerprint parseUnary(String value) {
+            if (value.startsWith("-") && value.length() > 1) {
+                return new ExprFingerprint("UNARY_NEG", "UNKNOWN", List.of(parseUnary(value.substring(1))), null,
+                        null);
+            }
+            return parsePrimary(value);
+        }
+
+        private static ExprFingerprint parsePrimary(String value) {
             int open = value.indexOf('(');
             if (open > 0 && value.endsWith(")")) {
                 String name = value.substring(0, open);
@@ -1120,26 +1154,51 @@ public final class TiDBExecutionContextAnalyzer {
             return depth == 0;
         }
 
-        private static int topLevelOperator(String value) {
+        private static int topLevelBinaryOperator(String value, String operators) {
             int depth = 0;
-            for (int i = value.length() - 1; i >= 0; i--) {
-                char c = value.charAt(i);
-                if (c == ')') depth++;
-                else if (c == '(') depth--;
-                else if (depth == 0 && (c == '+' || c == '-' || c == '*' || c == '/') && i > 0) return i;
-            }
-            return -1;
-        }
-
-        private static int topLevelComparison(String value) {
-            int depth = 0;
+            boolean quoted = false;
+            int result = -1;
             for (int i = 0; i < value.length(); i++) {
                 char c = value.charAt(i);
+                if (c == '\'' ) quoted = !quoted;
+                if (quoted) continue;
                 if (c == '(') depth++;
                 else if (c == ')') depth--;
-                else if (depth == 0 && (c == '>' || c == '<' || c == '=') && i > 0) return i;
+                else if (depth == 0 && operators.indexOf(c) >= 0 && i > 0) {
+                    char previous = value.charAt(i - 1);
+                    if (operators.indexOf(previous) < 0 && previous != '(' && previous != ',') result = i;
+                }
             }
-            return -1;
+            return result;
+        }
+
+        private static ComparisonOperator topLevelComparison(String value) {
+            int depth = 0;
+            boolean quoted = false;
+            String[] operators = { "<=>", ">=", "<=", "!=", "<>", ">", "<", "=" };
+            for (int i = 0; i < value.length(); i++) {
+                char c = value.charAt(i);
+                if (c == '\'') quoted = !quoted;
+                if (quoted) continue;
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (depth == 0 && i > 0) {
+                    for (String operator : operators) {
+                        if (value.startsWith(operator, i)) return new ComparisonOperator(i, operator);
+                    }
+                }
+            }
+            return null;
+        }
+
+        private static final class ComparisonOperator {
+            private final int index;
+            private final String operator;
+
+            private ComparisonOperator(int index, String operator) {
+                this.index = index;
+                this.operator = operator;
+            }
         }
 
         private static List<String> splitNormalizedArguments(String value) {

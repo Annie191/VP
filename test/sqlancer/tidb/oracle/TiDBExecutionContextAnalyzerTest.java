@@ -311,6 +311,30 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void rejectsDifferentArithmeticPrecedence() {
+        String plan = "Projection | 1 root | | mul(plus(test.t.c0, test.t.c1), test.t.c2)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "`c0` + `c1` * `c2`", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void rejectsDifferentComparisonOperators() {
+        String plan = "Selection | 1 root | | ge(test.t.c0, 0)\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "`c0` > 0", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void preservesUnaryMinus() {
+        String plan = "Projection | 1 root | | minus(0, test.t.c0)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "-`c0`", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
     void realPlansConfirmOnlyRequestedDirection() throws Exception {
         EcstContext root = TiDBExecutionContextAnalyzer.parse(fixture("projection"), "CAST(`v` AS SIGNED)");
         EcstContext cop = TiDBExecutionContextAnalyzer.parse(fixture("selection"), "CAST(`v` AS SIGNED)");
