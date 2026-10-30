@@ -904,16 +904,27 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         ControlledSplitPlan initial = createControlledSplitPlan(base.columns, dependencies,
                 EcstTransformationConfig.PartitionLayout.SAME_SIDE);
         VpSchema schema = materializeSourceSeed(base, initial.splitPlan, initial.splitStrategy);
-        String targetExpression = expression.expression;
-        EcstAccessPathPreparation accessPathPreparation = prepareEcstSourceAccessPath(schema, dependencies,
-                expression.filterPredicate);
-        String originalQuery = buildEcstSeedQuery(schema, targetExpression, expression.filterPredicate, context,
-                dependencies);
-        TiDBECSTOracle.QueryShape shape = TiDBECSTOracle.queryShapeFromSql(originalQuery, dependencies.size());
-        List<String> dependencyNames = dependencies.stream().map(column -> column.name).collect(Collectors.toList());
-        return new EcstSeed(base.tableName, schema.sourceTable, originalQuery, targetExpression,
-                expression.filterPredicate, expression.family, dependencyNames, shape,
-                context, base, schema, accessPathPreparation);
+        try {
+            String targetExpression = expression.expression;
+            EcstAccessPathPreparation accessPathPreparation = prepareEcstSourceAccessPath(schema, dependencies,
+                    expression.filterPredicate);
+            String originalQuery = buildEcstSeedQuery(schema, targetExpression, expression.filterPredicate, context,
+                    dependencies);
+            TiDBECSTOracle.QueryShape shape = TiDBECSTOracle.queryShapeFromSql(originalQuery, dependencies.size());
+            List<String> dependencyNames = dependencies.stream().map(column -> column.name).collect(Collectors.toList());
+            return new EcstSeed(base.tableName, schema.sourceTable, originalQuery, targetExpression,
+                    expression.filterPredicate, expression.family, dependencyNames, shape,
+                    context, base, schema, accessPathPreparation);
+        } catch (Throwable failure) {
+            try {
+                dropArtifacts(schema);
+            } catch (Exception cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+            if (failure instanceof Exception) throw (Exception) failure;
+            if (failure instanceof Error) throw (Error) failure;
+            throw new RuntimeException(failure);
+        }
     }
 
     private EcstExpressionSpec chooseEcstExpression(List<VpColumn> columns) {

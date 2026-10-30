@@ -62,6 +62,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int seedRefreshes;
     private long runId;
     private int caseSequence;
+    private int caseRecordsWritten;
+    private int seedSkipRecordsWritten;
+    private volatile String lastCommittedCaseId = "";
     private final List<String> candidateRejectReasons = new ArrayList<>();
 
     public TiDBECSTOracle(TiDBGlobalState state) {
@@ -70,6 +73,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         this.targets = capabilities.supportedTargets(state);
         this.vp = new TiDBVerticalPartitioningOracle(state, false);
         this.analyzer = new TiDBExecutionContextAnalyzer(state);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (runId != 0) {
+                writeFeedbackSummary("FINAL_SHUTDOWN");
+            }
+        }, "tidb-ecst-final-snapshot"));
     }
 
     static List<EcstTarget> defaultTargets() {
@@ -99,7 +107,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         try {
             checkInternal();
         } finally {
-            writeFeedbackSummary();
+            writeFeedbackSummary("FINAL");
         }
     }
 
@@ -109,6 +117,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         requestedBudget = budget;
         runId = RUN_IDS.incrementAndGet();
         caseSequence = 0;
+        caseRecordsWritten = 0;
+        seedSkipRecordsWritten = 0;
+        lastCommittedCaseId = "";
         completedCases = 0;
         int completed = 0;
         attempts = 0;
@@ -282,6 +293,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 writeCaseRecord(target, config, testCase, observation, comparison, null);
                 history.observe(target.getKey(), config.stableKey(), observation.getStatus(),
                         observation.getObservedShifts(), System.nanoTime() - started, feature);
+                lastCommittedCaseId = runId + "-" + caseSequence;
                 if (!keepArtifacts) {
                     cleanupSeed(seed);
                 }
@@ -696,9 +708,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         String expression = testCase == null ? seed == null ? "" : seed.getTargetExpression()
                 : testCase.getTargetExpression();
         String generationInfo = testCase == null ? "" : testCase.getGenerationInfo();
+        String sqlState = failure instanceof java.sql.SQLException ? ((java.sql.SQLException) failure).getSQLState() : "";
+        int errorCode = failure instanceof java.sql.SQLException ? ((java.sql.SQLException) failure).getErrorCode() : 0;
         EcstFailureRecord record = new EcstFailureRecord(phase, target == null ? "" : target.getKey(),
                 config == null ? "" : config.stableKey(), baseTable, original, transformed, expression,
-                failure == null ? "" : failure.getMessage(), stack, setup, generationInfo);
+                failure == null ? "" : failure.getMessage(), sqlState, errorCode, stack, setup, generationInfo);
         appendJsonLine("ecst-failures.jsonl", record.toJsonLine());
     }
 
@@ -729,7 +743,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + EcstFailureRecord.json(status) + "\",\"reason\":\"" + EcstFailureRecord.json(reason)
                 + "\",\"runId\":" + runId + ",\"workerId\":\""
                 + EcstFailureRecord.json(Thread.currentThread().getName()) + "\",\"caseId\":\"" + caseId
-                + "\",\"sourceCommit\":\"" + EcstFailureRecord.json(System.getProperty("git.commit", "UNKNOWN"))
+                + "\",\"sourceCommit\":\"" + EcstFailureRecord.json(sourceCommit())
                 + "\",\"shiftStatus\":\"" + shiftStatus + "\",\"comparisonStatus\":\""
                 + comparisonStatus + "\",\"preconditionStatus\":\"" + preconditionStatus
                 + "\",\"observedShifts\":" + observedShifts
@@ -751,6 +765,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + "\",\"generationInfo\":\"" + EcstFailureRecord.json(testCase.getGenerationInfo())
                 + "\",\"setup\":" + EcstFailureRecord.jsonArray(testCase.getMaterializationSetup()) + "}";
         appendJsonLine("ecst-cases.jsonl", line);
+        caseRecordsWritten++;
     }
 
     private void writeSeedSkipRecord(TiDBVerticalPartitioningOracle.EcstSeed seed,
@@ -770,6 +785,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         line.append(",\"originalPlan\":\"").append(EcstFailureRecord.json(parsed.plan())).append("\"");
         line.append(",\"originalQuery\":\"").append(EcstFailureRecord.json(seed.getOriginalQuery())).append("\"}");
         appendJsonLine("ecst-cases.jsonl", line.toString());
+        seedSkipRecordsWritten++;
     }
 
     private void appendJsonLine(String fileName, String line) {
@@ -794,7 +810,23 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         return text.toString();
     }
 
-    private void writeFeedbackSummary() {
+    private static String sourceCommit() {
+        String property = System.getProperty("git.commit", "");
+        if (!property.isEmpty()) return property;
+        String environment = System.getenv("GIT_COMMIT");
+        return environment == null || environment.isEmpty() ? "UNKNOWN" : environment;
+    }
+
+    private String dbVersion() {
+        try (java.sql.Statement statement = state.getConnection().createStatement();
+                java.sql.ResultSet result = statement.executeQuery("SELECT VERSION()")) {
+            return result.next() ? result.getString(1) : "UNKNOWN";
+        } catch (Exception ignored) {
+            return "UNKNOWN";
+        }
+    }
+
+    private synchronized void writeFeedbackSummary(String snapshotType) {
         File directory = new File(Main.LOG_DIRECTORY, "tidb");
         if (!directory.exists() && !directory.mkdirs()) {
             return;
@@ -805,8 +837,16 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             writer.write("candidateSynthesis=" + lastSynthesisSummary + System.lineSeparator());
             writer.write("semanticPreconditionRejects=" + semanticPreconditionRejects + System.lineSeparator());
             writer.write("requestedBudget=" + requestedBudget + System.lineSeparator());
+            writer.write("snapshotType=" + snapshotType + System.lineSeparator());
+            writer.write("sourceCommit=" + sourceCommit() + System.lineSeparator());
+            writer.write("dbVersion=" + dbVersion() + System.lineSeparator());
+            writer.write("runParameters=" + System.getProperty("ecst.run.parameters", "UNKNOWN")
+                    + System.lineSeparator());
             writer.write("runId=" + runId + System.lineSeparator());
-            writer.write("caseRecordsWritten=" + caseSequence + System.lineSeparator());
+            writer.write("caseRecordsWritten=" + caseRecordsWritten + System.lineSeparator());
+            writer.write("seedSkipRecordsWritten=" + seedSkipRecordsWritten + System.lineSeparator());
+            writer.write("lastCommittedCaseId=" + lastCommittedCaseId + System.lineSeparator());
+            writer.write("totalTrials=" + history.getTotalTrials() + System.lineSeparator());
             writer.write("completedCases=" + completedCases + System.lineSeparator());
             writer.write("attempts=" + attempts + System.lineSeparator());
             writer.write("candidateSetSkips=" + candidateSetSkips + System.lineSeparator());
