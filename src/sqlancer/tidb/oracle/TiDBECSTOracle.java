@@ -696,12 +696,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
     private void writeCaseRecord(EcstTarget target, EcstTransformationConfig config,
             TiDBVerticalPartitioningOracle.EcstCase testCase, EcstObservation observation,
-            TiDBVerticalPartitioningOracle.EcstComparison comparison) {
-        writeCaseRecord(target, config, testCase, observation, comparison, null);
-    }
-
-    private void writeCaseRecord(EcstTarget target, EcstTransformationConfig config,
-            TiDBVerticalPartitioningOracle.EcstCase testCase, EcstObservation observation,
             TiDBVerticalPartitioningOracle.EcstComparison comparison,
             TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult precondition) {
         String status = observation == null ? "UNKNOWN" : observation.getStatus().name();
@@ -762,6 +756,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         line.append("\",\"seedMatchReason\":\"").append(EcstFailureRecord.json(parsed.reason()));
         line.append("\",\"validTargetCount\":").append(validTargetCount);
         line.append(",\"candidateRejectReasons\":").append(EcstFailureRecord.jsonArray(reasons));
+        line.append(",\"targetExpression\":\"").append(EcstFailureRecord.json(seed.getTargetExpression())).append("\"");
+        line.append(",\"dependencies\":").append(EcstFailureRecord.jsonArray(seed.getTargetDependencies()));
+        line.append(",\"candidateExpressions\":").append(EcstFailureRecord.jsonArray(parsed.candidateExpressions()));
+        line.append(",\"originalPlan\":\"").append(EcstFailureRecord.json(parsed.plan())).append("\"");
         line.append(",\"originalQuery\":\"").append(EcstFailureRecord.json(seed.getOriginalQuery())).append("\"}");
         appendJsonLine("ecst-cases.jsonl", line.toString());
     }

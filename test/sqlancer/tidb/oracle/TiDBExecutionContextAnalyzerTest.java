@@ -285,6 +285,17 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void matchesCaseWhenStructureAgainstTidbCasewhenPlan() {
+        String plan = "Projection | 1 root | | casewhen(isnull(test.t.c0), "
+                + "cast(test.t.c1, bigint BINARY), cast(test.t.c0, bigint BINARY))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CASE WHEN `c0` IS NULL THEN CAST(`c1` AS SIGNED) ELSE CAST(`c0` AS SIGNED) END", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.PROJECTION_ITEM,
+                parsed.selectedExpression().role());
+    }
+
+    @Test
     void realPlansConfirmOnlyRequestedDirection() throws Exception {
         EcstContext root = TiDBExecutionContextAnalyzer.parse(fixture("projection"), "CAST(`v` AS SIGNED)");
         EcstContext cop = TiDBExecutionContextAnalyzer.parse(fixture("selection"), "CAST(`v` AS SIGNED)");

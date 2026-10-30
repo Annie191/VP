@@ -740,7 +740,7 @@ public final class TiDBExecutionContextAnalyzer {
 
     private static EcstOperation operationFor(String targetExpression) {
         String normalized = normalize(targetExpression);
-        return new EcstOperation("ECST_TARGET:" + normalized, normalized, references(targetExpression), "ARITHMETIC");
+        return new EcstOperation("ECST_TARGET:" + normalized, targetExpression, references(targetExpression), "ARITHMETIC");
     }
 
     enum MatchStatus {
@@ -792,6 +792,18 @@ public final class TiDBExecutionContextAnalyzer {
 
         public String evidence() {
             return evidence;
+        }
+
+        public String plan() {
+            return plan;
+        }
+
+        public List<String> candidateExpressions() {
+            List<String> expressions = new ArrayList<>();
+            for (Candidate candidate : candidates) {
+                expressions.add(candidate.expression.expressionText);
+            }
+            return expressions;
         }
 
         public EcstContext context() {
@@ -914,8 +926,33 @@ public final class TiDBExecutionContextAnalyzer {
         }
 
         static ExprFingerprint parse(String expression) {
+            ExprFingerprint caseFingerprint = parseSqlCase(expression);
+            if (caseFingerprint != null) {
+                return caseFingerprint;
+            }
             String normalized = normalize(expression);
             return normalized.isEmpty() ? null : parseNormalized(normalized);
+        }
+
+        private static ExprFingerprint parseSqlCase(String expression) {
+            if (expression == null) {
+                return null;
+            }
+            Matcher matcher = Pattern.compile("(?is)^\\s*case\\s+when\\s+(.+?)\\s+then\\s+(.+?)\\s+else\\s+(.+?)\\s+end\\s*$")
+                    .matcher(expression);
+            if (!matcher.matches()) {
+                return null;
+            }
+            return new ExprFingerprint("CASE_WHEN", "UNKNOWN", List.of(parseCaseCondition(matcher.group(1)),
+                    parse(matcher.group(2)), parse(matcher.group(3))), null, null);
+        }
+
+        private static ExprFingerprint parseCaseCondition(String condition) {
+            Matcher isNull = Pattern.compile("(?is)^\\s*(.+?)\\s+is\\s+null\\s*$").matcher(condition);
+            if (isNull.matches()) {
+                return new ExprFingerprint("IS_NULL", "BOOLEAN", List.of(parse(isNull.group(1))), null, null);
+            }
+            return parse(condition);
         }
 
         private static ExprFingerprint parseNormalized(String expression) {
@@ -928,6 +965,14 @@ public final class TiDBExecutionContextAnalyzer {
                 return new ExprFingerprint(kind, "UNKNOWN",
                         List.of(parseNormalized(value.substring(0, operator)),
                                 parseNormalized(value.substring(operator + 1))), null, null);
+            }
+            int comparison = topLevelComparison(value);
+            if (comparison > 0) {
+                String symbol = String.valueOf(value.charAt(comparison));
+                String kind = symbol.equals(">") ? "GT" : symbol.equals("<") ? "LT" : "COMPARE";
+                return new ExprFingerprint(kind, "BOOLEAN",
+                        List.of(parseNormalized(value.substring(0, comparison)),
+                                parseNormalized(value.substring(comparison + 1))), null, null);
             }
             int open = value.indexOf('(');
             if (open > 0 && value.endsWith(")")) {
@@ -951,6 +996,12 @@ public final class TiDBExecutionContextAnalyzer {
                 case "div":
                     kind = "DIV";
                     break;
+                case "casewhen":
+                    kind = "CASE_WHEN";
+                    break;
+                case "isnull":
+                    kind = "IS_NULL";
+                    break;
                 default:
                     kind = name.toUpperCase(Locale.ROOT);
                     break;
@@ -959,7 +1010,7 @@ public final class TiDBExecutionContextAnalyzer {
                 for (String argument : arguments) {
                     children.add(parseNormalized(argument));
                 }
-                return new ExprFingerprint(kind, "UNKNOWN", children, null, null);
+                return new ExprFingerprint(kind, "IS_NULL".equals(kind) ? "BOOLEAN" : "UNKNOWN", children, null, null);
             }
             if (value.matches("[-+]?\\d+(?:\\.\\d+)?")) {
                 return new ExprFingerprint("CONSTANT", numericType(value), List.of(), null, value);
@@ -1015,6 +1066,17 @@ public final class TiDBExecutionContextAnalyzer {
             return -1;
         }
 
+        private static int topLevelComparison(String value) {
+            int depth = 0;
+            for (int i = 0; i < value.length(); i++) {
+                char c = value.charAt(i);
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (depth == 0 && (c == '>' || c == '<' || c == '=') && i > 0) return i;
+            }
+            return -1;
+        }
+
         private static List<String> splitNormalizedArguments(String value) {
             return splitTopLevel(value, ',');
         }
@@ -1050,12 +1112,12 @@ public final class TiDBExecutionContextAnalyzer {
         private final ExprFingerprint fingerprint;
 
         private TargetPattern(String normalized, Set<String> references, Map<String, String> lineage,
-                String expectedRole) {
+                String expectedRole, ExprFingerprint fingerprint) {
             this.normalized = normalized;
             this.references = references;
             this.lineage = lineage == null ? Map.of() : lineage;
             this.expectedRole = expectedRole == null ? "UNKNOWN" : expectedRole;
-            this.fingerprint = ExprFingerprint.parse(normalized);
+            this.fingerprint = fingerprint;
         }
 
         private static TargetPattern create(EcstOperation operation) {
@@ -1065,7 +1127,7 @@ public final class TiDBExecutionContextAnalyzer {
             }
             Set<String> dependencies = operation.getDependencies();
             return new TargetPattern(normalized, dependencies, operation.getDependencyLineage(),
-                    operation.getExpectedRole());
+                    operation.getExpectedRole(), ExprFingerprint.parse(operation.getNormalizedExpression()));
         }
 
         private boolean acceptsRole(ExpressionRole role) {
