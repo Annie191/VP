@@ -995,8 +995,14 @@ public final class TiDBExecutionContextAnalyzer {
             if (caseFingerprint != null) {
                 return caseFingerprint;
             }
-            String normalized = normalize(expression);
+            String normalized = normalize(canonicalizeSqlCasts(expression));
             return normalized.isEmpty() ? null : parseNormalized(normalized);
+        }
+
+        private static String canonicalizeSqlCasts(String expression) {
+            return expression == null ? "" : expression.replaceAll(
+                    "(?i)cast\\(\\s*([^(),]+?)\\s+as\\s+char(?:\\s*\\(\\s*(\\d+)\\s*\\))?\\s*\\)",
+                    "cast($1,sql_char$2)");
         }
 
         private static ExprFingerprint parseSqlCase(String expression) {
@@ -1079,7 +1085,8 @@ public final class TiDBExecutionContextAnalyzer {
                 List<String> arguments = splitNormalizedArguments(value.substring(open + 1, value.length() - 1));
                 if ("cast".equals(name) && !arguments.isEmpty()) {
                     String type = arguments.size() > 1 ? castType(arguments.get(1)) : "UNKNOWN";
-                    return new ExprFingerprint("CAST", type, List.of(parseNormalized(arguments.get(0))), null, null);
+                    String length = castLength(arguments.size() > 1 ? arguments.get(1) : "");
+                    return new ExprFingerprint("CAST", type, List.of(parseNormalized(arguments.get(0))), null, length);
                 }
                 String kind;
                 switch (name) {
@@ -1124,6 +1131,9 @@ public final class TiDBExecutionContextAnalyzer {
         }
 
         private static String castType(String type) {
+            if (type.startsWith("sql_char") || type.startsWith("var_string")) {
+                return "CHAR";
+            }
             if (type.contains("unsigned")) {
                 return "UNSIGNED";
             }
@@ -1131,6 +1141,11 @@ public final class TiDBExecutionContextAnalyzer {
                 return "SIGNED";
             }
             return type.toUpperCase(Locale.ROOT);
+        }
+
+        private static String castLength(String type) {
+            Matcher matcher = Pattern.compile("(?:sql_char|var_string)(?:\\((\\d+)\\))?").matcher(type);
+            return matcher.matches() && matcher.group(1) != null ? matcher.group(1) : "*";
         }
 
         private static String numericType(String value) {
@@ -1217,14 +1232,16 @@ public final class TiDBExecutionContextAnalyzer {
         public boolean equals(Object other) {
             if (!(other instanceof ExprFingerprint)) return false;
             ExprFingerprint that = (ExprFingerprint) other;
-            return kind.equals(that.kind) && resultType.equals(that.resultType)
-                    && children.equals(that.children) && java.util.Objects.equals(column, that.column)
-                    && java.util.Objects.equals(constant, that.constant);
+            boolean castLengthCompatible = !"CAST".equals(kind) || !"CHAR".equals(resultType)
+                    || "*".equals(constant) || "*".equals(that.constant) || constant.equals(that.constant);
+            return castLengthCompatible && kind.equals(that.kind) && resultType.equals(that.resultType)
+                    && children.equals(that.children) && java.util.Objects.equals(column, that.column);
         }
 
         @Override
         public int hashCode() {
-            return java.util.Objects.hash(kind, resultType, children, column, constant);
+            String hashConstant = "CAST".equals(kind) && "CHAR".equals(resultType) ? "*" : constant;
+            return java.util.Objects.hash(kind, resultType, children, column, hashConstant);
         }
     }
 

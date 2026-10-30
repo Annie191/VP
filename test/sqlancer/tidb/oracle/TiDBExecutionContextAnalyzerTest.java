@@ -335,6 +335,24 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void mapsSqlCharCastToTidbVarStringLengths() {
+        for (String type : java.util.List.of("var_string(262140)", "var_string(19)", "var_string(10)")) {
+            String plan = "Projection | 1 root | | char_length(cast(test.t.c0, " + type + "))->Column#1\n";
+            TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                    "CHAR_LENGTH(CAST(`c0` AS CHAR))", "UNKNOWN");
+            assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status(), type);
+        }
+    }
+
+    @Test
+    void doesNotEraseFromBinaryCastMapping() {
+        String plan = "Projection | 1 root | | char_length(cast(from_binary(test.t.c0), var_string(19)))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CHAR_LENGTH(CAST(`c0` AS CHAR))", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
     void realPlansConfirmOnlyRequestedDirection() throws Exception {
         EcstContext root = TiDBExecutionContextAnalyzer.parse(fixture("projection"), "CAST(`v` AS SIGNED)");
         EcstContext cop = TiDBExecutionContextAnalyzer.parse(fixture("selection"), "CAST(`v` AS SIGNED)");
