@@ -1109,6 +1109,27 @@ public final class TiDBExecutionContextAnalyzer {
                 case "isnull":
                     kind = "IS_NULL";
                     break;
+                case "gt":
+                    kind = "GT";
+                    break;
+                case "ge":
+                    kind = "GE";
+                    break;
+                case "eq":
+                    kind = "EQ";
+                    break;
+                case "ne":
+                    kind = "NE";
+                    break;
+                case "lt":
+                    kind = "LT";
+                    break;
+                case "le":
+                    kind = "LE";
+                    break;
+                case "nulleq":
+                    kind = "NULL_SAFE_EQ";
+                    break;
                 default:
                     kind = name.toUpperCase(Locale.ROOT);
                     break;
@@ -1120,7 +1141,10 @@ public final class TiDBExecutionContextAnalyzer {
                 for (String argument : arguments) {
                     children.add(parseNormalized(argument));
                 }
-                return new ExprFingerprint(kind, "IS_NULL".equals(kind) ? "BOOLEAN" : "UNKNOWN", children, null, null);
+                boolean booleanResult = "IS_NULL".equals(kind) || "GT".equals(kind) || "GE".equals(kind)
+                        || "EQ".equals(kind) || "NE".equals(kind) || "LT".equals(kind) || "LE".equals(kind)
+                        || "NULL_SAFE_EQ".equals(kind);
+                return new ExprFingerprint(kind, booleanResult ? "BOOLEAN" : "UNKNOWN", children, null, null);
             }
             if (value.matches("[-+]?\\d+(?:\\.\\d+)?")) {
                 return new ExprFingerprint("CONSTANT", numericType(value), List.of(), null, value);

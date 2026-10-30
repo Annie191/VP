@@ -372,6 +372,24 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void matchesIfWithTidbInternalComparisonFunction() {
+        String plan = "Projection | 1 root | | if(gt(cast(test.t.c0, bigint BINARY), 0), "
+                + "cast(test.t.c1, bigint BINARY), 0)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "IF(CAST(`c0` AS SIGNED) > 0, CAST(`c1` AS SIGNED), 0)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+    }
+
+    @Test
+    void comparisonFunctionKindsRemainDistinct() {
+        String plan = "Projection | 1 root | | if(ge(cast(test.t.c0, bigint BINARY), 0), "
+                + "cast(test.t.c1, bigint BINARY), 0)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "IF(CAST(`c0` AS SIGNED) > 0, CAST(`c1` AS SIGNED), 0)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
     void doesNotEraseFromBinaryCastMapping() {
         String plan = "Projection | 1 root | | char_length(cast(from_binary(test.t.c0), var_string(19)))->Column#1\n";
         TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
