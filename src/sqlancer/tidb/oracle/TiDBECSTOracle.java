@@ -22,7 +22,6 @@ import sqlancer.common.oracle.ecst.EcstFeature;
 import sqlancer.common.oracle.ecst.EcstFailureRecord;
 import sqlancer.common.oracle.ecst.EcstHistory;
 import sqlancer.common.oracle.ecst.EcstObservation;
-import sqlancer.common.oracle.ecst.EcstShiftStatus;
 import sqlancer.common.oracle.ecst.EcstPhase;
 import sqlancer.common.oracle.ecst.EcstRuleLibrary;
 import sqlancer.common.oracle.ecst.EcstTarget;
@@ -53,6 +52,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int executionFailures;
     private int bugCandidates;
     private int comparisonSkips;
+    private int comparableComparisons;
+    private int equalComparisons;
+    private int incomparableComparisons;
     private int failureRecords;
     private int seedMappingSkips;
     private int noValidTargetSkips;
@@ -115,6 +117,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         executionFailures = 0;
         bugCandidates = 0;
         comparisonSkips = 0;
+        comparableComparisons = 0;
+        equalComparisons = 0;
+        incomparableComparisons = 0;
         failureRecords = 0;
         seedMappingSkips = 0;
         noValidTargetSkips = 0;
@@ -253,7 +258,12 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 comparison = vp.compareEcstCase(testCase);
                 if (!comparison.isComparable()) {
                     comparisonSkips++;
+                    incomparableComparisons++;
                     continue;
+                }
+                comparableComparisons++;
+                if (comparison.isEqual()) {
+                    equalComparisons++;
                 }
                 // A comparable result comparison, including a mismatch, is a completed test pair.
                 completed++;
@@ -270,9 +280,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 throw failure;
             } finally {
                 writeCaseRecord(target, config, testCase, observation, comparison, null);
-                EcstShiftStatus status = comparison != null && !comparison.isComparable() ? EcstShiftStatus.UNKNOWN
-                        : observation.getStatus();
-                history.observe(target.getKey(), config.stableKey(), status,
+                history.observe(target.getKey(), config.stableKey(), observation.getStatus(),
                         observation.getObservedShifts(), System.nanoTime() - started, feature);
                 if (!keepArtifacts) {
                     cleanupSeed(seed);
@@ -805,6 +813,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             writer.write("creationSkips=" + creationSkips + System.lineSeparator());
             writer.write("executionFailures=" + executionFailures + System.lineSeparator());
             writer.write("comparisonSkips=" + comparisonSkips + System.lineSeparator());
+            writer.write("comparableComparisons=" + comparableComparisons + System.lineSeparator());
+            writer.write("equalComparisons=" + equalComparisons + System.lineSeparator());
+            writer.write("incomparableComparisons=" + incomparableComparisons + System.lineSeparator());
             writer.write("failureRecords=" + failureRecords + System.lineSeparator());
             writer.write("bugCandidates=" + bugCandidates + System.lineSeparator());
             writer.write("seedMappingSkips=" + seedMappingSkips + System.lineSeparator());
