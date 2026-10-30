@@ -886,7 +886,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         String targetExpression = expression.expression;
         EcstAccessPathPreparation accessPathPreparation = prepareEcstSourceAccessPath(schema, dependencies,
                 targetExpression);
-        String originalQuery = buildEcstSeedQuery(schema, targetExpression, context);
+        String originalQuery = buildEcstSeedQuery(schema, targetExpression, context, dependencies);
         TiDBECSTOracle.QueryShape shape = TiDBECSTOracle.queryShapeFromSql(originalQuery, dependencies.size());
         List<String> dependencyNames = dependencies.stream().map(column -> column.name).collect(Collectors.toList());
         return new EcstSeed(base.tableName, schema.sourceTable, originalQuery, targetExpression, dependencyNames, shape,
@@ -969,7 +969,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     private String buildEcstSeedQuery(VpSchema schema, String targetExpression,
-            EcstTransformationConfig.ExpressionContext context) {
+            EcstTransformationConfig.ExpressionContext context, List<VpColumn> dependencies) {
         String predicate = targetExpression + " > 0";
         switch (context) {
         case WHERE:
@@ -978,9 +978,18 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
                     + quote(schema.sourceTable);
         case HAVING:
+            int variant = Randomly.fromOptions(0, 1, 2);
+            if (variant == 0) {
+                return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
+                        + quote(schema.sourceTable) + " GROUP BY " + quote(ROW_ID) + ", " + targetExpression
+                        + " HAVING " + predicate;
+            }
+            String dependencyGroup = dependencies.stream().map(column -> quote(column.name))
+                    .collect(Collectors.joining(", "));
+            String having = variant == 2 ? "ecst_value > 0" : predicate;
             return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
-                    + quote(schema.sourceTable) + " GROUP BY " + quote(ROW_ID) + ", " + targetExpression
-                    + " HAVING " + predicate;
+                    + quote(schema.sourceTable) + " GROUP BY " + quote(ROW_ID) + ", " + dependencyGroup
+                    + " HAVING " + having;
         default:
             throw new IllegalArgumentException("Unsupported ECST seed context: " + context);
         }

@@ -60,13 +60,19 @@ public final class TiDBExecutionContextAnalyzer {
     }
 
     public ParsedContext extractContext(String originalQuery, EcstOperation operation) {
+        String plan;
         try {
-            ParsedContext parsed = parsePlan(explain(originalQuery), operation,
-                    readEvaluationContext(operation == null ? null : operation.getNormalizedExpression()));
-            return parsed;
+            plan = explain(originalQuery);
         } catch (SQLException failure) {
-            return ParsedContext.unknown("", "EXPLAIN failed: " + failure.getMessage(), MatchStatus.NOT_FOUND);
+            return ParsedContext.explainFailure(originalQuery, failure);
         }
+        String evaluation = "UNKNOWN";
+        try {
+            evaluation = readEvaluationContext(operation == null ? null : operation.getNormalizedExpression());
+        } catch (SQLException failure) {
+            evaluation = "UNKNOWN; supplementaryEvaluationError=" + sqlError(failure);
+        }
+        return parsePlan(plan, operation, evaluation);
     }
 
     /** Compatibility accessor for callers that only need the normalized context. */
@@ -85,14 +91,27 @@ public final class TiDBExecutionContextAnalyzer {
         String transformedPlan = "";
         try {
             originalPlan = explain(originalQuery);
+        } catch (SQLException failure) {
+            ParsedContext original = ParsedContext.explainFailure(originalQuery, failure);
+            ParsedContext transformed = ParsedContext.unknown(transformedPlan, "transformed plan not requested");
+            return observation(original, transformed, EcstShiftStatus.UNKNOWN, Set.of(),
+                    "original EXPLAIN failed", UnknownReason.UNKNOWN_BECAUSE_PLAN);
+        }
+        try {
             transformedPlan = explain(transformedQuery);
-            String evaluation;
-            try {
-                evaluation = readEvaluationContext(operation == null ? null : operation.getNormalizedExpression());
-            } catch (SQLException ignored) {
-                // Session metadata is supplementary evidence; a failed metadata probe must not discard plan matches.
-                evaluation = "UNKNOWN";
-            }
+        } catch (SQLException failure) {
+            ParsedContext original = ParsedContext.unknown(originalPlan, "original plan available");
+            ParsedContext transformed = ParsedContext.explainFailure(transformedQuery, failure);
+            return observation(original, transformed, EcstShiftStatus.UNKNOWN, Set.of(),
+                    "transformed EXPLAIN failed", UnknownReason.UNKNOWN_BECAUSE_PLAN);
+        }
+        String evaluation;
+        try {
+            evaluation = readEvaluationContext(operation == null ? null : operation.getNormalizedExpression());
+        } catch (SQLException failure) {
+            evaluation = "UNKNOWN; supplementaryEvaluationError=" + sqlError(failure);
+        }
+        try {
             ParsedContext original = parsePlan(originalPlan, operation, evaluation);
             ParsedContext transformed = parsePlan(transformedPlan, operation, evaluation);
             if (!original.matched || !transformed.matched) {
@@ -118,11 +137,11 @@ public final class TiDBExecutionContextAnalyzer {
                     status == EcstShiftStatus.SUCCESS ? "confirmed target migration"
                             : status == EcstShiftStatus.FAILURE ? "target migration not observed"
                                     : "target migration cannot be determined", unknownReason);
-        } catch (SQLException e) {
-            ParsedContext original = ParsedContext.unknown(originalPlan, "EXPLAIN failed: " + e.getMessage());
-            ParsedContext transformed = ParsedContext.unknown(transformedPlan, "EXPLAIN failed: " + e.getMessage());
+        } catch (RuntimeException e) {
+            ParsedContext original = ParsedContext.unknown(originalPlan, "plan parsing failed: " + e.getMessage());
+            ParsedContext transformed = ParsedContext.unknown(transformedPlan, "plan parsing failed: " + e.getMessage());
             return observation(original, transformed, EcstShiftStatus.UNKNOWN, Set.of(),
-                    "EXPLAIN failed: " + e.getMessage(), UnknownReason.UNKNOWN_BECAUSE_PLAN);
+                    "plan parsing failed: " + e.getMessage(), UnknownReason.UNKNOWN_BECAUSE_PLAN);
         }
     }
 
@@ -723,19 +742,26 @@ public final class TiDBExecutionContextAnalyzer {
 
     private String readEvaluationContext(String targetExpression) throws SQLException {
         try (Statement statement = state.getConnection().createStatement(); ResultSet result = statement.executeQuery(
-                "SELECT @@sql_mode, @@collation_connection, @@character_set_connection")) {
+                "SELECT @@sql_mode, @@collation_connection, @@character_set_connection, "
+                        + "@@tidb_enable_new_only_full_group_by_check")) {
             if (!result.next()) {
                 return "UNKNOWN";
             }
             String cast = targetExpression != null && normalize(targetExpression).contains("cast(")
                     ? ";targetTypeConversion=CAST" : "";
             return "sql_mode=" + safe(result.getString(1)) + ";collation=" + safe(result.getString(2)) + ";charset="
-                    + safe(result.getString(3)) + cast;
+                    + safe(result.getString(3)) + ";tidb_enable_new_only_full_group_by_check=" + safe(result.getString(4))
+                    + cast;
         }
     }
 
     private static String safe(String value) {
         return value == null || value.isEmpty() ? "UNKNOWN" : value;
+    }
+
+    private static String sqlError(SQLException failure) {
+        return "sqlState=" + safe(failure.getSQLState()) + ",errorCode=" + failure.getErrorCode() + ",message="
+                + safe(failure.getMessage());
     }
 
     private static EcstOperation operationFor(String targetExpression) {
@@ -747,6 +773,10 @@ public final class TiDBExecutionContextAnalyzer {
         UNIQUE, DUPLICATED_SAME_OPERATION, AMBIGUOUS, NOT_FOUND
     }
 
+    public enum ExtractionStatus {
+        MATCHED, EXPRESSION_NOT_FOUND, AMBIGUOUS, EXPLAIN_ERROR
+    }
+
     public static final class ParsedContext {
         private final EcstContext context;
         private final String plan;
@@ -754,6 +784,7 @@ public final class TiDBExecutionContextAnalyzer {
         private final String evidence;
         private final boolean matched;
         private final MatchStatus status;
+        private final ExtractionStatus extractionStatus;
         private final String reason;
         private final List<Candidate> candidates;
         private final Candidate selected;
@@ -770,6 +801,7 @@ public final class TiDBExecutionContextAnalyzer {
             this.matchedNode = matchedNode == null ? "" : matchedNode;
             this.evidence = evidence == null ? "" : evidence;
             this.status = status == null ? MatchStatus.NOT_FOUND : status;
+            this.extractionStatus = extractionStatusFor(this.status);
             this.reason = reason == null ? "" : reason;
             this.candidates = Collections.unmodifiableList(new ArrayList<>(candidates == null ? List.of() : candidates));
             this.selected = this.candidates.isEmpty() ? null : this.candidates.get(0);
@@ -788,6 +820,35 @@ public final class TiDBExecutionContextAnalyzer {
                 List<Candidate> candidates) {
             return new ParsedContext(new EcstContext("UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN"),
                     plan, "", evidence, status, evidence, candidates);
+        }
+
+        private static ParsedContext explainFailure(String query, SQLException failure) {
+            String evidence = "EXPLAIN failed: " + sqlError(failure) + "; query=" + query;
+            return new ParsedContext(new EcstContext("UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN"),
+                    "", "", evidence, ExtractionStatus.EXPLAIN_ERROR, evidence, List.of());
+        }
+
+        private ParsedContext(EcstContext context, String plan, String matchedNode, String evidence,
+                ExtractionStatus extractionStatus, String reason, List<Candidate> candidates) {
+            this.context = context;
+            this.plan = plan == null ? "" : plan;
+            this.matchedNode = matchedNode == null ? "" : matchedNode;
+            this.evidence = evidence == null ? "" : evidence;
+            this.status = extractionStatus == ExtractionStatus.AMBIGUOUS ? MatchStatus.AMBIGUOUS
+                    : extractionStatus == ExtractionStatus.MATCHED ? MatchStatus.UNIQUE : MatchStatus.NOT_FOUND;
+            this.extractionStatus = extractionStatus;
+            this.reason = reason == null ? "" : reason;
+            this.candidates = Collections.unmodifiableList(new ArrayList<>(candidates == null ? List.of() : candidates));
+            this.selected = this.candidates.isEmpty() ? null : this.candidates.get(0);
+            this.matched = extractionStatus == ExtractionStatus.MATCHED;
+        }
+
+        private static ExtractionStatus extractionStatusFor(MatchStatus status) {
+            if (status == MatchStatus.AMBIGUOUS) return ExtractionStatus.AMBIGUOUS;
+            if (status == MatchStatus.UNIQUE || status == MatchStatus.DUPLICATED_SAME_OPERATION) {
+                return ExtractionStatus.MATCHED;
+            }
+            return ExtractionStatus.EXPRESSION_NOT_FOUND;
         }
 
         public String evidence() {
@@ -812,6 +873,10 @@ public final class TiDBExecutionContextAnalyzer {
 
         public MatchStatus status() {
             return status;
+        }
+
+        public ExtractionStatus extractionStatus() {
+            return extractionStatus;
         }
 
         public List<Candidate> candidates() {

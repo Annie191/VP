@@ -55,6 +55,21 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void distinguishesExpressionNotFoundFromAmbiguity() {
+        TiDBExecutionContextAnalyzer.ParsedContext missing = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                "Projection_1 1 root test.t.a\n", "CAST(`missing` AS SIGNED)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.ExtractionStatus.EXPRESSION_NOT_FOUND,
+                missing.extractionStatus());
+
+        TiDBExecutionContextAnalyzer.ParsedContext ambiguous = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                "Projection_1 1 root cast(test.t.a, bigint BINARY)->Column#1\n"
+                        + "└─Selection_2 1 cop[tikv] gt(cast(test.t.a, bigint BINARY), 0)\n",
+                "CAST(`a` AS SIGNED)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.ExtractionStatus.AMBIGUOUS,
+                ambiguous.extractionStatus());
+    }
+
+    @Test
     void ambiguousTargetMatchIsUnknown() {
         String plan = "Selection_2 1 root gt(cast(test.t.a, signed), 0)\n"
                 + "└─Selection_1 1 cop[tikv] gt(cast(test.t.a, signed), 0)\n";

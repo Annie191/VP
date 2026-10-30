@@ -752,7 +752,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 .append(EcstFailureRecord.json(Thread.currentThread().getName())).append("\",\"caseId\":\"")
                 .append(runId).append("-").append(++caseSequence).append("\"");
         line.append(",\"seedClause\":\"").append(EcstFailureRecord.json(seed.getExpressionContext().name()));
-        line.append("\",\"seedMatchStatus\":\"").append(EcstFailureRecord.json(parsed.status().name()));
+        line.append("\",\"seedMatchStatus\":\"").append(EcstFailureRecord.json(parsed.extractionStatus().name()));
         line.append("\",\"seedMatchReason\":\"").append(EcstFailureRecord.json(parsed.reason()));
         line.append("\",\"validTargetCount\":").append(validTargetCount);
         line.append(",\"candidateRejectReasons\":").append(EcstFailureRecord.jsonArray(reasons));
