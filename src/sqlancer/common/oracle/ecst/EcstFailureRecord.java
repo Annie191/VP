@@ -61,8 +61,43 @@ public final class EcstFailureRecord {
     }
 
     public static String json(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\r", "\\r")
-                .replace("\n", "\\n");
+        if (value == null) {
+            return "";
+        }
+        StringBuilder result = new StringBuilder(value.length() + 16);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+            case '\\':
+                result.append("\\\\");
+                break;
+            case '"':
+                result.append("\\\"");
+                break;
+            case '\r':
+                result.append("\\r");
+                break;
+            case '\n':
+                result.append("\\n");
+                break;
+            case '\t':
+                result.append("\\t");
+                break;
+            case '\b':
+                result.append("\\b");
+                break;
+            case '\f':
+                result.append("\\f");
+                break;
+            default:
+                if (c < 0x20) {
+                    result.append(String.format("\\u%04x", (int) c));
+                } else {
+                    result.append(c);
+                }
+            }
+        }
+        return result.toString();
     }
 
     public static String jsonArray(List<String> values) {

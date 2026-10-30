@@ -731,7 +731,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + "\",\"shiftStatus\":\"" + shiftStatus + "\",\"comparisonStatus\":\""
                 + comparisonStatus + "\",\"preconditionStatus\":\"" + preconditionStatus
                 + "\",\"observedShifts\":" + observedShifts
-                + "\",\"originalQuery\":\"" + EcstFailureRecord.json(testCase.getOriginalQuery())
+                + ",\"originalQuery\":\"" + EcstFailureRecord.json(testCase.getOriginalQuery())
                 + "\",\"transformedQuery\":\"" + EcstFailureRecord.json(testCase.getTransformedQuery())
                 + "\",\"targetExpression\":\"" + EcstFailureRecord.json(testCase.getTargetExpression())
                 + "\",\"dependencies\":" + EcstFailureRecord.jsonArray(testCase.getTargetDependencies())

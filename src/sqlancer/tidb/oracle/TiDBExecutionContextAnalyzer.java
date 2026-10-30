@@ -64,8 +64,8 @@ public final class TiDBExecutionContextAnalyzer {
             ParsedContext parsed = parsePlan(explain(originalQuery), operation,
                     readEvaluationContext(operation == null ? null : operation.getNormalizedExpression()));
             return parsed;
-        } catch (SQLException ignored) {
-            return ParsedContext.unknown("", "EXPLAIN failed", MatchStatus.NOT_FOUND);
+        } catch (SQLException failure) {
+            return ParsedContext.unknown("", "EXPLAIN failed: " + failure.getMessage(), MatchStatus.NOT_FOUND);
         }
     }
 
