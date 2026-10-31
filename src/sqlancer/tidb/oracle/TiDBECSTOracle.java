@@ -740,6 +740,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         }
         String observedShifts = observation == null ? "[]"
                 : EcstFailureRecord.jsonArray(new ArrayList<>(observation.getObservedShifts()));
+        String originalAggregation = originalPlan.matches("(?is).*\\b(hashagg|streamagg|aggregation|agg)\\b.*")
+                ? "PRESENT" : "ABSENT";
+        String transformedAggregation = transformedPlan.matches("(?is).*\\b(hashagg|streamagg|aggregation|agg)\\b.*")
+                ? "PRESENT" : "ABSENT";
         String lineage = testCase == null || testCase.getOperation() == null ? "{}"
                 : EcstFailureRecord.json(String.valueOf(testCase.getOperation().getDependencyLineage()));
         String caseId = runId + "-" + (++caseSequence);
@@ -759,6 +763,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + ",\"lineage\":\"" + lineage
                 + "\",\"originalPlan\":\"" + EcstFailureRecord.json(originalPlan)
                 + "\",\"transformedPlan\":\"" + EcstFailureRecord.json(transformedPlan)
+                + "\",\"originalAggregation\":\"" + originalAggregation + "\",\"transformedAggregation\":\""
+                + transformedAggregation
                 + "\",\"originalMatchedNode\":\""
                 + EcstFailureRecord.json(observation == null ? "" : observation.getOriginalMatchedNode())
                 + "\",\"transformedMatchedNode\":\""

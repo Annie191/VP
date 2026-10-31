@@ -115,6 +115,12 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         SINGLE_SIDE, SAME_SIDE, CROSS_SIDE, OVERLAPPED, INVALID
     }
 
+    public enum HavingTemplate {
+        GROUP_DEPENDENCIES,
+        GROUP_DEPENDENCIES_USE_ALIAS,
+        GROUP_EXPRESSION_PROBE
+    }
+
     private static final List<ReconstructionStrategy> SUPPORTED_RECONSTRUCTION_STRATEGIES = List.of(
             ReconstructionStrategy.JOIN, ReconstructionStrategy.LEFT_RIGHT_JOIN,
             ReconstructionStrategy.FULL_OUTER_SIMULATION, ReconstructionStrategy.SCALAR_SUBQUERY,
@@ -913,8 +919,12 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             String targetExpression = expression.expression;
             EcstAccessPathPreparation accessPathPreparation = prepareEcstSourceAccessPath(schema, dependencies,
                     expression.filterPredicate);
-            String originalQuery = buildEcstSeedQuery(schema, targetExpression, expression.filterPredicate, context,
-                    dependencies);
+        HavingTemplate havingTemplate = context == EcstTransformationConfig.ExpressionContext.HAVING
+                ? Randomly.fromOptions(HavingTemplate.GROUP_DEPENDENCIES,
+                        HavingTemplate.GROUP_DEPENDENCIES_USE_ALIAS)
+                : null;
+        String originalQuery = buildEcstSeedQuery(schema, targetExpression, expression.filterPredicate, context,
+                dependencies, havingTemplate);
             TiDBECSTOracle.QueryShape shape = TiDBECSTOracle.queryShapeFromSql(originalQuery, dependencies.size());
             List<String> dependencyNames = dependencies.stream().map(column -> column.name).collect(Collectors.toList());
             return new EcstSeed(base.tableName, schema.sourceTable, originalQuery, targetExpression,
@@ -1019,7 +1029,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     private String buildEcstSeedQuery(VpSchema schema, String targetExpression, String filterPredicate,
-            EcstTransformationConfig.ExpressionContext context, List<VpColumn> dependencies) {
+            EcstTransformationConfig.ExpressionContext context, List<VpColumn> dependencies,
+            HavingTemplate havingTemplate) {
         String predicate = filterPredicate;
         switch (context) {
         case WHERE:
@@ -1028,21 +1039,30 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
                     + quote(schema.sourceTable);
         case HAVING:
-            int variant = Randomly.fromOptions(0, 1, 2);
-            if (variant == 0) {
+            String dependencyGroup = dependencies.stream().map(column -> quote(column.name))
+                    .collect(Collectors.joining(", "));
+            if (havingTemplate == HavingTemplate.GROUP_EXPRESSION_PROBE) {
                 return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
                         + quote(schema.sourceTable) + " GROUP BY " + quote(ROW_ID) + ", " + targetExpression
                         + " HAVING " + predicate;
             }
-            String dependencyGroup = dependencies.stream().map(column -> quote(column.name))
-                    .collect(Collectors.joining(", "));
-            String having = variant == 2 ? "ecst_value > 0" : predicate;
+            String having = havingTemplate == HavingTemplate.GROUP_DEPENDENCIES_USE_ALIAS ? "ecst_value > 0"
+                    : predicate;
             return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
                     + quote(schema.sourceTable) + " GROUP BY " + quote(ROW_ID) + ", " + dependencyGroup
                     + " HAVING " + having;
         default:
             throw new IllegalArgumentException("Unsupported ECST seed context: " + context);
         }
+    }
+
+    String buildHavingCompatibilityProbeForTest(String sourceTable, String targetExpression,
+            List<String> dependencies) {
+        if (dependencies == null || dependencies.isEmpty()) {
+            throw new IllegalArgumentException("HAVING probe requires dependencies");
+        }
+        return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM " + quote(sourceTable)
+                + " GROUP BY " + quote(ROW_ID) + ", " + targetExpression + " HAVING " + targetExpression + " > 0";
     }
 
     /** Applies the selected ECST transformation to an existing source seed. */
