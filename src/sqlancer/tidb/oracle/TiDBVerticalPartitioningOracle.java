@@ -290,8 +290,13 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             if (!target.getFrom().equals(seedContext.getAccessPath())) {
                 return false;
             }
-            return ("TABLEFULLSCAN".equals(target.getFrom()) && "INDEXLOOKUP".equals(target.getTo()))
-                    || ("INDEXLOOKUP".equals(target.getFrom()) && "TABLEFULLSCAN".equals(target.getTo()));
+            return isAccessPath(target.getFrom()) && isAccessPath(target.getTo())
+                    && !target.getFrom().equals(target.getTo());
+        }
+
+        private static boolean isAccessPath(String value) {
+            return "TABLEFULLSCAN".equals(value) || "INDEXLOOKUP".equals(value)
+                    || "INDEXREADER".equals(value);
         }
 
         @Override
@@ -1129,7 +1134,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
     private void preparePartitionAccessPath(VpSchema schema, SplitPlan splitPlan, EcstTarget target) throws Exception {
         if (target == null || target.getDimension() != EcstContextDimension.ACCESS_PATH
-                || !"INDEXLOOKUP".equals(target.getTo())) {
+                || !("INDEXLOOKUP".equals(target.getTo()) || "INDEXREADER".equals(target.getTo()))) {
             return;
         }
         createAccessIndex(schema, schema.leftTable, splitPlan.leftColumns, "l");

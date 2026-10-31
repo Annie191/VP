@@ -99,7 +99,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 new EcstTarget("TIDB_ACCESS_TABLEFULLSCAN_TO_INDEXLOOKUP", EcstContextDimension.ACCESS_PATH,
                         "TABLEFULLSCAN", "INDEXLOOKUP"),
                 new EcstTarget("TIDB_ACCESS_INDEXLOOKUP_TO_TABLEFULLSCAN", EcstContextDimension.ACCESS_PATH,
-                        "INDEXLOOKUP", "TABLEFULLSCAN"));
+                        "INDEXLOOKUP", "TABLEFULLSCAN"),
+                new EcstTarget("TIDB_ACCESS_TABLEFULLSCAN_TO_INDEXREADER", EcstContextDimension.ACCESS_PATH,
+                        "TABLEFULLSCAN", "INDEXREADER"),
+                new EcstTarget("TIDB_ACCESS_INDEXREADER_TO_TABLEFULLSCAN", EcstContextDimension.ACCESS_PATH,
+                        "INDEXREADER", "TABLEFULLSCAN"));
     }
 
     @Override
@@ -168,8 +172,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             EcstTransformationConfig config = null;
             try {
                 List<EcstTarget> validTargets = supportedTargets(seed, seedContext);
-                if (seedParsed.status() == TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND
-                        || seedParsed.status() == TiDBExecutionContextAnalyzer.MatchStatus.AMBIGUOUS) {
+                if (seedParsed.extractionStatus() == TiDBExecutionContextAnalyzer.ExtractionStatus.EXPRESSION_NOT_FOUND
+                        || seedParsed.extractionStatus() == TiDBExecutionContextAnalyzer.ExtractionStatus.EXPLAIN_ERROR
+                        || seedParsed.extractionStatus() == TiDBExecutionContextAnalyzer.ExtractionStatus.AMBIGUOUS) {
                     seedMappingSkips++;
                     writeSeedSkipRecord(seed, seedParsed, validTargets.size(), List.of("seed mapping: "
                             + seedParsed.reason()));

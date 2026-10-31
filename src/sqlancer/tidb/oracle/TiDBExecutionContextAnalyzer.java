@@ -72,7 +72,9 @@ public final class TiDBExecutionContextAnalyzer {
         } catch (SQLException failure) {
             evaluation = "UNKNOWN; supplementaryEvaluationError=" + sqlError(failure);
         }
-        return parsePlan(plan, operation, evaluation);
+        ParsedContext parsed = parsePlan(plan, operation, evaluation);
+        return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
+                ? relationAccessContext(plan, evaluation) : parsed;
     }
 
     /** Compatibility accessor for callers that only need the normalized context. */
@@ -114,6 +116,14 @@ public final class TiDBExecutionContextAnalyzer {
         try {
             ParsedContext original = parsePlan(originalPlan, operation, evaluation);
             ParsedContext transformed = parsePlan(transformedPlan, operation, evaluation);
+            if (target != null && target.getDimension() == sqlancer.common.oracle.ecst.EcstContextDimension.ACCESS_PATH) {
+                if (original.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND) {
+                    original = relationAccessContext(originalPlan, evaluation);
+                }
+                if (transformed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND) {
+                    transformed = relationAccessContext(transformedPlan, evaluation);
+                }
+            }
             if (!original.matched || !transformed.matched) {
                 UnknownReason unknownReason = original.status == MatchStatus.NOT_FOUND
                         || transformed.status == MatchStatus.NOT_FOUND ? UnknownReason.UNKNOWN_BECAUSE_PLAN
@@ -173,11 +183,15 @@ public final class TiDBExecutionContextAnalyzer {
 
     /** Package-visible evidence entry point for focused analyzer tests. */
     static ParsedContext parseWithEvidence(String plan, String targetExpression, String evaluation) {
-        return parsePlan(plan, operationFor(targetExpression), evaluation);
+        ParsedContext parsed = parsePlan(plan, operationFor(targetExpression), evaluation);
+        return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
+                ? relationAccessContext(plan, evaluation) : parsed;
     }
 
     static ParsedContext parseWithEvidence(String plan, EcstOperation operation, String evaluation) {
-        return parsePlan(plan, operation, evaluation);
+        ParsedContext parsed = parsePlan(plan, operation, evaluation);
+        return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
+                ? relationAccessContext(plan, evaluation) : parsed;
     }
 
     private EcstObservation observation(ParsedContext original, ParsedContext transformed, EcstShiftStatus status,
@@ -254,6 +268,21 @@ public final class TiDBExecutionContextAnalyzer {
         String reason = status == MatchStatus.DUPLICATED_SAME_OPERATION ? "duplicated physical instances of one operation"
                 : status == MatchStatus.AMBIGUOUS ? "equally scored candidates represent different operations" : "unique operation match";
         return new ParsedContext(context, plan, best.expression.owner.raw, evidence, status, reason, candidates);
+    }
+
+    private static ParsedContext relationAccessContext(String plan, String evaluation) {
+        List<PlanNode> nodes = parseNodes(plan);
+        PlanNode accessRoot = nodes.isEmpty() ? null : nodes.get(0);
+        boolean absorbed = plan != null && (plan.toLowerCase(Locale.ROOT).contains("indexrangescan")
+                || plan.toLowerCase(Locale.ROOT).contains("indexfullscan"));
+        if (accessRoot == null || !absorbed) {
+            return ParsedContext.unknown(plan, "target expression fingerprint was not found in a plan node",
+                    MatchStatus.NOT_FOUND);
+        }
+        EcstContext context = contextFor(accessRoot, parseEvaluationEnvironment(evaluation), null);
+        String evidence = "sessionMetadata=" + evaluation + "; extractionStatus=ABSORBED_IN_INDEX_RANGE"
+                + "; relationAccessPath=" + context.getAccessPath() + "; plan=" + plan;
+        return ParsedContext.absorbed(context, plan, evidence);
     }
 
     private static boolean allCandidatesRepresentSameOperation(List<Candidate> candidates) {
@@ -774,7 +803,7 @@ public final class TiDBExecutionContextAnalyzer {
     }
 
     public enum ExtractionStatus {
-        MATCHED, EXPRESSION_NOT_FOUND, AMBIGUOUS, EXPLAIN_ERROR
+        MATCHED, EXPRESSION_NOT_FOUND, AMBIGUOUS, EXPLAIN_ERROR, ABSORBED_IN_INDEX_RANGE
     }
 
     public static final class ParsedContext {
@@ -826,6 +855,11 @@ public final class TiDBExecutionContextAnalyzer {
             String evidence = "EXPLAIN failed: " + sqlError(failure) + "; query=" + query;
             return new ParsedContext(new EcstContext("UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN"),
                     "", "", evidence, ExtractionStatus.EXPLAIN_ERROR, evidence, List.of());
+        }
+
+        private static ParsedContext absorbed(EcstContext context, String plan, String evidence) {
+            return new ParsedContext(context, plan, "", evidence, ExtractionStatus.ABSORBED_IN_INDEX_RANGE, evidence,
+                    List.of());
         }
 
         private ParsedContext(EcstContext context, String plan, String matchedNode, String evidence,
