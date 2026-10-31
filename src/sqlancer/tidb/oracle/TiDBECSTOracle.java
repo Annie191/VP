@@ -42,6 +42,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private final TiDBEcstCapabilities capabilities;
     private final EcstHistory history = new EcstHistory();
     private final List<EcstTarget> targets;
+    private final EcstSeedPool seedPool;
     private volatile String lastSynthesisSummary = "<none>";
     private long semanticPreconditionRejects;
     private int requestedBudget;
@@ -49,6 +50,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int attempts;
     private int candidateSetSkips;
     private int creationSkips;
+    private int generationExpectedSkips;
     private int executionFailures;
     private int bugCandidates;
     private int comparisonSkips;
@@ -60,6 +62,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int noValidTargetSkips;
     private int noConfigurationSkips;
     private int seedRefreshes;
+    private int seedRefreshAttempts;
+    private int seedRefreshExpectedSkips;
     private long runId;
     private int caseSequence;
     private int caseRecordsWritten;
@@ -73,6 +77,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         this.targets = capabilities.supportedTargets(state);
         this.vp = new TiDBVerticalPartitioningOracle(state, false);
         this.analyzer = new TiDBExecutionContextAnalyzer(state);
+        this.seedPool = new EcstSeedPool(vp);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (runId != 0) {
                 writeFeedbackSummary("FINAL_SHUTDOWN");
@@ -129,6 +134,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         attempts = 0;
         candidateSetSkips = 0;
         creationSkips = 0;
+        generationExpectedSkips = 0;
         executionFailures = 0;
         bugCandidates = 0;
         comparisonSkips = 0;
@@ -140,9 +146,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         noValidTargetSkips = 0;
         noConfigurationSkips = 0;
         seedRefreshes = 0;
+        seedRefreshAttempts = 0;
+        seedRefreshExpectedSkips = 0;
         candidateRejectReasons.clear();
         semanticPreconditionRejects = 0;
-        EcstSeedPool seedPool = new EcstSeedPool(vp);
         while (completed < budget && attempts < budget * 4) {
             attempts++;
             TiDBVerticalPartitioningOracle.EcstSeed seed = null;
@@ -154,7 +161,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 seedContext = seedParsed.context();
             } catch (IgnoreMeException | IllegalArgumentException ignored) {
                 creationSkips++;
-                recordFailure(EcstPhase.SEED_GENERATION, seed, null, null, ignored);
+                generationExpectedSkips++;
+                writeExpectedGenerationSkip(seed, ignored);
                 continue;
             } catch (Exception failure) {
                 creationSkips++;
@@ -338,8 +346,15 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
         private TiDBVerticalPartitioningOracle.EcstSeed nextSeed() throws Exception {
             if (issued > 0 && issued % REFRESH_INTERVAL == 0) {
-                backend.refreshEcstBaseRelations();
-                seedRefreshes++;
+                seedRefreshAttempts++;
+                try {
+                    backend.refreshEcstBaseRelations();
+                    seedRefreshes++;
+                } catch (IgnoreMeException | IllegalArgumentException expected) {
+                    seedRefreshExpectedSkips++;
+                    generationExpectedSkips++;
+                    writeExpectedGenerationSkip(null, expected);
+                }
             }
             issued++;
             return backend.createEcstSeed();
@@ -721,6 +736,16 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         appendJsonLine("ecst-failures.jsonl", record.toJsonLine());
     }
 
+    private void writeExpectedGenerationSkip(TiDBVerticalPartitioningOracle.EcstSeed seed, Throwable failure) {
+        String line = "{\"type\":\"generation_skip\",\"outcome\":\"EXPECTED_GENERATION_SKIP\","
+                + "\"runId\":" + runId + ",\"workerId\":\""
+                + EcstFailureRecord.json(Thread.currentThread().getName()) + "\",\"message\":\""
+                + EcstFailureRecord.json(failure == null ? "" : failure.getMessage()) + "\",\"baseTable\":\""
+                + EcstFailureRecord.json(seed == null ? "" : seed.getBaseTable()) + "\",\"targetExpression\":\""
+                + EcstFailureRecord.json(seed == null ? "" : seed.getTargetExpression()) + "\"}";
+        appendJsonLine("ecst-failures.jsonl", line);
+    }
+
     private void writeCaseRecord(EcstTarget target, EcstTransformationConfig config,
             TiDBVerticalPartitioningOracle.EcstCase testCase, EcstObservation observation,
             TiDBVerticalPartitioningOracle.EcstComparison comparison,
@@ -862,6 +887,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             writer.write("attempts=" + attempts + System.lineSeparator());
             writer.write("candidateSetSkips=" + candidateSetSkips + System.lineSeparator());
             writer.write("creationSkips=" + creationSkips + System.lineSeparator());
+            writer.write("generationExpectedSkips=" + generationExpectedSkips + System.lineSeparator());
+            writer.write("seedRefreshAttempts=" + seedRefreshAttempts + System.lineSeparator());
+            writer.write("seedRefreshExpectedSkips=" + seedRefreshExpectedSkips + System.lineSeparator());
             writer.write("executionFailures=" + executionFailures + System.lineSeparator());
             writer.write("comparisonSkips=" + comparisonSkips + System.lineSeparator());
             writer.write("comparableComparisons=" + comparableComparisons + System.lineSeparator());
