@@ -920,23 +920,24 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             throw new IgnoreMeException();
         }
         List<VpColumn> dependencies = expression.dependencies;
+        String filterPredicate = enrichSeedPredicate(expression.filterPredicate, dependencies);
         ControlledSplitPlan initial = createControlledSplitPlan(base.columns, dependencies,
                 EcstTransformationConfig.PartitionLayout.SAME_SIDE);
         VpSchema schema = materializeSourceSeed(base, initial.splitPlan, initial.splitStrategy);
         try {
             String targetExpression = expression.expression;
             EcstAccessPathPreparation accessPathPreparation = prepareEcstSourceAccessPath(schema, dependencies,
-                    expression.filterPredicate);
+                    filterPredicate);
         HavingTemplate havingTemplate = context == EcstTransformationConfig.ExpressionContext.HAVING
                 ? Randomly.fromOptions(HavingTemplate.GROUP_DEPENDENCIES,
                         HavingTemplate.GROUP_DEPENDENCIES_USE_ALIAS)
                 : null;
-        String originalQuery = buildEcstSeedQuery(schema, targetExpression, expression.filterPredicate, context,
+        String originalQuery = buildEcstSeedQuery(schema, targetExpression, filterPredicate, context,
                 dependencies, havingTemplate);
             TiDBECSTOracle.QueryShape shape = TiDBECSTOracle.queryShapeFromSql(originalQuery, dependencies.size());
             List<String> dependencyNames = dependencies.stream().map(column -> column.name).collect(Collectors.toList());
             return new EcstSeed(base.tableName, schema.sourceTable, originalQuery, targetExpression,
-                    expression.filterPredicate, expression.family, dependencyNames, shape,
+                    filterPredicate, expression.family, dependencyNames, shape,
                     context, base, schema, accessPathPreparation);
         } catch (Throwable failure) {
             try {
@@ -972,8 +973,9 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             return new EcstExpressionSpec(op, op + " > 0", List.of(column), "DATE_YEAR");
         }
         if (numeric.size() >= 2) {
-            VpColumn left = numeric.get(0);
-            VpColumn right = numeric.get(1);
+            VpColumn left = Randomly.fromList(numeric);
+            List<VpColumn> remaining = numeric.stream().filter(column -> column != left).collect(Collectors.toList());
+            VpColumn right = Randomly.fromList(remaining);
             String l = "CAST(" + quote(left.name) + " AS SIGNED)";
             String r = "CAST(" + quote(right.name) + " AS SIGNED)";
             String expression;
@@ -1004,6 +1006,15 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             return new EcstExpressionSpec(op, op + " > 0", List.of(column), "STRING_LENGTH");
         }
         return null;
+    }
+
+    private String enrichSeedPredicate(String predicate, List<VpColumn> dependencies) {
+        if (predicate == null || dependencies == null || dependencies.isEmpty()
+                || !Randomly.getBooleanWithSmallProbability()) {
+            return predicate;
+        }
+        VpColumn guard = Randomly.fromList(dependencies);
+        return "(" + predicate + ") AND " + quote(guard.name) + " IS NOT NULL";
     }
 
     private EcstAccessPathPreparation prepareEcstSourceAccessPath(VpSchema schema, List<VpColumn> dependencies,
@@ -1044,19 +1055,23 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         case WHERE:
             return "SELECT " + quote(ROW_ID) + " FROM " + quote(schema.sourceTable) + " WHERE " + predicate;
         case SELECT:
-            return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
+            String sibling = dependencies.isEmpty() ? "" : ", " + quote(dependencies.get(0).name)
+                    + " AS ecst_input";
+            return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value" + sibling + " FROM "
                     + quote(schema.sourceTable);
         case HAVING:
             String dependencyGroup = dependencies.stream().map(column -> quote(column.name))
                     .collect(Collectors.joining(", "));
             if (havingTemplate == HavingTemplate.GROUP_EXPRESSION_PROBE) {
-                return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
-                        + quote(schema.sourceTable) + " GROUP BY " + quote(ROW_ID) + ", " + targetExpression
+                return "SELECT MIN(" + quote(ROW_ID) + ") AS " + quote(ROW_ID) + ", " + targetExpression
+                        + " AS ecst_value FROM "
+                        + quote(schema.sourceTable) + " GROUP BY " + targetExpression
                         + " HAVING " + predicate;
             }
             String having = havingTemplate == HavingTemplate.GROUP_DEPENDENCIES_USE_ALIAS ? "ecst_value > 0"
                     : predicate;
-            return "SELECT " + quote(ROW_ID) + ", " + targetExpression + " AS ecst_value FROM "
+            return "SELECT MIN(" + quote(ROW_ID) + ") AS " + quote(ROW_ID) + ", " + targetExpression
+                    + " AS ecst_value FROM "
                     + quote(schema.sourceTable) + " GROUP BY " + quote(ROW_ID) + ", " + dependencyGroup
                     + " HAVING " + having;
         default:
