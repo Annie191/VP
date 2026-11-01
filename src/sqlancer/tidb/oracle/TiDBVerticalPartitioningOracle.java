@@ -1462,6 +1462,13 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 violations.add("dependency type changed across materialization: " + dependency);
             }
         }
+        try {
+            violations.addAll(validateRelationMetadata(ecstCase));
+        } catch (SQLException failure) {
+            return new EcstSemanticPreconditionResult(
+                    List.of("relation metadata validation unavailable: " + failure.getMessage()),
+                    EcstSemanticPreconditionResult.Status.UNKNOWN);
+        }
         if (!containsSetupToken(ecstCase.pair.schema.setupStatements, quote(ROW_ID) + " BIGINT NOT NULL PRIMARY KEY")) {
             violations.add("materialized partitions do not prove unique non-null row identity");
         }
@@ -1491,16 +1498,133 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         }
         try {
             RowIdValidation validation = validateRowIdBijection(ecstCase.pair.schema);
-            if (validation.valid()) {
-                return new EcstSemanticPreconditionResult(List.of(),
-                        EcstSemanticPreconditionResult.Status.DATA_VALID);
+            if (!validation.valid()) {
+                return new EcstSemanticPreconditionResult(List.of(validation.reason),
+                        EcstSemanticPreconditionResult.Status.INVALID);
             }
-            return new EcstSemanticPreconditionResult(List.of(validation.reason),
-                    EcstSemanticPreconditionResult.Status.INVALID);
+            List<String> valueViolations = validateDependencyValues(ecstCase);
+            return new EcstSemanticPreconditionResult(valueViolations,
+                    valueViolations.isEmpty() ? EcstSemanticPreconditionResult.Status.DATA_VALID
+                            : EcstSemanticPreconditionResult.Status.INVALID);
         } catch (SQLException failure) {
             return new EcstSemanticPreconditionResult(List.of("row-id validation unavailable: " + failure.getMessage()),
                     EcstSemanticPreconditionResult.Status.UNKNOWN);
         }
+    }
+
+    private static final class RelationColumnMetadata {
+        private final String type;
+        private final String collation;
+
+        private RelationColumnMetadata(String type, String collation) {
+            this.type = type == null ? "" : type.trim().toLowerCase(Locale.ROOT);
+            this.collation = collation == null ? "" : collation.trim().toLowerCase(Locale.ROOT);
+        }
+    }
+
+    private List<String> validateRelationMetadata(EcstCase ecstCase) throws SQLException {
+        VpSchema schema = ecstCase.pair.schema;
+        Map<String, RelationColumnMetadata> source = describeColumns(schema.sourceTable);
+        List<String> violations = new ArrayList<>();
+        String sourceTableCollation = tableCollation(schema.sourceTable);
+        for (String table : List.of(schema.leftTable, schema.rightTable)) {
+            Map<String, RelationColumnMetadata> partition = describeColumns(table);
+            String partitionTableCollation = tableCollation(table);
+            if (!Objects.equals(sourceTableCollation, partitionTableCollation)) {
+                violations.add("table collation changed source=" + sourceTableCollation + ", table=" + table
+                        + ", collation=" + partitionTableCollation);
+            }
+            for (VpColumn column : schema.columns) {
+                if (!containsColumn(table.equals(schema.leftTable) ? schema.leftColumns : schema.rightColumns,
+                        column.name)) {
+                    continue;
+                }
+                RelationColumnMetadata sourceMetadata = source.get(column.name.toLowerCase(Locale.ROOT));
+                RelationColumnMetadata partitionMetadata = partition.get(column.name.toLowerCase(Locale.ROOT));
+                if (sourceMetadata == null || partitionMetadata == null) {
+                    violations.add("column metadata missing for " + table + "." + column.name);
+                    continue;
+                }
+                if (!sourceMetadata.type.equals(partitionMetadata.type)) {
+                    violations.add("column type changed for " + column.name + ": source=" + sourceMetadata.type
+                            + ", table=" + table + ", type=" + partitionMetadata.type);
+                }
+                if (!sourceMetadata.collation.equals(partitionMetadata.collation)) {
+                    violations.add("column collation changed for " + column.name + ": source="
+                            + sourceMetadata.collation + ", table=" + table + ", collation="
+                            + partitionMetadata.collation);
+                }
+            }
+        }
+        return violations;
+    }
+
+    private Map<String, RelationColumnMetadata> describeColumns(String table) throws SQLException {
+        Map<String, RelationColumnMetadata> result = new LinkedHashMap<>();
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet rows = statement.executeQuery("SHOW FULL COLUMNS FROM " + quote(table))) {
+            while (rows.next()) {
+                result.put(rows.getString("Field").toLowerCase(Locale.ROOT),
+                        new RelationColumnMetadata(rows.getString("Type"), rows.getString("Collation")));
+            }
+        }
+        return result;
+    }
+
+    private String tableCollation(String table) throws SQLException {
+        String escaped = table.replace("'", "''");
+        String sql = "SELECT TABLE_COLLATION FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"
+                + " AND TABLE_NAME='" + escaped + "'";
+        try (Statement statement = state.getConnection().createStatement(); ResultSet rows = statement.executeQuery(sql)) {
+            return rows.next() && rows.getString(1) != null ? rows.getString(1).toLowerCase(Locale.ROOT) : "";
+        }
+    }
+
+    private List<String> validateDependencyValues(EcstCase ecstCase) throws SQLException {
+        VpSchema schema = ecstCase.pair.schema;
+        Map<String, RelationColumnMetadata> source = describeColumns(schema.sourceTable);
+        List<String> violations = new ArrayList<>();
+        for (String dependency : ecstCase.targetDependencies) {
+            RelationColumnMetadata metadata = source.get(dependency.toLowerCase(Locale.ROOT));
+            if (metadata == null) {
+                violations.add("source metadata missing for dependency " + dependency);
+                continue;
+            }
+            if (containsColumn(schema.leftColumns, dependency)) {
+                long mismatches = countDependencyValueMismatches(schema.sourceTable, schema.leftTable, dependency,
+                        metadata);
+                if (mismatches != 0) {
+                    violations.add("source/left value mismatch for " + dependency + ": " + mismatches);
+                }
+            }
+            if (containsColumn(schema.rightColumns, dependency)) {
+                long mismatches = countDependencyValueMismatches(schema.sourceTable, schema.rightTable, dependency,
+                        metadata);
+                if (mismatches != 0) {
+                    violations.add("source/right value mismatch for " + dependency + ": " + mismatches);
+                }
+            }
+        }
+        return violations;
+    }
+
+    private long countDependencyValueMismatches(String sourceTable, String partitionTable, String column,
+            RelationColumnMetadata metadata) throws SQLException {
+        String sourceValue = isCharacterOrBinaryType(metadata.type) ? "BINARY s." + quote(column)
+                : "s." + quote(column);
+        String partitionValue = isCharacterOrBinaryType(metadata.type) ? "BINARY p." + quote(column)
+                : "p." + quote(column);
+        String sql = "SELECT COUNT(*) FROM " + quote(sourceTable) + " s JOIN " + quote(partitionTable)
+                + " p ON s." + quote(ROW_ID) + "=p." + quote(ROW_ID) + " WHERE NOT (" + sourceValue
+                + " <=> " + partitionValue + ")";
+        try (Statement statement = state.getConnection().createStatement(); ResultSet rows = statement.executeQuery(sql)) {
+            return rows.next() ? rows.getLong(1) : -1;
+        }
+    }
+
+    private boolean isCharacterOrBinaryType(String type) {
+        return type.contains("char") || type.contains("text") || type.contains("blob")
+                || type.contains("binary") || type.contains("bit");
     }
 
     private static List<String> dependencyLayoutViolations(EcstTransformationConfig.PartitionLayout requested,
