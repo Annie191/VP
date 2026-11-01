@@ -409,8 +409,18 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         lastSynthesisSummary = "capabilities=" + capabilities.describe() + "; queryShape=" + shape
                 + "; accessPathPreparation=" + seed.getAccessPathPreparation() + "; "
                 + "historicalRules=" + historicalRules.size() + ";historicalMatches="
-                + historicalRuleMatches(seed, result) + "; " + String.join("; ", synthesis);
+                + historicalRuleMatches(seed, result) + ";historicalMigrations="
+                + historicalRuleCount(EcstHistoricalRule.Kind.PRIMARY_TARGET, EcstHistoricalRule.Kind.SECONDARY_MIGRATION)
+                + ";historicalStructuralEvidence="
+                + historicalRuleCount(EcstHistoricalRule.Kind.STRUCTURAL_PRESERVATION) + "; "
+                + String.join("; ", synthesis);
         return result;
+    }
+
+    private int historicalRuleCount(EcstHistoricalRule.Kind... kinds) {
+        java.util.Set<EcstHistoricalRule.Kind> accepted = java.util.EnumSet.noneOf(EcstHistoricalRule.Kind.class);
+        accepted.addAll(java.util.Arrays.asList(kinds));
+        return (int) historicalRules.stream().filter(rule -> accepted.contains(rule.getKind())).count();
     }
 
     private int historicalRuleMatches(TiDBVerticalPartitioningOracle.EcstSeed seed,
