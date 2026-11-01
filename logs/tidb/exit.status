@@ -1,0 +1,8 @@
+finished_at_utc=2026-11-01T13:39:03Z
+elapsed_approx=30m10s
+termination=timeout_1800s
+last_progress=Executed 11377 queries; Threads shut down: 0
+bug_candidates=0
+comparable_mismatches=0
+parseable_jsonl_records=5287
+malformed_jsonl_lines=0
