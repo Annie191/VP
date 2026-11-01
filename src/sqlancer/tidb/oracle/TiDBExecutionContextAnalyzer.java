@@ -124,7 +124,13 @@ public final class TiDBExecutionContextAnalyzer {
                     transformed = relationAccessContext(transformedPlan, evaluation);
                 }
             }
-            if (!original.matched || !transformed.matched) {
+            boolean originalMatched = original.matched || target != null
+                    && target.getDimension() == sqlancer.common.oracle.ecst.EcstContextDimension.ACCESS_PATH
+                    && original.extractionStatus() == ExtractionStatus.ABSORBED_IN_INDEX_RANGE;
+            boolean transformedMatched = transformed.matched || target != null
+                    && target.getDimension() == sqlancer.common.oracle.ecst.EcstContextDimension.ACCESS_PATH
+                    && transformed.extractionStatus() == ExtractionStatus.ABSORBED_IN_INDEX_RANGE;
+            if (!originalMatched || !transformedMatched) {
                 UnknownReason unknownReason = original.status == MatchStatus.NOT_FOUND
                         || transformed.status == MatchStatus.NOT_FOUND ? UnknownReason.UNKNOWN_BECAUSE_PLAN
                                 : UnknownReason.UNKNOWN_BECAUSE_OPERATION_MAPPING;
