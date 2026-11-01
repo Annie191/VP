@@ -923,7 +923,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                         : "INCOMPARABLE";
         String preconditionStatus = precondition == null ? "DATA_VALID" : precondition.getStatus().name();
         if (comparison != null && !comparison.isComparable()) {
-            status = "UNKNOWN";
             reason = comparison.getReason();
         }
         String observedShifts = observation == null ? "[]"
@@ -945,6 +944,18 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + comparisonStatus + "\",\"preconditionStatus\":\"" + preconditionStatus
                 + "\",\"bugValidation\":\""
                 + EcstFailureRecord.json(bugValidation == null ? "" : bugValidation.toString())
+                + "\",\"evidenceLevel\":\""
+                + (observation == null ? "PLAN_ONLY" : observation.getEvidenceLevel().name())
+                + "\",\"originalResultSample\":\""
+                + EcstFailureRecord.json(comparison == null ? "" : comparison.getOriginalSample())
+                + "\",\"transformedResultSample\":\""
+                + EcstFailureRecord.json(comparison == null ? "" : comparison.getTransformedSample())
+                + "\",\"resultDifference\":\""
+                + EcstFailureRecord.json(comparison != null && !comparison.isEqual() ? comparison.getReason() : "")
+                + "\",\"minimizationStatus\":\""
+                + EcstFailureRecord.json(bugValidation == null ? "NOT_ATTEMPTED" : bugValidation.getMinimizationStatus())
+                + "\",\"interventionStatus\":\""
+                + EcstFailureRecord.json(bugValidation == null ? "INCONCLUSIVE" : bugValidation.getInterventionStatus())
                 + "\",\"observedShifts\":" + observedShifts
                 + ",\"originalQuery\":\"" + EcstFailureRecord.json(testCase.getOriginalQuery())
                 + "\",\"transformedQuery\":\"" + EcstFailureRecord.json(testCase.getTransformedQuery())
@@ -964,7 +975,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + "\",\"transformedEvidence\":\""
                 + EcstFailureRecord.json(observation == null ? "" : observation.getTransformedEvidence())
                 + "\",\"generationInfo\":\"" + EcstFailureRecord.json(testCase.getGenerationInfo())
-                + "\",\"setup\":" + EcstFailureRecord.jsonArray(testCase.getMaterializationSetup()) + "}";
+                + "\",\"setup\":" + EcstFailureRecord.jsonArray(testCase.getMaterializationSetup())
+                + ",\"sourceDataReplay\":" + EcstFailureRecord.jsonArray(testCase.getMaterializationSetup()) + "}";
         appendJsonLine("ecst-cases.jsonl", line);
         caseRecordsWritten++;
     }
