@@ -602,6 +602,46 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         }
     }
 
+    public static final class EcstBugValidation {
+        public enum Status {
+            REPRODUCED, NON_REPRODUCIBLE
+        }
+
+        private final Status status;
+        private final String reproductionReason;
+
+        private EcstBugValidation(Status status, String reproductionReason) {
+            this.status = status;
+            this.reproductionReason = reproductionReason;
+        }
+
+        public boolean isReproduced() { return status == Status.REPRODUCED; }
+        public Status getStatus() { return status; }
+        public String getReproductionReason() { return reproductionReason; }
+        public String getMinimizationStatus() { return "NOT_ATTEMPTED"; }
+        public String getInterventionStatus() { return "INCONCLUSIVE"; }
+
+        @Override
+        public String toString() {
+            return "status=" + status + ",reproductionReason=" + reproductionReason
+                    + ",minimization=NOT_ATTEMPTED,intervention=INCONCLUSIVE";
+        }
+    }
+
+    /** Repeats a comparable mismatch under the same connection and materialized state. */
+    public EcstBugValidation validateBugCandidate(EcstCase ecstCase, EcstComparison initial) throws Exception {
+        if (ecstCase == null || initial == null || !initial.isComparable() || initial.isEqual()) {
+            return new EcstBugValidation(EcstBugValidation.Status.NON_REPRODUCIBLE, "initial result was not a mismatch");
+        }
+        EcstComparison repeat = compareEcstCase(ecstCase);
+        if (repeat.isComparable() && !repeat.isEqual()) {
+            return new EcstBugValidation(EcstBugValidation.Status.REPRODUCED,
+                    "repeat mismatch: " + repeat.getReason());
+        }
+        return new EcstBugValidation(EcstBugValidation.Status.NON_REPRODUCIBLE,
+                repeat.getReason());
+    }
+
     public static final class EcstSemanticPreconditionResult {
         public enum Status {
             STATIC_LEGAL, DATA_VALID, INVALID, UNKNOWN

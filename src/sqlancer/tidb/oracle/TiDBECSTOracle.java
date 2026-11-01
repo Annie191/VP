@@ -309,6 +309,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
             boolean keepArtifacts = false;
             TiDBVerticalPartitioningOracle.EcstComparison comparison = null;
+            TiDBVerticalPartitioningOracle.EcstBugValidation bugValidation = null;
             try {
                 comparison = vp.compareEcstCase(testCase);
                 if (!comparison.isComparable()) {
@@ -324,9 +325,13 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 completed++;
                 completedCases = completed;
                 if (!comparison.isEqual()) {
-                    bugCandidates++;
                     keepArtifacts = true;
-                    throw new AssertionError(formatBug(target, testCase, observation, comparison));
+                    bugValidation = vp.validateBugCandidate(testCase, comparison);
+                    if (!bugValidation.isReproduced()) {
+                        continue;
+                    }
+                    bugCandidates++;
+                    throw new AssertionError(formatBug(target, testCase, observation, comparison, bugValidation));
                 }
             } catch (Exception failure) {
                 executionFailures++;
@@ -334,7 +339,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 if (isRecoverable(failure)) continue;
                 throw failure;
             } finally {
-                writeCaseRecord(target, config, testCase, observation, comparison, null);
+                writeCaseRecord(target, config, testCase, observation, comparison, null, bugValidation);
                 history.observe(target.getKey(), config.stableKey(), observation.getStatus(),
                         observation.getObservedShifts(), System.nanoTime() - started, feature);
                 lastCommittedCaseId = runId + "-" + caseSequence;
@@ -801,7 +806,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
     private String formatBug(EcstTarget target, TiDBVerticalPartitioningOracle.EcstCase testCase,
             EcstObservation observation,
-            TiDBVerticalPartitioningOracle.EcstComparison comparison) {
+            TiDBVerticalPartitioningOracle.EcstComparison comparison,
+            TiDBVerticalPartitioningOracle.EcstBugValidation bugValidation) {
         return "[ECST BUG CANDIDATE]" + System.lineSeparator() + "target=" + target + System.lineSeparator()
                 + "config=" + testCase.getDescription() + System.lineSeparator() + "shiftStatus="
                 + observation.getStatus() + System.lineSeparator() + "shiftReason=" + observation.getReason()
@@ -820,7 +826,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + testCase.getTransformedQuery() + System.lineSeparator() + "originalSample="
                 + comparison.getOriginalSample() + System.lineSeparator() + "transformedSample="
                 + comparison.getTransformedSample() + System.lineSeparator() + "comparisonReason="
-                + comparison.getReason() + System.lineSeparator() + "history="
+                + comparison.getReason() + System.lineSeparator() + "bugValidation=" + bugValidation
+                + System.lineSeparator() + "history="
                 + history.formatSummary() + System.lineSeparator() + "generationInfo="
                 + testCase.getGenerationInfo() + System.lineSeparator() + "materializationSetup="
                 + testCase.getMaterializationSetup();
@@ -898,6 +905,14 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             TiDBVerticalPartitioningOracle.EcstCase testCase, EcstObservation observation,
             TiDBVerticalPartitioningOracle.EcstComparison comparison,
             TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult precondition) {
+        writeCaseRecord(target, config, testCase, observation, comparison, precondition, null);
+    }
+
+    private void writeCaseRecord(EcstTarget target, EcstTransformationConfig config,
+            TiDBVerticalPartitioningOracle.EcstCase testCase, EcstObservation observation,
+            TiDBVerticalPartitioningOracle.EcstComparison comparison,
+            TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult precondition,
+            TiDBVerticalPartitioningOracle.EcstBugValidation bugValidation) {
         String status = observation == null ? "UNKNOWN" : observation.getStatus().name();
         String reason = observation == null ? "case did not reach plan analysis" : observation.getReason();
         String originalPlan = observation == null ? "" : observation.getOriginalPlan();
@@ -928,6 +943,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + "\",\"sourceCommit\":\"" + EcstFailureRecord.json(sourceCommit())
                 + "\",\"shiftStatus\":\"" + shiftStatus + "\",\"comparisonStatus\":\""
                 + comparisonStatus + "\",\"preconditionStatus\":\"" + preconditionStatus
+                + "\",\"bugValidation\":\""
+                + EcstFailureRecord.json(bugValidation == null ? "" : bugValidation.toString())
                 + "\",\"observedShifts\":" + observedShifts
                 + ",\"originalQuery\":\"" + EcstFailureRecord.json(testCase.getOriginalQuery())
                 + "\",\"transformedQuery\":\"" + EcstFailureRecord.json(testCase.getTransformedQuery())
