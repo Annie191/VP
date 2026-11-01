@@ -428,8 +428,24 @@ public class TiDBExecutionContextAnalyzerTest {
                 "`c0` > 0", "UNKNOWN");
         assertEquals(TiDBExecutionContextAnalyzer.ExtractionStatus.ABSORBED_IN_INDEX_RANGE,
                 parsed.extractionStatus());
+        assertEquals("UNKNOWN", parsed.context().getLocation());
+        assertEquals("UNKNOWN", parsed.context().getOperator());
+        assertEquals("UNKNOWN", parsed.context().getBoundary());
         assertEquals("INDEXREADER", parsed.context().getAccessPath());
         assertTrue(parsed.evidence().contains("IndexRangeScan"));
+    }
+
+    @Test
+    void indexRangeEvidenceMustReferenceTheTargetDependencies() {
+        String plan = "IndexReader | 1 root | | index:IndexRangeScan\n"
+                + "└─IndexRangeScan | 1 cop[tikv] | table:t, index:idx(c1) | range:(0,+inf]\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "`c0` > 0", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.ExtractionStatus.EXPRESSION_NOT_FOUND,
+                parsed.extractionStatus());
+        assertEquals("UNKNOWN", parsed.context().getLocation());
+        assertEquals("UNKNOWN", parsed.context().getBoundary());
+        assertEquals("UNKNOWN", parsed.context().getAccessPath());
     }
 
     @Test

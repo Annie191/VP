@@ -74,7 +74,7 @@ public final class TiDBExecutionContextAnalyzer {
         }
         ParsedContext parsed = parsePlan(plan, operation, evaluation);
         return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
-                ? relationAccessContext(plan, evaluation) : parsed;
+                ? relationAccessContext(plan, evaluation, operation) : parsed;
     }
 
     /** Compatibility accessor for callers that only need the normalized context. */
@@ -118,10 +118,10 @@ public final class TiDBExecutionContextAnalyzer {
             ParsedContext transformed = parsePlan(transformedPlan, operation, evaluation);
             if (target != null && target.getDimension() == sqlancer.common.oracle.ecst.EcstContextDimension.ACCESS_PATH) {
                 if (original.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND) {
-                    original = relationAccessContext(originalPlan, evaluation);
+                    original = relationAccessContext(originalPlan, evaluation, operation);
                 }
                 if (transformed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND) {
-                    transformed = relationAccessContext(transformedPlan, evaluation);
+                    transformed = relationAccessContext(transformedPlan, evaluation, operation);
                 }
             }
             boolean originalMatched = original.matched || target != null
@@ -189,15 +189,16 @@ public final class TiDBExecutionContextAnalyzer {
 
     /** Package-visible evidence entry point for focused analyzer tests. */
     static ParsedContext parseWithEvidence(String plan, String targetExpression, String evaluation) {
-        ParsedContext parsed = parsePlan(plan, operationFor(targetExpression), evaluation);
+        EcstOperation operation = operationFor(targetExpression);
+        ParsedContext parsed = parsePlan(plan, operation, evaluation);
         return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
-                ? relationAccessContext(plan, evaluation) : parsed;
+                ? relationAccessContext(plan, evaluation, operation) : parsed;
     }
 
     static ParsedContext parseWithEvidence(String plan, EcstOperation operation, String evaluation) {
         ParsedContext parsed = parsePlan(plan, operation, evaluation);
         return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
-                ? relationAccessContext(plan, evaluation) : parsed;
+                ? relationAccessContext(plan, evaluation, operation) : parsed;
     }
 
     private EcstObservation observation(ParsedContext original, ParsedContext transformed, EcstShiftStatus status,
@@ -276,19 +277,70 @@ public final class TiDBExecutionContextAnalyzer {
         return new ParsedContext(context, plan, best.expression.owner.raw, evidence, status, reason, candidates);
     }
 
-    private static ParsedContext relationAccessContext(String plan, String evaluation) {
+    private static ParsedContext relationAccessContext(String plan, String evaluation, EcstOperation operation) {
         List<PlanNode> nodes = parseNodes(plan);
         PlanNode accessRoot = nodes.isEmpty() ? null : nodes.get(0);
-        boolean absorbed = plan != null && (plan.toLowerCase(Locale.ROOT).contains("indexrangescan")
-                || plan.toLowerCase(Locale.ROOT).contains("indexfullscan"));
-        if (accessRoot == null || !absorbed) {
+        TargetPattern target = TargetPattern.create(operation);
+        List<PlanNode> indexRanges = nodes.stream().filter(TiDBExecutionContextAnalyzer::isIndexRangeNode)
+                .collect(java.util.stream.Collectors.toList());
+        if (accessRoot == null || target == null || indexRanges.isEmpty()
+                || indexRanges.stream().noneMatch(node -> indexRangeMatchesTarget(node, target))) {
             return ParsedContext.unknown(plan, "target expression fingerprint was not found in a plan node",
                     MatchStatus.NOT_FOUND);
         }
-        EcstContext context = contextFor(accessRoot, parseEvaluationEnvironment(evaluation), null);
+        String relationAccessPath = accessPath(accessRoot);
+        if ("UNKNOWN".equals(relationAccessPath)) {
+            return ParsedContext.unknown(plan, "index range evidence did not expose a relation access path",
+                    MatchStatus.NOT_FOUND);
+        }
+        EcstContext context = new EcstContext("UNKNOWN", "UNKNOWN", "UNKNOWN", relationAccessPath,
+                parseEvaluationEnvironment(evaluation));
         String evidence = "sessionMetadata=" + evaluation + "; extractionStatus=ABSORBED_IN_INDEX_RANGE"
-                + "; relationAccessPath=" + context.getAccessPath() + "; plan=" + plan;
+                + "; relationAccessPath=" + context.getAccessPath() + "; location=UNKNOWN; boundary=UNKNOWN"
+                + "; targetReferences=" + target.references + "; plan=" + plan;
         return ParsedContext.absorbed(context, plan, evidence);
+    }
+
+    private static boolean isIndexRangeNode(PlanNode node) {
+        String operator = node.operator.toLowerCase(Locale.ROOT);
+        return operator.contains("indexrangescan") || operator.contains("indexfullscan");
+    }
+
+    private static boolean indexRangeMatchesTarget(PlanNode node, TargetPattern target) {
+        Set<String> required = canonicalDependencyReferences(target);
+        if (required.isEmpty()) {
+            return false;
+        }
+        Set<String> rangeReferences = indexRangeReferences(node, target);
+        return required.stream().allMatch(reference -> rangeReferences.stream().anyMatch(rangeReference ->
+                rangeReference.equals(reference)
+                        || rangeReference.substring(rangeReference.lastIndexOf('.') + 1)
+                                .equals(reference.substring(reference.lastIndexOf('.') + 1))));
+    }
+
+    private static Set<String> indexRangeReferences(PlanNode node, TargetPattern target) {
+        String raw = node.raw;
+        String lower = raw.toLowerCase(Locale.ROOT);
+        int indexStart = lower.indexOf("index:");
+        if (indexStart < 0) {
+            return Set.of();
+        }
+        int rangeStart = lower.indexOf("range:", indexStart + "index:".length());
+        int end = rangeStart < 0 ? raw.length() : rangeStart;
+        String indexDescriptor = raw.substring(indexStart + "index:".length(), end);
+        return logicalReferences(indexDescriptor, target);
+    }
+
+    private static Set<String> canonicalDependencyReferences(TargetPattern target) {
+        Set<String> result = new LinkedHashSet<>();
+        for (String dependency : target.references) {
+            String canonical = target.lineage.getOrDefault(dependency, dependency);
+            result.add(canonical);
+        }
+        for (String canonical : target.lineage.values()) {
+            result.add(canonical);
+        }
+        return result;
     }
 
     private static boolean allCandidatesRepresentSameOperation(List<Candidate> candidates) {
