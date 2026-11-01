@@ -1,6 +1,7 @@
 package sqlancer.tidb.oracle;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -387,6 +388,28 @@ public class TiDBExecutionContextAnalyzerTest {
         TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
                 "IF(CAST(`c0` AS SIGNED) > 0, CAST(`c1` AS SIGNED), 0)", "UNKNOWN");
         assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void differentConstantsDoNotMatchTheSameIfFingerprint() {
+        String plan = "Projection | 1 root | | if(gt(cast(test.t.c0, bigint BINARY), 0), "
+                + "cast(test.t.c1, bigint BINARY), 1)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "IF(CAST(`c0` AS SIGNED) > 0, CAST(`c1` AS SIGNED), 0)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void constantsAndUnsupportedRewriteContentsAreCompared() {
+        TiDBExecutionContextAnalyzer.ExprFingerprint zero = TiDBExecutionContextAnalyzer.ExprFingerprint
+                .parse("gt(c0, 0)");
+        TiDBExecutionContextAnalyzer.ExprFingerprint same = TiDBExecutionContextAnalyzer.ExprFingerprint
+                .parse("gt(c0, 0)");
+        assertEquals(zero, same);
+        assertEquals(zero.hashCode(), same.hashCode());
+        assertNotEquals(zero, TiDBExecutionContextAnalyzer.ExprFingerprint.parse("gt(c0, 1)"));
+        assertNotEquals(TiDBExecutionContextAnalyzer.ExprFingerprint.parse("optimizer_rewrite(c0, 0)"),
+                TiDBExecutionContextAnalyzer.ExprFingerprint.parse("optimizer_rewrite(c0, 1)"));
     }
 
     @Test

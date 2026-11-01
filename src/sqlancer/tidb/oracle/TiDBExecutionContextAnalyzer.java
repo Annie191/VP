@@ -1300,10 +1300,17 @@ public final class TiDBExecutionContextAnalyzer {
         public boolean equals(Object other) {
             if (!(other instanceof ExprFingerprint)) return false;
             ExprFingerprint that = (ExprFingerprint) other;
-            boolean castLengthCompatible = !"CAST".equals(kind) || !"CHAR".equals(resultType)
-                    || "*".equals(constant) || "*".equals(that.constant) || constant.equals(that.constant);
-            return castLengthCompatible && kind.equals(that.kind) && resultType.equals(that.resultType)
-                    && children.equals(that.children) && java.util.Objects.equals(column, that.column);
+            return kind.equals(that.kind) && resultType.equals(that.resultType)
+                    && children.equals(that.children) && java.util.Objects.equals(column, that.column)
+                    && constantsEqual(that);
+        }
+
+        private boolean constantsEqual(ExprFingerprint that) {
+            if ("CAST".equals(kind) && "CHAR".equals(resultType)) {
+                return "*".equals(constant) || "*".equals(that.constant)
+                        || java.util.Objects.equals(constant, that.constant);
+            }
+            return java.util.Objects.equals(constant, that.constant);
         }
 
         @Override

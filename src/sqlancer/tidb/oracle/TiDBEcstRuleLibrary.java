@@ -20,7 +20,7 @@ public final class TiDBEcstRuleLibrary {
                         historical.getFamily(), transition.targetKey(), historical.configKey(),
                         List.of(historical.getIssue()), List.of(transition.getEvidence()),
                         sqlancer.common.oracle.ecst.EcstHistoricalRule.Kind.valueOf(
-                                transition.getKind().name()))));
+                                transition.getKind().name())));
             }
         }
         return result;
