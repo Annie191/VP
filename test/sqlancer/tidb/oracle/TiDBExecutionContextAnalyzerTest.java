@@ -408,8 +408,8 @@ public class TiDBExecutionContextAnalyzerTest {
         assertEquals(zero, same);
         assertEquals(zero.hashCode(), same.hashCode());
         assertNotEquals(zero, TiDBExecutionContextAnalyzer.ExprFingerprint.parse("gt(c0, 1)"));
-        assertNotEquals(TiDBExecutionContextAnalyzer.ExprFingerprint.parse("optimizer_rewrite(c0, 0)"),
-                TiDBExecutionContextAnalyzer.ExprFingerprint.parse("optimizer_rewrite(c0, 1)"));
+        assertNotEquals(TiDBExecutionContextAnalyzer.ExprFingerprint.parse("(c0, 0)"),
+                TiDBExecutionContextAnalyzer.ExprFingerprint.parse("(c0, 1)"));
     }
 
     @Test
