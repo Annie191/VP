@@ -19,9 +19,13 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(capabilities.supportsRepresentation(EcstTransformationConfig.Representation.VERTICAL_PARTITIONED));
         assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.JOIN));
         assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.DERIVED_TABLE));
+        assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.CTE));
         assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.WHERE));
         assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.SELECT));
         assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.HAVING));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.JOIN_ON));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.INNER_WHERE));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.INNER_SELECT));
         assertEquals("TiDB ECST prototype capability set", capabilities.describe());
     }
 
@@ -47,7 +51,7 @@ public class TiDBECSTOracleCandidateSynthesisTest {
     void enumeratesTheFullTransformationProductBeforeFiltering() {
         List<EcstTransformationConfig> configurations = TiDBECSTOracle.enumerateConfigurationSpace();
 
-        assertEquals(4 * 2 * 4 * 4, configurations.size());
+        assertEquals(4 * 2 * 4 * 7, configurations.size());
         assertTrue(configurations.stream().anyMatch(c -> c.getRepresentation()
                 == EcstTransformationConfig.Representation.VIEW));
         assertTrue(configurations.stream().anyMatch(c -> c.getReconstruction()

@@ -1083,10 +1083,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             throws Exception {
         Objects.requireNonNull(seed, "seed");
         if (config.getRepresentation() != EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
-                || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.ON) {
-            throw new IgnoreMeException();
-        }
-        if (config.getExpressionContext() != seed.expressionContext) {
+                || !isEmbeddingCompatible(seed.expressionContext, config.getExpressionContext())) {
             throw new IgnoreMeException();
         }
         ReconstructionStrategy reconstructionStrategy;
@@ -1096,6 +1093,9 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             break;
         case DERIVED_TABLE:
             reconstructionStrategy = ReconstructionStrategy.DERIVED_TABLE;
+            break;
+        case CTE:
+            reconstructionStrategy = ReconstructionStrategy.CTE;
             break;
         default:
             throw new IgnoreMeException();
@@ -1115,8 +1115,9 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         String targetExpression = seed.targetExpression;
         String singleQuery = seed.originalQuery;
         List<String> extraSetup = new ArrayList<>();
-        String relation = buildReconstructionRelation(vp, reconstructionStrategy, extraSetup);
-        String splitQuery = replaceSourceFrom(singleQuery, vp.sourceTable, relation);
+        String relation = buildEcstReconstructionRelation(vp, reconstructionStrategy, seed,
+                config.getExpressionContext(), extraSetup);
+        String splitQuery = embedTargetOperation(singleQuery, relation, vp, seed, config.getExpressionContext());
         VpQueryPair pair = new VpQueryPair(vp, reconstructionStrategy, singleQuery, splitQuery, extraSetup,
                 "ECST config=" + config.stableKey() + ", target=" + targetExpression, false);
         List<String> dependencyNames = seed.targetDependencies;
@@ -1138,6 +1139,18 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         return new EcstCase(pair, seed.operation, seed.accessPathPreparation, config, actualLayout, targetExpression,
                 base.tableName,
                 dependencyNames, leftDependencies, rightDependencies, generationInfo);
+    }
+
+    private static boolean isEmbeddingCompatible(EcstTransformationConfig.ExpressionContext seedContext,
+            EcstTransformationConfig.ExpressionContext embeddedContext) {
+        if (seedContext == embeddedContext) {
+            return true;
+        }
+        return seedContext == EcstTransformationConfig.ExpressionContext.WHERE
+                && (embeddedContext == EcstTransformationConfig.ExpressionContext.JOIN_ON
+                        || embeddedContext == EcstTransformationConfig.ExpressionContext.INNER_WHERE)
+                || seedContext == EcstTransformationConfig.ExpressionContext.SELECT
+                        && embeddedContext == EcstTransformationConfig.ExpressionContext.INNER_SELECT;
     }
 
     private VpSchema reconfigureSeedPartitions(VpSchema schema, SplitPlan splitPlan, SplitStrategy strategy,
@@ -1205,12 +1218,25 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.ON) {
             throw new IgnoreMeException();
         }
-        EcstSeed seed = createEcstSeed(config.getExpressionContext());
+        EcstSeed seed = createEcstSeed(seedContextForEmbedding(config.getExpressionContext()));
         try {
             return applyEcstTransformation(seed, config);
         } catch (Exception | Error failure) {
             cleanupEcstSeed(seed);
             throw failure;
+        }
+    }
+
+    private static EcstTransformationConfig.ExpressionContext seedContextForEmbedding(
+            EcstTransformationConfig.ExpressionContext context) {
+        switch (context) {
+        case JOIN_ON:
+        case INNER_WHERE:
+            return EcstTransformationConfig.ExpressionContext.WHERE;
+        case INNER_SELECT:
+            return EcstTransformationConfig.ExpressionContext.SELECT;
+        default:
+            return context;
         }
     }
 
@@ -2503,6 +2529,85 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         throw new IgnoreMeException();
     }
 
+    /** Builds the selected relation representation and applies the requested inner embedding. */
+    private String buildEcstReconstructionRelation(VpSchema vp, ReconstructionStrategy strategy, EcstSeed seed,
+            EcstTransformationConfig.ExpressionContext context, List<String> extraSetup) throws Exception {
+        String predicate = context == EcstTransformationConfig.ExpressionContext.JOIN_ON
+                || context == EcstTransformationConfig.ExpressionContext.INNER_WHERE
+                        ? qualifyForReconstruction(seed.filterPredicate, vp)
+                        : null;
+        String projectionExpression = context == EcstTransformationConfig.ExpressionContext.INNER_SELECT
+                ? qualifyForReconstruction(seed.targetExpression, vp)
+                : null;
+        if (strategy != ReconstructionStrategy.JOIN && strategy != ReconstructionStrategy.DERIVED_TABLE
+                && strategy != ReconstructionStrategy.CTE) {
+            throw new IgnoreMeException();
+        }
+        String projection = joinProjection(vp, "l", "r", false, projectionExpression);
+        String join = "l." + quote(ROW_ID) + " = r." + quote(ROW_ID);
+        if (context == EcstTransformationConfig.ExpressionContext.JOIN_ON) {
+            join += " AND " + predicate;
+        }
+        String from;
+        if (strategy == ReconstructionStrategy.DERIVED_TABLE) {
+            from = " FROM (SELECT * FROM " + quote(vp.leftTable) + ") l JOIN (SELECT * FROM "
+                    + quote(vp.rightTable) + ") r ON " + join;
+        } else if (strategy == ReconstructionStrategy.CTE) {
+            from = " FROM l JOIN r ON " + join;
+        } else {
+            from = " FROM " + quote(vp.leftTable) + " l JOIN " + quote(vp.rightTable) + " r ON " + join;
+        }
+        if (context == EcstTransformationConfig.ExpressionContext.INNER_WHERE) {
+            from += " WHERE " + predicate;
+        }
+        if (strategy == ReconstructionStrategy.CTE) {
+            return "(WITH l AS (SELECT * FROM " + quote(vp.leftTable) + "), r AS (SELECT * FROM "
+                    + quote(vp.rightTable) + ") SELECT " + projection + from + ") " + quote(vp.sourceTable);
+        }
+        return reconstructedSubquery(vp, projection, from);
+    }
+
+    private String embedTargetOperation(String singleQuery, String relation, VpSchema vp, EcstSeed seed,
+            EcstTransformationConfig.ExpressionContext context) {
+        if (context == EcstTransformationConfig.ExpressionContext.JOIN_ON
+                || context == EcstTransformationConfig.ExpressionContext.INNER_WHERE) {
+            String outer = removeOuterPredicate(singleQuery, seed.filterPredicate);
+            return replaceSourceFrom(outer, vp.sourceTable, relation);
+        }
+        if (context == EcstTransformationConfig.ExpressionContext.INNER_SELECT) {
+            String fromMarker = " FROM ";
+            int from = singleQuery.toUpperCase(Locale.ROOT).indexOf(fromMarker);
+            if (from < 0) {
+                throw new IgnoreMeException();
+            }
+            return "SELECT " + quote(ROW_ID) + ", ecst_value AS ecst_value FROM " + relation;
+        }
+        return replaceSourceFrom(singleQuery, vp.sourceTable, relation);
+    }
+
+    private String removeOuterPredicate(String query, String predicate) {
+        String marker = " WHERE " + predicate;
+        if (query.contains(marker)) {
+            return query.replace(marker, "");
+        }
+        String normalized = query.toLowerCase(Locale.ROOT);
+        int where = normalized.indexOf(" where ");
+        if (where >= 0) {
+            return query.substring(0, where);
+        }
+        throw new IgnoreMeException();
+    }
+
+    private String qualifyForReconstruction(String expression, VpSchema vp) {
+        String result = expression;
+        for (VpColumn column : vp.columns) {
+            String quoted = quote(column.name);
+            String alias = columnAlias(vp, column, "l", "r");
+            result = result.replace(quoted, alias + "." + quoted);
+        }
+        return result;
+    }
+
     private String buildReconstructionRelation(VpSchema vp, ReconstructionStrategy strategy, List<String> extraSetup)
             throws Exception {
         switch (strategy) {
@@ -2601,11 +2706,19 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     private String joinProjection(VpSchema vp, String leftAlias, String rightAlias, boolean rightBiasedRowId) {
+        return joinProjection(vp, leftAlias, rightAlias, rightBiasedRowId, null);
+    }
+
+    private String joinProjection(VpSchema vp, String leftAlias, String rightAlias, boolean rightBiasedRowId,
+            String extraExpression) {
         List<String> parts = new ArrayList<>();
         parts.add((rightBiasedRowId ? rightAlias : leftAlias) + "." + quote(ROW_ID) + " AS " + quote(ROW_ID));
         for (VpColumn column : vp.columns) {
             String alias = columnAlias(vp, column, leftAlias, rightAlias);
             parts.add(alias + "." + quote(column.name) + " AS " + quote(column.name));
+        }
+        if (extraExpression != null) {
+            parts.add(extraExpression + " AS ecst_value");
         }
         return String.join(", ", parts);
     }

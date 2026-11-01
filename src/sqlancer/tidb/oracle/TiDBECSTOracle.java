@@ -566,6 +566,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             return shape.hasJoin && (target.getDimension() == EcstContextDimension.BOUNDARY
                     || target.getDimension() == EcstContextDimension.ACCESS_PATH);
         }
+        if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.JOIN_ON) {
+            return target.getDimension() == EcstContextDimension.LOCATION
+                    || target.getDimension() == EcstContextDimension.BOUNDARY
+                    || target.getDimension() == EcstContextDimension.ACCESS_PATH;
+        }
         if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING) {
             return shape.hasAggregation;
         }
@@ -575,7 +580,18 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     /** TiDB currently has a VP materializer for these contexts; other legal configs remain visible as future work. */
     private static boolean isApplicableToSeed(EcstTransformationConfig config, QueryShape shape,
             EcstTransformationConfig.ExpressionContext seedExpressionContext) {
-        return config.getExpressionContext() == seedExpressionContext && shape.hasBaseTable;
+        if (!shape.hasBaseTable) {
+            return false;
+        }
+        EcstTransformationConfig.ExpressionContext embedded = config.getExpressionContext();
+        if (embedded == seedExpressionContext) {
+            return true;
+        }
+        return seedExpressionContext == EcstTransformationConfig.ExpressionContext.WHERE
+                && (embedded == EcstTransformationConfig.ExpressionContext.JOIN_ON
+                        || embedded == EcstTransformationConfig.ExpressionContext.INNER_WHERE)
+                || seedExpressionContext == EcstTransformationConfig.ExpressionContext.SELECT
+                        && embedded == EcstTransformationConfig.ExpressionContext.INNER_SELECT;
     }
 
     private static boolean isDependencyLayoutApplicable(TiDBVerticalPartitioningOracle.EcstSeed seed,
@@ -601,7 +617,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             return false;
         }
         boolean boundaryReconstruction = config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
-                || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE;
+                || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE
+                || config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE;
         if (!boundaryReconstruction) {
             return false;
         }
@@ -626,7 +643,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             }
             return false;
         case ACCESS_PATH:
-            return !crossSide && config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE;
+            return !crossSide && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
+                    || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_WHERE);
         default:
             return false;
         }
@@ -644,10 +662,14 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private static boolean isApplicableToTiDb(EcstTransformationConfig config, QueryShape shape) {
         return config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
                 && (config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
-                        || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE)
+                        || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE
+                        || config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE)
                 && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
                         || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.SELECT
-                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING)
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.JOIN_ON
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_WHERE
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_SELECT)
                 && shape.hasBaseTable;
     }
 

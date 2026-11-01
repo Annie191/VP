@@ -42,13 +42,17 @@ public final class TiDBEcstCapabilities {
 
     public boolean supportsReconstruction(EcstTransformationConfig.Reconstruction reconstruction) {
         return reconstruction == EcstTransformationConfig.Reconstruction.JOIN
-                || reconstruction == EcstTransformationConfig.Reconstruction.DERIVED_TABLE;
+                || reconstruction == EcstTransformationConfig.Reconstruction.DERIVED_TABLE
+                || reconstruction == EcstTransformationConfig.Reconstruction.CTE;
     }
 
     public boolean supportsExpressionContext(EcstTransformationConfig.ExpressionContext context) {
         return context == EcstTransformationConfig.ExpressionContext.WHERE
                 || context == EcstTransformationConfig.ExpressionContext.SELECT
-                || context == EcstTransformationConfig.ExpressionContext.HAVING;
+                || context == EcstTransformationConfig.ExpressionContext.HAVING
+                || context == EcstTransformationConfig.ExpressionContext.JOIN_ON
+                || context == EcstTransformationConfig.ExpressionContext.INNER_WHERE
+                || context == EcstTransformationConfig.ExpressionContext.INNER_SELECT;
     }
 
     /**
