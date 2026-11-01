@@ -60,13 +60,21 @@ public final class TiDBExecutionContextAnalyzer {
     }
 
     public ParsedContext extractContext(String originalQuery, EcstOperation operation) {
+        String plan;
         try {
-            ParsedContext parsed = parsePlan(explain(originalQuery), operation,
-                    readEvaluationContext(operation == null ? null : operation.getNormalizedExpression()));
-            return parsed;
-        } catch (SQLException ignored) {
-            return ParsedContext.unknown("", "EXPLAIN failed", MatchStatus.NOT_FOUND);
+            plan = explain(originalQuery);
+        } catch (SQLException failure) {
+            return ParsedContext.explainFailure(originalQuery, failure);
         }
+        String evaluation = "UNKNOWN";
+        try {
+            evaluation = readEvaluationContext(operation == null ? null : operation.getNormalizedExpression());
+        } catch (SQLException failure) {
+            evaluation = "UNKNOWN; supplementaryEvaluationError=" + sqlError(failure);
+        }
+        ParsedContext parsed = parsePlan(plan, operation, evaluation);
+        return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
+                ? relationAccessContext(plan, evaluation) : parsed;
     }
 
     /** Compatibility accessor for callers that only need the normalized context. */
@@ -85,17 +93,44 @@ public final class TiDBExecutionContextAnalyzer {
         String transformedPlan = "";
         try {
             originalPlan = explain(originalQuery);
+        } catch (SQLException failure) {
+            ParsedContext original = ParsedContext.explainFailure(originalQuery, failure);
+            ParsedContext transformed = ParsedContext.unknown(transformedPlan, "transformed plan not requested");
+            return observation(original, transformed, EcstShiftStatus.UNKNOWN, Set.of(),
+                    "original EXPLAIN failed", UnknownReason.UNKNOWN_BECAUSE_PLAN);
+        }
+        try {
             transformedPlan = explain(transformedQuery);
-            String evaluation;
-            try {
-                evaluation = readEvaluationContext(operation == null ? null : operation.getNormalizedExpression());
-            } catch (SQLException ignored) {
-                // Session metadata is supplementary evidence; a failed metadata probe must not discard plan matches.
-                evaluation = "UNKNOWN";
-            }
+        } catch (SQLException failure) {
+            ParsedContext original = ParsedContext.unknown(originalPlan, "original plan available");
+            ParsedContext transformed = ParsedContext.explainFailure(transformedQuery, failure);
+            return observation(original, transformed, EcstShiftStatus.UNKNOWN, Set.of(),
+                    "transformed EXPLAIN failed", UnknownReason.UNKNOWN_BECAUSE_PLAN);
+        }
+        String evaluation;
+        try {
+            evaluation = readEvaluationContext(operation == null ? null : operation.getNormalizedExpression());
+        } catch (SQLException failure) {
+            evaluation = "UNKNOWN; supplementaryEvaluationError=" + sqlError(failure);
+        }
+        try {
             ParsedContext original = parsePlan(originalPlan, operation, evaluation);
             ParsedContext transformed = parsePlan(transformedPlan, operation, evaluation);
-            if (!original.matched || !transformed.matched) {
+            if (target != null && target.getDimension() == sqlancer.common.oracle.ecst.EcstContextDimension.ACCESS_PATH) {
+                if (original.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND) {
+                    original = relationAccessContext(originalPlan, evaluation);
+                }
+                if (transformed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND) {
+                    transformed = relationAccessContext(transformedPlan, evaluation);
+                }
+            }
+            boolean originalMatched = original.matched || target != null
+                    && target.getDimension() == sqlancer.common.oracle.ecst.EcstContextDimension.ACCESS_PATH
+                    && original.extractionStatus() == ExtractionStatus.ABSORBED_IN_INDEX_RANGE;
+            boolean transformedMatched = transformed.matched || target != null
+                    && target.getDimension() == sqlancer.common.oracle.ecst.EcstContextDimension.ACCESS_PATH
+                    && transformed.extractionStatus() == ExtractionStatus.ABSORBED_IN_INDEX_RANGE;
+            if (!originalMatched || !transformedMatched) {
                 UnknownReason unknownReason = original.status == MatchStatus.NOT_FOUND
                         || transformed.status == MatchStatus.NOT_FOUND ? UnknownReason.UNKNOWN_BECAUSE_PLAN
                                 : UnknownReason.UNKNOWN_BECAUSE_OPERATION_MAPPING;
@@ -118,11 +153,11 @@ public final class TiDBExecutionContextAnalyzer {
                     status == EcstShiftStatus.SUCCESS ? "confirmed target migration"
                             : status == EcstShiftStatus.FAILURE ? "target migration not observed"
                                     : "target migration cannot be determined", unknownReason);
-        } catch (SQLException e) {
-            ParsedContext original = ParsedContext.unknown(originalPlan, "EXPLAIN failed: " + e.getMessage());
-            ParsedContext transformed = ParsedContext.unknown(transformedPlan, "EXPLAIN failed: " + e.getMessage());
+        } catch (RuntimeException e) {
+            ParsedContext original = ParsedContext.unknown(originalPlan, "plan parsing failed: " + e.getMessage());
+            ParsedContext transformed = ParsedContext.unknown(transformedPlan, "plan parsing failed: " + e.getMessage());
             return observation(original, transformed, EcstShiftStatus.UNKNOWN, Set.of(),
-                    "EXPLAIN failed: " + e.getMessage(), UnknownReason.UNKNOWN_BECAUSE_PLAN);
+                    "plan parsing failed: " + e.getMessage(), UnknownReason.UNKNOWN_BECAUSE_PLAN);
         }
     }
 
@@ -154,11 +189,15 @@ public final class TiDBExecutionContextAnalyzer {
 
     /** Package-visible evidence entry point for focused analyzer tests. */
     static ParsedContext parseWithEvidence(String plan, String targetExpression, String evaluation) {
-        return parsePlan(plan, operationFor(targetExpression), evaluation);
+        ParsedContext parsed = parsePlan(plan, operationFor(targetExpression), evaluation);
+        return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
+                ? relationAccessContext(plan, evaluation) : parsed;
     }
 
     static ParsedContext parseWithEvidence(String plan, EcstOperation operation, String evaluation) {
-        return parsePlan(plan, operation, evaluation);
+        ParsedContext parsed = parsePlan(plan, operation, evaluation);
+        return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
+                ? relationAccessContext(plan, evaluation) : parsed;
     }
 
     private EcstObservation observation(ParsedContext original, ParsedContext transformed, EcstShiftStatus status,
@@ -235,6 +274,21 @@ public final class TiDBExecutionContextAnalyzer {
         String reason = status == MatchStatus.DUPLICATED_SAME_OPERATION ? "duplicated physical instances of one operation"
                 : status == MatchStatus.AMBIGUOUS ? "equally scored candidates represent different operations" : "unique operation match";
         return new ParsedContext(context, plan, best.expression.owner.raw, evidence, status, reason, candidates);
+    }
+
+    private static ParsedContext relationAccessContext(String plan, String evaluation) {
+        List<PlanNode> nodes = parseNodes(plan);
+        PlanNode accessRoot = nodes.isEmpty() ? null : nodes.get(0);
+        boolean absorbed = plan != null && (plan.toLowerCase(Locale.ROOT).contains("indexrangescan")
+                || plan.toLowerCase(Locale.ROOT).contains("indexfullscan"));
+        if (accessRoot == null || !absorbed) {
+            return ParsedContext.unknown(plan, "target expression fingerprint was not found in a plan node",
+                    MatchStatus.NOT_FOUND);
+        }
+        EcstContext context = contextFor(accessRoot, parseEvaluationEnvironment(evaluation), null);
+        String evidence = "sessionMetadata=" + evaluation + "; extractionStatus=ABSORBED_IN_INDEX_RANGE"
+                + "; relationAccessPath=" + context.getAccessPath() + "; plan=" + plan;
+        return ParsedContext.absorbed(context, plan, evidence);
     }
 
     private static boolean allCandidatesRepresentSameOperation(List<Candidate> candidates) {
@@ -472,7 +526,7 @@ public final class TiDBExecutionContextAnalyzer {
             return new Candidate(expression, Integer.MAX_VALUE, List.of("ambiguous-expression-occurrences"));
         }
         boolean allReferences = !target.references.isEmpty() && nodeReferences.equals(target.references);
-        boolean equivalent = allReferences && equivalentExpressionShape(text, target);
+        boolean equivalent = allReferences && equivalentExpressionShape(expression.expressionText, target);
         boolean predicate = containsPredicateMarker(text) || expression.role == ExpressionRole.SELECTION_PREDICATE
                 || expression.role == ExpressionRole.JOIN_OTHER_CONDITION;
         if (exactStructure) {
@@ -502,20 +556,9 @@ public final class TiDBExecutionContextAnalyzer {
         return new Candidate(expression, score, signals);
     }
 
-    private static boolean equivalentExpressionShape(String text, TargetPattern target) {
-        if (countOccurrences(text, "cast(") != target.castCount) {
-            return false;
-        }
-        if (target.castMode != null && !text.contains(target.castMode)) {
-            return false;
-        }
-        if (!target.operatorShape.equals(operatorShape(text))) {
-            return false;
-        }
-        if (target.hasFunction && !text.contains(target.functionName + "(")) {
-            return false;
-        }
-        return target.hasCast || target.hasArithmetic || target.hasFunction;
+    private static boolean equivalentExpressionShape(String expression, TargetPattern target) {
+        ExprFingerprint candidate = ExprFingerprint.parse(expression);
+        return candidate != null && target.fingerprint != null && candidate.contains(target.fingerprint);
     }
 
     private static int countOccurrences(String text, String needle) {
@@ -734,14 +777,16 @@ public final class TiDBExecutionContextAnalyzer {
 
     private String readEvaluationContext(String targetExpression) throws SQLException {
         try (Statement statement = state.getConnection().createStatement(); ResultSet result = statement.executeQuery(
-                "SELECT @@sql_mode, @@collation_connection, @@character_set_connection")) {
+                "SELECT @@sql_mode, @@collation_connection, @@character_set_connection, "
+                        + "@@tidb_enable_new_only_full_group_by_check")) {
             if (!result.next()) {
                 return "UNKNOWN";
             }
             String cast = targetExpression != null && normalize(targetExpression).contains("cast(")
                     ? ";targetTypeConversion=CAST" : "";
             return "sql_mode=" + safe(result.getString(1)) + ";collation=" + safe(result.getString(2)) + ";charset="
-                    + safe(result.getString(3)) + cast;
+                    + safe(result.getString(3)) + ";tidb_enable_new_only_full_group_by_check=" + safe(result.getString(4))
+                    + cast;
         }
     }
 
@@ -749,13 +794,22 @@ public final class TiDBExecutionContextAnalyzer {
         return value == null || value.isEmpty() ? "UNKNOWN" : value;
     }
 
+    private static String sqlError(SQLException failure) {
+        return "sqlState=" + safe(failure.getSQLState()) + ",errorCode=" + failure.getErrorCode() + ",message="
+                + safe(failure.getMessage());
+    }
+
     private static EcstOperation operationFor(String targetExpression) {
         String normalized = normalize(targetExpression);
-        return new EcstOperation("ECST_TARGET:" + normalized, normalized, references(targetExpression), "ARITHMETIC");
+        return new EcstOperation("ECST_TARGET:" + normalized, targetExpression, references(targetExpression), "ARITHMETIC");
     }
 
     enum MatchStatus {
         UNIQUE, DUPLICATED_SAME_OPERATION, AMBIGUOUS, NOT_FOUND
+    }
+
+    public enum ExtractionStatus {
+        MATCHED, EXPRESSION_NOT_FOUND, AMBIGUOUS, EXPLAIN_ERROR, ABSORBED_IN_INDEX_RANGE
     }
 
     public static final class ParsedContext {
@@ -765,6 +819,7 @@ public final class TiDBExecutionContextAnalyzer {
         private final String evidence;
         private final boolean matched;
         private final MatchStatus status;
+        private final ExtractionStatus extractionStatus;
         private final String reason;
         private final List<Candidate> candidates;
         private final Candidate selected;
@@ -781,6 +836,7 @@ public final class TiDBExecutionContextAnalyzer {
             this.matchedNode = matchedNode == null ? "" : matchedNode;
             this.evidence = evidence == null ? "" : evidence;
             this.status = status == null ? MatchStatus.NOT_FOUND : status;
+            this.extractionStatus = extractionStatusFor(this.status);
             this.reason = reason == null ? "" : reason;
             this.candidates = Collections.unmodifiableList(new ArrayList<>(candidates == null ? List.of() : candidates));
             this.selected = this.candidates.isEmpty() ? null : this.candidates.get(0);
@@ -801,8 +857,54 @@ public final class TiDBExecutionContextAnalyzer {
                     plan, "", evidence, status, evidence, candidates);
         }
 
+        private static ParsedContext explainFailure(String query, SQLException failure) {
+            String evidence = "EXPLAIN failed: " + sqlError(failure) + "; query=" + query;
+            return new ParsedContext(new EcstContext("UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN"),
+                    "", "", evidence, ExtractionStatus.EXPLAIN_ERROR, evidence, List.of());
+        }
+
+        private static ParsedContext absorbed(EcstContext context, String plan, String evidence) {
+            return new ParsedContext(context, plan, "", evidence, ExtractionStatus.ABSORBED_IN_INDEX_RANGE, evidence,
+                    List.of());
+        }
+
+        private ParsedContext(EcstContext context, String plan, String matchedNode, String evidence,
+                ExtractionStatus extractionStatus, String reason, List<Candidate> candidates) {
+            this.context = context;
+            this.plan = plan == null ? "" : plan;
+            this.matchedNode = matchedNode == null ? "" : matchedNode;
+            this.evidence = evidence == null ? "" : evidence;
+            this.status = extractionStatus == ExtractionStatus.AMBIGUOUS ? MatchStatus.AMBIGUOUS
+                    : extractionStatus == ExtractionStatus.MATCHED ? MatchStatus.UNIQUE : MatchStatus.NOT_FOUND;
+            this.extractionStatus = extractionStatus;
+            this.reason = reason == null ? "" : reason;
+            this.candidates = Collections.unmodifiableList(new ArrayList<>(candidates == null ? List.of() : candidates));
+            this.selected = this.candidates.isEmpty() ? null : this.candidates.get(0);
+            this.matched = extractionStatus == ExtractionStatus.MATCHED;
+        }
+
+        private static ExtractionStatus extractionStatusFor(MatchStatus status) {
+            if (status == MatchStatus.AMBIGUOUS) return ExtractionStatus.AMBIGUOUS;
+            if (status == MatchStatus.UNIQUE || status == MatchStatus.DUPLICATED_SAME_OPERATION) {
+                return ExtractionStatus.MATCHED;
+            }
+            return ExtractionStatus.EXPRESSION_NOT_FOUND;
+        }
+
         public String evidence() {
             return evidence;
+        }
+
+        public String plan() {
+            return plan;
+        }
+
+        public List<String> candidateExpressions() {
+            List<String> expressions = new ArrayList<>();
+            for (Candidate candidate : candidates) {
+                expressions.add(candidate.expression.expressionText);
+            }
+            return expressions;
         }
 
         public EcstContext context() {
@@ -811,6 +913,10 @@ public final class TiDBExecutionContextAnalyzer {
 
         public MatchStatus status() {
             return status;
+        }
+
+        public ExtractionStatus extractionStatus() {
+            return extractionStatus;
         }
 
         public List<Candidate> candidates() {
@@ -907,33 +1013,320 @@ public final class TiDBExecutionContextAnalyzer {
         }
     }
 
+    /** Structural expression fingerprint; unlike operator text, child order and types are significant. */
+    public static final class ExprFingerprint {
+        private final String kind;
+        private final String resultType;
+        private final List<ExprFingerprint> children;
+        private final String column;
+        private final String constant;
+
+        private ExprFingerprint(String kind, String resultType, List<ExprFingerprint> children, String column,
+                String constant) {
+            this.kind = kind;
+            this.resultType = resultType;
+            this.children = List.copyOf(children == null ? List.of() : children);
+            this.column = column;
+            this.constant = constant;
+        }
+
+        static ExprFingerprint parse(String expression) {
+            ExprFingerprint caseFingerprint = parseSqlCase(expression);
+            if (caseFingerprint != null) {
+                return caseFingerprint;
+            }
+            String normalized = normalize(canonicalizeSqlCasts(expression));
+            return normalized.isEmpty() ? null : parseNormalized(normalized);
+        }
+
+        private static String canonicalizeSqlCasts(String expression) {
+            return expression == null ? "" : expression.replaceAll(
+                    "(?i)cast\\(\\s*([^(),]+?)\\s+as\\s+char(?:\\s*\\(\\s*(\\d+)\\s*\\))?\\s*\\)",
+                    "cast($1,sql_char$2)");
+        }
+
+        private static ExprFingerprint parseSqlCase(String expression) {
+            if (expression == null) {
+                return null;
+            }
+            Matcher matcher = Pattern.compile("(?is)^\\s*case\\s+when\\s+(.+?)\\s+then\\s+(.+?)\\s+else\\s+(.+?)\\s+end\\s*$")
+                    .matcher(expression);
+            if (!matcher.matches()) {
+                return null;
+            }
+            return new ExprFingerprint("CASE_WHEN", "UNKNOWN", List.of(parseCaseCondition(matcher.group(1)),
+                    parse(matcher.group(2)), parse(matcher.group(3))), null, null);
+        }
+
+        private static ExprFingerprint parseCaseCondition(String condition) {
+            Matcher isNull = Pattern.compile("(?is)^\\s*(.+?)\\s+is\\s+null\\s*$").matcher(condition);
+            if (isNull.matches()) {
+                return new ExprFingerprint("IS_NULL", "BOOLEAN", List.of(parse(isNull.group(1))), null, null);
+            }
+            return parse(condition);
+        }
+
+        private static ExprFingerprint parseNormalized(String expression) {
+            String value = stripOuterParentheses(expression);
+            ComparisonOperator comparison = topLevelComparison(value);
+            if (comparison != null) {
+                String kind;
+                switch (comparison.operator) {
+                case ">": kind = "GT"; break;
+                case "<": kind = "LT"; break;
+                case ">=": kind = "GE"; break;
+                case "<=": kind = "LE"; break;
+                case "!=": kind = "NE"; break;
+                case "<>": kind = "NE"; break;
+                case "<=>": kind = "NULL_SAFE_EQ"; break;
+                default: kind = "EQ"; break;
+                }
+                return new ExprFingerprint(kind, "BOOLEAN",
+                        List.of(parseNormalized(value.substring(0, comparison.index)),
+                                parseNormalized(value.substring(comparison.index + comparison.operator.length()))), null, null);
+            }
+            return parseAdditive(value);
+        }
+
+        private static ExprFingerprint parseAdditive(String value) {
+            int operator = topLevelBinaryOperator(value, "+-");
+            if (operator > 0) {
+                String symbol = String.valueOf(value.charAt(operator));
+                return new ExprFingerprint(symbol.equals("+") ? "ADD" : "SUB", "UNKNOWN",
+                        List.of(parseAdditive(value.substring(0, operator)),
+                                parseMultiplicative(value.substring(operator + 1))), null, null);
+            }
+            return parseMultiplicative(value);
+        }
+
+        private static ExprFingerprint parseMultiplicative(String value) {
+            int operator = topLevelBinaryOperator(value, "*/");
+            if (operator > 0) {
+                String symbol = String.valueOf(value.charAt(operator));
+                return new ExprFingerprint(symbol.equals("*") ? "MUL" : "DIV", "UNKNOWN",
+                        List.of(parseMultiplicative(value.substring(0, operator)),
+                                parseUnary(value.substring(operator + 1))), null, null);
+            }
+            return parseUnary(value);
+        }
+
+        private static ExprFingerprint parseUnary(String value) {
+            if (value.startsWith("-") && value.length() > 1) {
+                return new ExprFingerprint("UNARY_NEG", "UNKNOWN", List.of(parseUnary(value.substring(1))), null,
+                        null);
+            }
+            return parsePrimary(value);
+        }
+
+        private static ExprFingerprint parsePrimary(String value) {
+            int open = value.indexOf('(');
+            if (open > 0 && value.endsWith(")")) {
+                String name = value.substring(0, open);
+                List<String> arguments = splitNormalizedArguments(value.substring(open + 1, value.length() - 1));
+                if ("cast".equals(name) && !arguments.isEmpty()) {
+                    String type = arguments.size() > 1 ? castType(arguments.get(1)) : "UNKNOWN";
+                    String length = castLength(arguments.size() > 1 ? arguments.get(1) : "");
+                    return new ExprFingerprint("CAST", type, List.of(parseNormalized(arguments.get(0))), null, length);
+                }
+                String kind;
+                switch (name) {
+                case "plus":
+                    kind = "ADD";
+                    break;
+                case "minus":
+                    kind = "SUB";
+                    break;
+                case "mul":
+                    kind = "MUL";
+                    break;
+                case "div":
+                    kind = "DIV";
+                    break;
+                case "casewhen":
+                case "case":
+                    kind = "CASE_WHEN";
+                    break;
+                case "isnull":
+                    kind = "IS_NULL";
+                    break;
+                case "gt":
+                    kind = "GT";
+                    break;
+                case "ge":
+                    kind = "GE";
+                    break;
+                case "eq":
+                    kind = "EQ";
+                    break;
+                case "ne":
+                    kind = "NE";
+                    break;
+                case "lt":
+                    kind = "LT";
+                    break;
+                case "le":
+                    kind = "LE";
+                    break;
+                case "nulleq":
+                    kind = "NULL_SAFE_EQ";
+                    break;
+                default:
+                    kind = name.toUpperCase(Locale.ROOT);
+                    break;
+                }
+                if ("CASE_WHEN".equals(kind) && arguments.size() != 3) {
+                    return new ExprFingerprint("UNSUPPORTED_REWRITE", "UNKNOWN", List.of(), null, value);
+                }
+                List<ExprFingerprint> children = new ArrayList<>();
+                for (String argument : arguments) {
+                    children.add(parseNormalized(argument));
+                }
+                boolean booleanResult = "IS_NULL".equals(kind) || "GT".equals(kind) || "GE".equals(kind)
+                        || "EQ".equals(kind) || "NE".equals(kind) || "LT".equals(kind) || "LE".equals(kind)
+                        || "NULL_SAFE_EQ".equals(kind);
+                return new ExprFingerprint(kind, booleanResult ? "BOOLEAN" : "UNKNOWN", children, null, null);
+            }
+            if (value.matches("[-+]?\\d+(?:\\.\\d+)?")) {
+                return new ExprFingerprint("CONSTANT", numericType(value), List.of(), null, value);
+            }
+            if (value.matches("[a-z_][a-z0-9_$]*(?:\\.[a-z_][a-z0-9_$]*)?")) {
+                return new ExprFingerprint("COLUMN", "UNKNOWN", List.of(),
+                        value.substring(value.lastIndexOf('.') + 1), null);
+            }
+            // CASE and unsupported optimizer rewrites are intentionally opaque. They
+            // can match only when their normalized structure is exactly preserved.
+            return new ExprFingerprint("UNSUPPORTED_REWRITE", "UNKNOWN", List.of(), null, value);
+        }
+
+        private static String castType(String type) {
+            if (type.startsWith("sql_char") || type.startsWith("var_string")) {
+                return "CHAR";
+            }
+            if (type.contains("unsigned")) {
+                return "UNSIGNED";
+            }
+            if (type.contains("signed") || type.contains("bigintbinary")) {
+                return "SIGNED";
+            }
+            return type.toUpperCase(Locale.ROOT);
+        }
+
+        private static String castLength(String type) {
+            Matcher matcher = Pattern.compile("(?:sql_char|var_string)(?:\\((\\d+)\\))?").matcher(type);
+            return matcher.matches() && matcher.group(1) != null ? matcher.group(1) : "*";
+        }
+
+        private static String numericType(String value) {
+            return value.contains(".") ? "DECIMAL" : "INTEGER";
+        }
+
+        private static String stripOuterParentheses(String value) {
+            while (value.startsWith("(") && value.endsWith(")") && matchingOuterParentheses(value)) {
+                value = value.substring(1, value.length() - 1);
+            }
+            return value;
+        }
+
+        private static boolean matchingOuterParentheses(String value) {
+            int depth = 0;
+            for (int i = 0; i < value.length(); i++) {
+                char c = value.charAt(i);
+                if (c == '(') depth++;
+                if (c == ')' && --depth == 0 && i != value.length() - 1) return false;
+            }
+            return depth == 0;
+        }
+
+        private static int topLevelBinaryOperator(String value, String operators) {
+            int depth = 0;
+            boolean quoted = false;
+            int result = -1;
+            for (int i = 0; i < value.length(); i++) {
+                char c = value.charAt(i);
+                if (c == '\'' ) quoted = !quoted;
+                if (quoted) continue;
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (depth == 0 && operators.indexOf(c) >= 0 && i > 0) {
+                    char previous = value.charAt(i - 1);
+                    if (operators.indexOf(previous) < 0 && previous != '(' && previous != ',') result = i;
+                }
+            }
+            return result;
+        }
+
+        private static ComparisonOperator topLevelComparison(String value) {
+            int depth = 0;
+            boolean quoted = false;
+            String[] operators = { "<=>", ">=", "<=", "!=", "<>", ">", "<", "=" };
+            for (int i = 0; i < value.length(); i++) {
+                char c = value.charAt(i);
+                if (c == '\'') quoted = !quoted;
+                if (quoted) continue;
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (depth == 0 && i > 0) {
+                    for (String operator : operators) {
+                        if (value.startsWith(operator, i)) return new ComparisonOperator(i, operator);
+                    }
+                }
+            }
+            return null;
+        }
+
+        private static final class ComparisonOperator {
+            private final int index;
+            private final String operator;
+
+            private ComparisonOperator(int index, String operator) {
+                this.index = index;
+                this.operator = operator;
+            }
+        }
+
+        private static List<String> splitNormalizedArguments(String value) {
+            return splitTopLevel(value, ',');
+        }
+
+        private boolean contains(ExprFingerprint target) {
+            if (equals(target)) return true;
+            for (ExprFingerprint child : children) {
+                if (child.contains(target)) return true;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (!(other instanceof ExprFingerprint)) return false;
+            ExprFingerprint that = (ExprFingerprint) other;
+            boolean castLengthCompatible = !"CAST".equals(kind) || !"CHAR".equals(resultType)
+                    || "*".equals(constant) || "*".equals(that.constant) || constant.equals(that.constant);
+            return castLengthCompatible && kind.equals(that.kind) && resultType.equals(that.resultType)
+                    && children.equals(that.children) && java.util.Objects.equals(column, that.column);
+        }
+
+        @Override
+        public int hashCode() {
+            String hashConstant = "CAST".equals(kind) && "CHAR".equals(resultType) ? "*" : constant;
+            return java.util.Objects.hash(kind, resultType, children, column, hashConstant);
+        }
+    }
+
     private static final class TargetPattern {
         private final String normalized;
         private final Set<String> references;
-        private final boolean hasCast;
-        private final boolean hasArithmetic;
-        private final boolean hasFunction;
-        private final String functionName;
-        private final String castMode;
-        private final int castCount;
-        private final String operatorShape;
         private final Map<String, String> lineage;
         private final String expectedRole;
+        private final ExprFingerprint fingerprint;
 
-        private TargetPattern(String normalized, Set<String> references, boolean hasCast, boolean hasArithmetic,
-                boolean hasFunction, String functionName, String castMode, int castCount, String operatorShape,
-                Map<String, String> lineage, String expectedRole) {
+        private TargetPattern(String normalized, Set<String> references, Map<String, String> lineage,
+                String expectedRole, ExprFingerprint fingerprint) {
             this.normalized = normalized;
             this.references = references;
-            this.hasCast = hasCast;
-            this.hasArithmetic = hasArithmetic;
-            this.hasFunction = hasFunction;
-            this.functionName = functionName;
-            this.castMode = castMode;
-            this.castCount = castCount;
-            this.operatorShape = operatorShape;
             this.lineage = lineage == null ? Map.of() : lineage;
             this.expectedRole = expectedRole == null ? "UNKNOWN" : expectedRole;
+            this.fingerprint = fingerprint;
         }
 
         private static TargetPattern create(EcstOperation operation) {
@@ -941,19 +1334,9 @@ public final class TiDBExecutionContextAnalyzer {
             if (normalized.isEmpty()) {
                 return null;
             }
-            boolean cast = normalized.contains("cast(");
-            boolean arithmetic = normalized.contains("+") || normalized.contains("-") || normalized.contains("*");
-            String function = "";
-            Matcher matcher = Pattern.compile("^([a-z_][a-z0-9_$]*)\\(").matcher(normalized);
-            boolean hasFunction = matcher.find() && !"cast".equals(matcher.group(1));
-            if (hasFunction) {
-                function = matcher.group(1);
-            }
-            String mode = normalized.contains("unsigned") ? "unsigned" : normalized.contains("signed") ? "signed" : null;
             Set<String> dependencies = operation.getDependencies();
-            return new TargetPattern(normalized, dependencies, cast, arithmetic, hasFunction, function, mode,
-                    countOccurrences(normalized, "cast("), operatorShape(normalized), operation.getDependencyLineage(),
-                    operation.getExpectedRole());
+            return new TargetPattern(normalized, dependencies, operation.getDependencyLineage(),
+                    operation.getExpectedRole(), ExprFingerprint.parse(operation.getNormalizedExpression()));
         }
 
         private boolean acceptsRole(ExpressionRole role) {

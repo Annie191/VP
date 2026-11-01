@@ -1,0 +1,6 @@
+Issue: 69177
+DBMS: TiDB
+Version: v8.5.6
+Connection: mysql --protocol=tcp -h127.0.0.1 -P25800 -uroot
+Version-specific note: TiDB v9.0.0-beta.2.pre issues use mysql --protocol=tcp -h127.0.0.1 -P4009 -uroot
+Source SQL: /home/lwm/sqlancer/Bugs/TIDB/69177.sql

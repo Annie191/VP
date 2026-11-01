@@ -14,6 +14,8 @@ public final class EcstFailureRecord {
     private final String transformedQuery;
     private final String targetExpression;
     private final String message;
+    private final String sqlState;
+    private final int errorCode;
     private final String stackTrace;
     private final List<String> setupStatements;
     private final String generationInfo;
@@ -21,6 +23,13 @@ public final class EcstFailureRecord {
     public EcstFailureRecord(EcstPhase phase, String target, String config, String baseTable, String originalQuery,
             String transformedQuery, String targetExpression, String message, String stackTrace,
             List<String> setupStatements, String generationInfo) {
+        this(phase, target, config, baseTable, originalQuery, transformedQuery, targetExpression, message, "", 0,
+                stackTrace, setupStatements, generationInfo);
+    }
+
+    public EcstFailureRecord(EcstPhase phase, String target, String config, String baseTable, String originalQuery,
+            String transformedQuery, String targetExpression, String message, String sqlState, int errorCode,
+            String stackTrace, List<String> setupStatements, String generationInfo) {
         this.phase = phase;
         this.target = value(target);
         this.config = value(config);
@@ -29,6 +38,8 @@ public final class EcstFailureRecord {
         this.transformedQuery = value(transformedQuery);
         this.targetExpression = value(targetExpression);
         this.message = value(message);
+        this.sqlState = value(sqlState);
+        this.errorCode = errorCode;
         this.stackTrace = value(stackTrace);
         this.setupStatements = Collections.unmodifiableList(new ArrayList<>(setupStatements == null ? List.of() : setupStatements));
         this.generationInfo = value(generationInfo);
@@ -46,6 +57,8 @@ public final class EcstFailureRecord {
     public String getTransformedQuery() { return transformedQuery; }
     public String getTargetExpression() { return targetExpression; }
     public String getMessage() { return message; }
+    public String getSqlState() { return sqlState; }
+    public int getErrorCode() { return errorCode; }
     public String getStackTrace() { return stackTrace; }
     public List<String> getSetupStatements() { return setupStatements; }
     public String getGenerationInfo() { return generationInfo; }
@@ -56,13 +69,49 @@ public final class EcstFailureRecord {
                 + "\",\"baseTable\":\"" + json(baseTable) + "\",\"originalQuery\":\""
                 + json(originalQuery) + "\",\"transformedQuery\":\"" + json(transformedQuery)
                 + "\",\"targetExpression\":\"" + json(targetExpression) + "\",\"message\":\""
-                + json(message) + "\",\"stackTrace\":\"" + json(stackTrace) + "\",\"setup\":"
+                + json(message) + "\",\"sqlState\":\"" + json(sqlState) + "\",\"errorCode\":"
+                + errorCode + ",\"stackTrace\":\"" + json(stackTrace) + "\",\"setup\":"
                 + jsonArray(setupStatements) + ",\"generationInfo\":\"" + json(generationInfo) + "\"}";
     }
 
     public static String json(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\r", "\\r")
-                .replace("\n", "\\n");
+        if (value == null) {
+            return "";
+        }
+        StringBuilder result = new StringBuilder(value.length() + 16);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+            case '\\':
+                result.append("\\\\");
+                break;
+            case '"':
+                result.append("\\\"");
+                break;
+            case '\r':
+                result.append("\\r");
+                break;
+            case '\n':
+                result.append("\\n");
+                break;
+            case '\t':
+                result.append("\\t");
+                break;
+            case '\b':
+                result.append("\\b");
+                break;
+            case '\f':
+                result.append("\\f");
+                break;
+            default:
+                if (c < 0x20) {
+                    result.append(String.format("\\u%04x", (int) c));
+                } else {
+                    result.append(c);
+                }
+            }
+        }
+        return result.toString();
     }
 
     public static String jsonArray(List<String> values) {

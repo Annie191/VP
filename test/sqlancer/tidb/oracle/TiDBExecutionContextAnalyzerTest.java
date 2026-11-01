@@ -55,6 +55,21 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void distinguishesExpressionNotFoundFromAmbiguity() {
+        TiDBExecutionContextAnalyzer.ParsedContext missing = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                "Projection_1 1 root test.t.a\n", "CAST(`missing` AS SIGNED)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.ExtractionStatus.EXPRESSION_NOT_FOUND,
+                missing.extractionStatus());
+
+        TiDBExecutionContextAnalyzer.ParsedContext ambiguous = TiDBExecutionContextAnalyzer.parseWithEvidence(
+                "Projection_1 1 root cast(test.t.a, bigint BINARY)->Column#1\n"
+                        + "└─Selection_2 1 cop[tikv] gt(cast(test.t.a, bigint BINARY), 0)\n",
+                "CAST(`a` AS SIGNED)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.ExtractionStatus.AMBIGUOUS,
+                ambiguous.extractionStatus());
+    }
+
+    @Test
     void ambiguousTargetMatchIsUnknown() {
         String plan = "Selection_2 1 root gt(cast(test.t.a, signed), 0)\n"
                 + "└─Selection_1 1 cop[tikv] gt(cast(test.t.a, signed), 0)\n";
@@ -265,6 +280,133 @@ public class TiDBExecutionContextAnalyzerTest {
         assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
         assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.SELECTION_PREDICATE,
                 parsed.selectedExpression().role());
+    }
+
+    @Test
+    void rejectsReorderedSubtractionOperands() {
+        String plan = "Projection | 1 root | | minus(cast(test.t.c1, bigint BINARY), "
+                + "cast(test.t.c0, bigint BINARY))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "(CAST(`c0` AS SIGNED) - CAST(`c1` AS SIGNED))", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void rejectsSignedUnsignedCastMismatch() {
+        String plan = "Projection | 1 root | | cast(test.t.c0, bigint UNSIGNED)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CAST(`c0` AS SIGNED)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void matchesCaseWhenStructureAgainstTidbCasewhenPlan() {
+        String plan = "Projection | 1 root | | casewhen(isnull(test.t.c0), "
+                + "cast(test.t.c1, bigint BINARY), cast(test.t.c0, bigint BINARY))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CASE WHEN `c0` IS NULL THEN CAST(`c1` AS SIGNED) ELSE CAST(`c0` AS SIGNED) END", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+        assertEquals(TiDBExecutionContextAnalyzer.ExpressionRole.PROJECTION_ITEM,
+                parsed.selectedExpression().role());
+    }
+
+    @Test
+    void rejectsDifferentArithmeticPrecedence() {
+        String plan = "Projection | 1 root | | mul(plus(test.t.c0, test.t.c1), test.t.c2)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "`c0` + `c1` * `c2`", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void rejectsDifferentComparisonOperators() {
+        String plan = "Selection | 1 root | | ge(test.t.c0, 0)\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "`c0` > 0", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void preservesUnaryMinus() {
+        String plan = "Projection | 1 root | | minus(0, test.t.c0)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "-`c0`", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void mapsSqlCharCastToTidbVarStringLengths() {
+        for (String type : java.util.List.of("var_string(262140)", "var_string(19)", "var_string(10)")) {
+            String plan = "Projection | 1 root | | char_length(cast(test.t.c0, " + type + "))->Column#1\n";
+            TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                    "CHAR_LENGTH(CAST(`c0` AS CHAR))", "UNKNOWN");
+            assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status(), type);
+        }
+    }
+
+    @Test
+    void matchesRealTidbCasePlan() {
+        String plan = "Projection | 1 root | | case(isnull(test.t.c0), cast(test.t.c1, bigint BINARY), "
+                + "cast(test.t.c0, bigint BINARY))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CASE WHEN `c0` IS NULL THEN CAST(`c1` AS SIGNED) ELSE CAST(`c0` AS SIGNED) END", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+    }
+
+    @Test
+    void rejectsSwappedCaseBranches() {
+        String plan = "Projection | 1 root | | case(isnull(test.t.c0), cast(test.t.c0, bigint BINARY), "
+                + "cast(test.t.c1, bigint BINARY))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CASE WHEN `c0` IS NULL THEN CAST(`c1` AS SIGNED) ELSE CAST(`c0` AS SIGNED) END", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void rejectsDifferentCaseCondition() {
+        String plan = "Projection | 1 root | | case(isnull(test.t.c1), cast(test.t.c1, bigint BINARY), "
+                + "cast(test.t.c0, bigint BINARY))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CASE WHEN `c0` IS NULL THEN CAST(`c1` AS SIGNED) ELSE CAST(`c0` AS SIGNED) END", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void matchesIfWithTidbInternalComparisonFunction() {
+        String plan = "Projection | 1 root | | if(gt(cast(test.t.c0, bigint BINARY), 0), "
+                + "cast(test.t.c1, bigint BINARY), 0)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "IF(CAST(`c0` AS SIGNED) > 0, CAST(`c1` AS SIGNED), 0)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+    }
+
+    @Test
+    void comparisonFunctionKindsRemainDistinct() {
+        String plan = "Projection | 1 root | | if(ge(cast(test.t.c0, bigint BINARY), 0), "
+                + "cast(test.t.c1, bigint BINARY), 0)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "IF(CAST(`c0` AS SIGNED) > 0, CAST(`c1` AS SIGNED), 0)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void doesNotEraseFromBinaryCastMapping() {
+        String plan = "Projection | 1 root | | char_length(cast(from_binary(test.t.c0), var_string(19)))->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "CHAR_LENGTH(CAST(`c0` AS CHAR))", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void reportsExpressionAbsorbedIntoIndexRangeAsRelationEvidence() {
+        String plan = "IndexReader | 1 root | | index:IndexRangeScan\n"
+                + "└─IndexRangeScan | 1 cop[tikv] | table:t, index:idx(c0) | range:(0,+inf]\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "`c0` > 0", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.ExtractionStatus.ABSORBED_IN_INDEX_RANGE,
+                parsed.extractionStatus());
+        assertEquals("INDEXREADER", parsed.context().getAccessPath());
+        assertTrue(parsed.evidence().contains("IndexRangeScan"));
     }
 
     @Test

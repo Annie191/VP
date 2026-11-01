@@ -1,0 +1,7 @@
+SELECT
+  NULL << 'aMI x*' AS a,
+  403837559 AS b,
+  BIN(c0) AS c
+FROM src
+WHERE BIN((BINARY(CAST(vp_rowid AS DECIMAL)) <= '|'))
+ORDER BY 0.9328472781954409;
