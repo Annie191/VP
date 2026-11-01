@@ -186,4 +186,16 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(!TiDBVerticalPartitioningOracle.isSargableAccessPredicateForTest(
                 "CAST(`c0` AS SIGNED) + CAST(`c1` AS SIGNED) > 0", "c0"));
     }
+
+    @Test
+    void innerSelectPreservesOutputShapeIncludingSiblingColumn() {
+        String target = "COALESCE(CAST(`c0` AS SIGNED), 0)";
+        String original = "SELECT `vp_rowid`, " + target
+                + " AS ecst_value, `c0` AS ecst_input FROM `source`";
+
+        String rewritten = TiDBVerticalPartitioningOracle.rewriteInnerSelectProjection(original, target);
+
+        assertEquals("SELECT `vp_rowid`, ecst_value AS ecst_value, `c0` AS ecst_input FROM `source`", rewritten);
+        assertEquals(3, rewritten.substring(0, rewritten.indexOf(" FROM ")).split(",").length);
+    }
 }

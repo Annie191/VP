@@ -2670,14 +2670,25 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             return replaceSourceFrom(outer, vp.sourceTable, relation);
         }
         if (context == EcstTransformationConfig.ExpressionContext.INNER_SELECT) {
-            String fromMarker = " FROM ";
-            int from = singleQuery.toUpperCase(Locale.ROOT).indexOf(fromMarker);
-            if (from < 0) {
-                throw new IgnoreMeException();
-            }
-            return "SELECT " + quote(ROW_ID) + ", ecst_value AS ecst_value FROM " + relation;
+            String preservedProjection = rewriteInnerSelectProjection(singleQuery, seed.targetExpression);
+            return replaceSourceFrom(preservedProjection, vp.sourceTable, relation);
         }
         return replaceSourceFrom(singleQuery, vp.sourceTable, relation);
+    }
+
+    /** Preserve the original SELECT projection shape while using the inner value. */
+    static String rewriteInnerSelectProjection(String singleQuery, String targetExpression) {
+        String targetProjection = "SELECT " + quoteIdentifier(ROW_ID) + ", " + targetExpression
+                + " AS ecst_value";
+        if (!singleQuery.contains(targetProjection)) {
+            throw new IgnoreMeException();
+        }
+        return singleQuery.replace(targetProjection,
+                "SELECT " + quoteIdentifier(ROW_ID) + ", ecst_value AS ecst_value");
+    }
+
+    private static String quoteIdentifier(String identifier) {
+        return "`" + identifier.replace("`", "``") + "`";
     }
 
     private String removeOuterPredicate(String query, String predicate) {
