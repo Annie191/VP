@@ -52,6 +52,31 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void repeatedFailuresReduceTargetPriorityButDoNotRemoveIt() {
+        EcstHistory history = new EcstHistory();
+        for (int i = 0; i < 40; i++) {
+            history.observe("root-cop", "config", EcstShiftStatus.FAILURE, Set.of(), 1);
+        }
+        EcstHistory.Decision decision = history.chooseTargetDecision(
+                Map.of("root-cop", List.of("config"), "fresh-target", List.of("config")));
+        assertEquals("fresh-target", decision.getKey());
+        assertTrue(history.chooseTargetDecision(Map.of("root-cop", List.of("config"))) != null);
+    }
+
+    @Test
+    public void newFeatureBucketGetsAFreshTargetProbe() {
+        EcstHistory history = new EcstHistory();
+        EcstFeature oldFeature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "SINGLE_DEPENDENCY");
+        EcstFeature newFeature = new EcstFeature("TiDB", "STRING_LENGTH", "SELECT", "SINGLE_DEPENDENCY");
+        for (int i = 0; i < 40; i++) {
+            history.observe("root-cop", "config", EcstShiftStatus.FAILURE, Set.of(), 1, oldFeature);
+        }
+        EcstHistory.Decision decision = history.chooseTargetDecision(
+                Map.of("root-cop", List.of("config"), "fresh-target", List.of("config")), newFeature);
+        assertTrue(decision != null);
+    }
+
+    @Test
     public void coverageCountsOnlyTheTargetMigrationDimension() {
         EcstHistory history = new EcstHistory();
         history.observe("TIDB_LOCATION_SHIFT", "config", EcstShiftStatus.FAILURE,

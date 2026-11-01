@@ -191,6 +191,10 @@ public final class EcstHistory {
             return (success + SMOOTHING_A) / (success + failure + SMOOTHING_A + SMOOTHING_B);
         }
 
+        private synchronized double failureRate() {
+            return trials == 0 ? 0.0 : (double) failure / trials;
+        }
+
         private synchronized long trials() {
             return trials;
         }
@@ -430,10 +434,20 @@ public final class EcstHistory {
             Stats globalTarget = targetStats.get(TargetKey.parse(candidate));
             long coverage = targetCoverage(candidate);
             long trials = globalTarget == null ? 0 : globalTarget.trials();
-            double novelty = 1.0 / Math.sqrt(1.0 + coverage);
+            Stats targetEvidence = selectTargetStats(candidate, feature);
+            long evidenceTrials = targetEvidence == null ? 0 : targetEvidence.trials();
+            double failureConfidence = evidenceTrials == 0 ? 0.0
+                    : evidenceTrials / (evidenceTrials + 8.0);
+            double failurePenalty = targetEvidence == null ? 0.0
+                    : 0.9 * targetEvidence.failureRate() * failureConfidence;
+            double novelty = (1.0 / Math.sqrt(1.0 + coverage)) * (1.0 - failurePenalty);
             double reachability = maxReachability(candidate, entry.getValue(), feature);
             double exploration = Math.sqrt(2.0 * Math.log(2.0 + Math.max(1, totalTrials.get())) / (1.0 + trials));
-            double score = novelty + reachability + exploration;
+            // An unseen feature bucket gets a bounded fresh probe allowance. This lets a new
+            // query/template shape recover a direction without making a permanently failed
+            // direction competitive for the same feature.
+            double featureExploration = feature != null && targetEvidence == null ? 0.25 : 0.0;
+            double score = novelty + reachability + exploration + featureExploration;
             if (score > best || score == best && Randomly.getBoolean()) {
                 best = score;
                 selected = new Decision(candidate, score, reachability, exploration, 0.0);
@@ -450,10 +464,42 @@ public final class EcstHistory {
         }
         double best = Double.NEGATIVE_INFINITY;
         for (String candidate : candidates) {
-            Stats stats = selectTransformStats(targetKey, candidate, feature);
+            Stats stats = selectTargetTransformStats(targetKey, candidate, feature);
             best = Math.max(best, stats == null ? 0.5 : stats.successRate());
         }
         return best;
+    }
+
+    /** Target-level reachability must not reuse stale global evidence for a new feature bucket. */
+    private Stats selectTargetTransformStats(String targetKey, String transformKey, EcstFeature feature) {
+        if (feature == null) {
+            return selectTransformStats(targetKey, transformKey, null);
+        }
+        Stats exact = featureTransformStats.get(featureTransformKey(targetKey, transformKey, feature));
+        if (hasEnoughFeatureSamples(exact)) {
+            return exact;
+        }
+        Stats coarse = coarseFeatureTransformStats.get(coarseFeatureTransformKey(targetKey, transformKey, feature));
+        if (hasEnoughFeatureSamples(coarse)) {
+            return coarse;
+        }
+        return null;
+    }
+
+    /** Selects target evidence at the same feature granularity used by target scheduling. */
+    private Stats selectTargetStats(String targetKey, EcstFeature feature) {
+        if (feature != null) {
+            Stats exact = featureTargetStats.get(featureTargetKey(targetKey, feature));
+            if (hasEnoughFeatureSamples(exact)) {
+                return exact;
+            }
+            Stats coarse = coarseFeatureTargetStats.get(coarseFeatureTargetKey(targetKey, feature));
+            if (hasEnoughFeatureSamples(coarse)) {
+                return coarse;
+            }
+            return null;
+        }
+        return targetStats.get(TargetKey.parse(targetKey));
     }
 
     public long getTotalTrials() {

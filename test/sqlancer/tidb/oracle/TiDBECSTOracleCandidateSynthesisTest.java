@@ -182,6 +182,25 @@ public class TiDBECSTOracleCandidateSynthesisTest {
     }
 
     @Test
+    void rootToCopRejectsRootOnlyEmbeddingContexts() {
+        EcstTarget rootToCop = new EcstTarget("root-cop", EcstContextDimension.LOCATION, "ROOT", "COP_TIKV");
+        EcstTransformationConfig rootProjection = new EcstTransformationConfig(
+                EcstTransformationConfig.Representation.VERTICAL_PARTITIONED,
+                EcstTransformationConfig.PartitionLayout.SAME_SIDE,
+                EcstTransformationConfig.Reconstruction.JOIN,
+                EcstTransformationConfig.ExpressionContext.SELECT);
+        EcstTransformationConfig innerProjection = new EcstTransformationConfig(
+                EcstTransformationConfig.Representation.VERTICAL_PARTITIONED,
+                EcstTransformationConfig.PartitionLayout.SAME_SIDE,
+                EcstTransformationConfig.Reconstruction.JOIN,
+                EcstTransformationConfig.ExpressionContext.INNER_SELECT);
+        assertTrue(!TiDBECSTOracle.structurallyApplicableForTest(rootToCop, rootProjection, "SAME_SIDE",
+                TiDBECSTOracle.QueryShape.synthetic()));
+        assertTrue(TiDBECSTOracle.structurallyApplicableForTest(rootToCop, innerProjection, "SAME_SIDE",
+                TiDBECSTOracle.QueryShape.synthetic()));
+    }
+
+    @Test
     void directComparisonFilterCanPrepareAnAccessPath() {
         assertTrue(TiDBVerticalPartitioningOracle.isSargableAccessPredicateForTest("`c0` > 0", "c0"));
         assertTrue(!TiDBVerticalPartitioningOracle.isSargableAccessPredicateForTest(

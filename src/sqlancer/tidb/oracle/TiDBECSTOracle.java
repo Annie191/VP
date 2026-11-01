@@ -662,8 +662,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         switch (target.getDimension()) {
         case LOCATION:
             if (isPushdownLocation(target.getTo())) {
-                // A complete cross-side expression cannot be evaluated by one Cop scan.
-                return !crossSide;
+                // Root -> Cop needs a predicate or an inner projection that TiDB can push
+                // into one scan. A top-level projection/HAVING/Join-ON shape leaves the
+                // expression at the root and is therefore not a useful induction template.
+                return !crossSide && isRootToCopInductionContext(config.getExpressionContext());
             }
             if (isPushdownLocation(target.getFrom()) && "ROOT".equals(target.getTo())) {
                 // A join/derived boundary, including a cross-side dependency, can lift evaluation to Root.
@@ -698,6 +700,13 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
     private static boolean isPushdownLocation(String location) {
         return "COP_TIKV".equals(location) || "COP_TIFLASH".equals(location);
+    }
+
+    private static boolean isRootToCopInductionContext(
+            EcstTransformationConfig.ExpressionContext context) {
+        return context == EcstTransformationConfig.ExpressionContext.WHERE
+                || context == EcstTransformationConfig.ExpressionContext.INNER_WHERE
+                || context == EcstTransformationConfig.ExpressionContext.INNER_SELECT;
     }
 
     private static boolean isApplicableToTiDb(EcstTransformationConfig config, QueryShape shape) {
