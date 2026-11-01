@@ -72,6 +72,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int seedSkipRecordsWritten;
     private volatile String lastCommittedCaseId = "";
     private final List<String> candidateRejectReasons = new ArrayList<>();
+    private static final int MAX_CONFIG_ATTEMPTS_PER_SEED = 4;
 
     public TiDBECSTOracle(TiDBGlobalState state) {
         this.state = state;
@@ -189,6 +190,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             }
             EcstTarget target = null;
             EcstTransformationConfig config = null;
+            Map<String, List<EcstTransformationConfig>> candidateSets = null;
             try {
                 List<EcstTarget> validTargets = supportedTargets(seed, seedContext);
                 if (seedParsed.extractionStatus() == TiDBExecutionContextAnalyzer.ExtractionStatus.EXPRESSION_NOT_FOUND
@@ -206,7 +208,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     cleanupSeed(seed);
                     continue;
                 }
-                Map<String, List<EcstTransformationConfig>> candidateSets = synthesizeCandidateSets(seed, seedContext,
+                candidateSets = synthesizeCandidateSets(seed, seedContext,
                         validTargets);
                 if (candidateSets.isEmpty()) {
                     noConfigurationSkips++;
@@ -216,8 +218,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     continue;
                 }
                 target = chooseTarget(candidateSets, seed.features());
-                List<EcstTransformationConfig> applicable = candidateSets.get(target.getKey());
-                config = chooseConfig(target, applicable, seed);
             } catch (Exception | AssertionError failure) {
                 recordFailure(config == null ? EcstPhase.CONFIGURATION_SYNTHESIS : EcstPhase.TARGET_SELECTION,
                         seed, target, config, failure);
@@ -227,65 +227,72 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             }
             EcstFeature feature = featureForSeed(seed);
             long started = System.nanoTime();
-            TiDBVerticalPartitioningOracle.EcstCase testCase;
-            try {
-                testCase = vp.applyEcstTransformation(seed, config, target);
-            } catch (IgnoreMeException | IllegalArgumentException ignored) {
-                creationSkips++;
-                recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, ignored);
-                cleanupSeed(seed);
-                continue;
-            } catch (Exception failure) {
-                recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, failure);
-                cleanupSeed(seed);
-                if (isRecoverable(failure)) continue;
-                throw failure;
-            } catch (AssertionError failure) {
-                recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, failure);
-                cleanupSeed(seed);
-                throw failure;
-            }
-            try {
-                EcstContext refreshedSeedContext = analyzer.extractContext(testCase.getOriginalQuery(),
-                        testCase.getOperation()).context();
-                if (!sameContext(seedContext, refreshedSeedContext)) {
-                    recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config, testCase,
-                            new IllegalStateException("SEED_CONTEXT_CHANGED: seed=" + seedContext + ", refreshed="
-                                    + refreshedSeedContext));
+            TiDBVerticalPartitioningOracle.EcstCase testCase = null;
+            List<EcstTransformationConfig> remaining = new ArrayList<>(candidateSets.get(target.getKey()));
+            int candidateAttempts = 0;
+            while (testCase == null && !remaining.isEmpty()
+                    && candidateAttempts++ < MAX_CONFIG_ATTEMPTS_PER_SEED) {
+                config = chooseConfig(target, remaining, seed);
+                remaining.remove(config);
+                TiDBVerticalPartitioningOracle.EcstCase candidate;
+                try {
+                    candidate = vp.applyEcstTransformation(seed, config, target);
+                } catch (IgnoreMeException | IllegalArgumentException ignored) {
+                    creationSkips++;
+                    recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, ignored);
+                    continue;
+                } catch (Exception failure) {
+                    recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, failure);
+                    if (isRecoverable(failure)) continue;
                     cleanupSeed(seed);
+                    throw failure;
+                } catch (AssertionError failure) {
+                    recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, failure);
+                    cleanupSeed(seed);
+                    throw failure;
+                }
+                try {
+                    EcstContext refreshedSeedContext = analyzer.extractContext(candidate.getOriginalQuery(),
+                            candidate.getOperation()).context();
+                    if (!sameContext(seedContext, refreshedSeedContext)) {
+                        recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config,
+                                new IllegalStateException("SEED_CONTEXT_CHANGED: seed=" + seedContext + ", refreshed="
+                                        + refreshedSeedContext));
+                        continue;
+                    }
+                } catch (Exception failure) {
+                    recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config, candidate, failure);
+                    if (isRecoverable(failure)) continue;
+                    cleanupSeed(seed);
+                    throw failure;
+                }
+                TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult semantic;
+                try {
+                    semantic = vp.checkSemanticPreconditions(candidate);
+                } catch (Exception | AssertionError failure) {
+                    recordFailure(EcstPhase.PRECONDITION_CHECK, seed, target, config, candidate, failure);
+                    if (isRecoverable(failure)) continue;
+                    cleanupSeed(seed);
+                    throw failure;
+                }
+                if (!semantic.isValid()) {
+                    semanticPreconditionRejects++;
+                    writeCaseRecord(target, config, candidate, null, null, semantic);
                     continue;
                 }
-            } catch (Exception failure) {
-                recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config, testCase, failure);
-                cleanupSeed(seed);
-                if (isRecoverable(failure)) continue;
-                throw failure;
+                TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult data = vp
+                        .validateDataPreconditions(candidate);
+                if (data.getStatus() != TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult.Status.DATA_VALID) {
+                    semanticPreconditionRejects++;
+                    writeCaseRecord(target, config, candidate, null, null, data);
+                    continue;
+                }
+                testCase = candidate;
             }
-            TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult semantic;
-            try {
-                semantic = vp.checkSemanticPreconditions(testCase);
-            } catch (Exception | AssertionError failure) {
-                recordFailure(EcstPhase.PRECONDITION_CHECK, seed, target, config, testCase, failure);
-                cleanupSeed(seed);
-                if (isRecoverable(failure)) continue;
-                throw failure;
-            }
-            if (!semantic.isValid()) {
-                semanticPreconditionRejects++;
-                writeCaseRecord(target, config, testCase, null, null, semantic);
-                cleanupSeed(seed);
-                continue;
-            }
-            TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult data;
-            try {
-                data = vp.validateDataPreconditions(testCase);
-            } catch (Exception | AssertionError failure) {
-                data = TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult
-                        .unknown("data validation unavailable: " + failure.getMessage());
-            }
-            if (data.getStatus() != TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult.Status.DATA_VALID) {
-                semanticPreconditionRejects++;
-                writeCaseRecord(target, config, testCase, null, null, data);
+            if (testCase == null) {
+                noConfigurationSkips++;
+                candidateSetSkips++;
+                candidateRejectReasons.add(target.getKey() + ": all candidate configurations failed or were exhausted");
                 cleanupSeed(seed);
                 continue;
             }
