@@ -425,6 +425,20 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void charCastLengthsAreCanonicalizedAndComparedStrictly() {
+        TiDBExecutionContextAnalyzer.ExprFingerprint length10 = TiDBExecutionContextAnalyzer.ExprFingerprint
+                .parse("CAST(`c0` AS CHAR(10))");
+        TiDBExecutionContextAnalyzer.ExprFingerprint length20 = TiDBExecutionContextAnalyzer.ExprFingerprint
+                .parse("CAST(`c0` AS CHAR(20))");
+        TiDBExecutionContextAnalyzer.ExprFingerprint planLength10 = TiDBExecutionContextAnalyzer.ExprFingerprint
+                .parse("cast(c0,sql_char(10))");
+
+        assertEquals(length10, planLength10);
+        assertEquals(length10.hashCode(), planLength10.hashCode());
+        assertNotEquals(length10, length20);
+    }
+
+    @Test
     void doesNotEraseFromBinaryCastMapping() {
         String plan = "Projection | 1 root | | char_length(cast(from_binary(test.t.c0), var_string(19)))->Column#1\n";
         TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,

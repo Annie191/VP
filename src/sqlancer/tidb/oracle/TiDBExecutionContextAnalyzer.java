@@ -1138,9 +1138,21 @@ public final class TiDBExecutionContextAnalyzer {
         }
 
         private static String canonicalizeSqlCasts(String expression) {
-            return expression == null ? "" : expression.replaceAll(
-                    "(?i)cast\\(\\s*([^(),]+?)\\s+as\\s+char(?:\\s*\\(\\s*(\\d+)\\s*\\))?\\s*\\)",
-                    "cast($1,sql_char$2)");
+            if (expression == null) {
+                return "";
+            }
+            Matcher matcher = Pattern.compile(
+                    "(?i)cast\\(\\s*([^(),]+?)\\s+as\\s+char(?:\\s*\\(\\s*(\\d+)\\s*\\))?\\s*\\)")
+                    .matcher(expression);
+            StringBuffer result = new StringBuffer();
+            while (matcher.find()) {
+                String length = matcher.group(2);
+                String replacement = "cast(" + matcher.group(1) + ",sql_char"
+                        + (length == null ? "" : "(" + length + ")") + ")";
+                matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
+            }
+            matcher.appendTail(result);
+            return result.toString();
         }
 
         private static ExprFingerprint parseSqlCase(String expression) {
@@ -1404,17 +1416,12 @@ public final class TiDBExecutionContextAnalyzer {
         }
 
         private boolean constantsEqual(ExprFingerprint that) {
-            if ("CAST".equals(kind) && "CHAR".equals(resultType)) {
-                return "*".equals(constant) || "*".equals(that.constant)
-                        || java.util.Objects.equals(constant, that.constant);
-            }
             return java.util.Objects.equals(constant, that.constant);
         }
 
         @Override
         public int hashCode() {
-            String hashConstant = "CAST".equals(kind) && "CHAR".equals(resultType) ? "*" : constant;
-            return java.util.Objects.hash(kind, resultType, children, column, hashConstant);
+            return java.util.Objects.hash(kind, resultType, children, column, constant);
         }
     }
 
