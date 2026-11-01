@@ -21,6 +21,7 @@ import sqlancer.common.oracle.ecst.EcstContextDimension;
 import sqlancer.common.oracle.ecst.EcstFeature;
 import sqlancer.common.oracle.ecst.EcstFailureRecord;
 import sqlancer.common.oracle.ecst.EcstHistory;
+import sqlancer.common.oracle.ecst.EcstHistoricalRule;
 import sqlancer.common.oracle.ecst.EcstObservation;
 import sqlancer.common.oracle.ecst.EcstPhase;
 import sqlancer.common.oracle.ecst.EcstRuleLibrary;
@@ -40,6 +41,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private final TiDBVerticalPartitioningOracle vp;
     private final TiDBExecutionContextAnalyzer analyzer;
     private final TiDBEcstCapabilities capabilities;
+    private final List<EcstHistoricalRule> historicalRules = TiDBEcstRuleLibrary.historicalRules();
     private final EcstHistory history = new EcstHistory();
     private final List<EcstTarget> targets;
     private final EcstSeedPool seedPool;
@@ -406,8 +408,24 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         }
         lastSynthesisSummary = "capabilities=" + capabilities.describe() + "; queryShape=" + shape
                 + "; accessPathPreparation=" + seed.getAccessPathPreparation() + "; "
-                + String.join("; ", synthesis);
+                + "historicalRules=" + historicalRules.size() + ";historicalMatches="
+                + historicalRuleMatches(seed, result) + "; " + String.join("; ", synthesis);
         return result;
+    }
+
+    private int historicalRuleMatches(TiDBVerticalPartitioningOracle.EcstSeed seed,
+            Map<String, List<EcstTransformationConfig>> candidates) {
+        int matches = 0;
+        for (EcstHistoricalRule rule : historicalRules) {
+            List<EcstTransformationConfig> applicable = candidates.get(rule.getTargetKey());
+            if (applicable == null || !rule.getConfiguration().contains(seed.getExpressionContext().name())) {
+                continue;
+            }
+            if (applicable.stream().anyMatch(config -> config.stableKey().equals(rule.getConfiguration()))) {
+                matches++;
+            }
+        }
+        return matches;
     }
 
     /** Resolves S_valid from the actual seed execution context, including direction. */

@@ -1,0 +1,15 @@
+SELECT
+  CAST(
+    CASE '2025-02-01 20:39:39'
+      WHEN c0 THEN ((false) REGEXP NULL)
+      ELSE CAST(c2 AS TIME)
+    END AS DATETIME
+  ) AS val
+FROM src
+GROUP BY
+  CAST(
+    CASE '2025-02-01 20:39:39'
+      WHEN c0 THEN ((false) REGEXP NULL)
+      ELSE CAST(c2 AS TIME)
+    END AS DATETIME
+  );

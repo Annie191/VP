@@ -1,0 +1,12 @@
+-- 单表：返回 80
+SELECT MAX(
+  BIT_LENGTH(
+    CASE c0
+      WHEN ((BINARY id) | (id NOT LIKE c0)) THEN NULL
+      ELSE CAST(0.7772428249950747 AS TIME)
+    END
+  )
+) AS single_val
+FROM src
+WHERE 1
+ORDER BY id;

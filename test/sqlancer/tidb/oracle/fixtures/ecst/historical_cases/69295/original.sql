@@ -1,0 +1,11 @@
+-- 单表：返回 1 行
+SELECT 1 AS ok
+FROM src
+WHERE DATE_FORMAT(
+  CASE 0
+    WHEN CAST(id AS CHAR) THEN NULL
+    WHEN TRUE THEN c0
+    ELSE CAST(c0 AS DATE)
+  END,
+  (c0 OR 1) NOT LIKE TRUE
+) | id;
