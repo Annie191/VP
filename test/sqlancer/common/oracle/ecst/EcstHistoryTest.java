@@ -122,6 +122,22 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void explorationUsesGlobalTrialsWhenFeatureBucketChanges() {
+        EcstFeature observed = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "SINGLE_DEPENDENCY");
+        EcstFeature query = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "MULTI_DEPENDENCY");
+        EcstHistory history = new EcstHistory();
+        for (int i = 0; i < 6; i++) {
+            history.observe("target", "config", EcstShiftStatus.SUCCESS, Set.of(), 1, observed);
+        }
+        EcstHistory.Decision targetDecision = history.chooseTargetDecision(
+                Map.of("target", List.of("config")), query);
+        EcstHistory.Decision transformDecision = history.chooseTransformDecision(
+                "target", Map.of("config", query));
+        assertTrue(targetDecision.getExploration() < Math.sqrt(2.0 * Math.log(2.0) / 1.0));
+        assertTrue(transformDecision.getExploration() < Math.sqrt(2.0 * Math.log(2.0 + 6.0) / 1.0));
+    }
+
+    @Test
     public void reachabilityUsesObservedSuccessRateBelowPriorFloor() {
         EcstHistory history = new EcstHistory();
         for (int i = 0; i < 8; i++) {

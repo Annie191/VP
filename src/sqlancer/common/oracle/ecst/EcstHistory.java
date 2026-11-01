@@ -378,8 +378,9 @@ public final class EcstHistory {
         for (Map.Entry<String, EcstFeature> candidateEntry : candidates.entrySet()) {
             String candidate = candidateEntry.getKey();
             Stats stats = selectTransformStats(targetKey, candidate, candidateEntry.getValue());
+            Stats globalConfig = configStats.get(new ConfigTargetKey(candidate, TargetKey.parse(targetKey)));
             double rate = stats == null ? 0.5 : stats.successRate();
-            long allTrials = stats == null ? 0 : stats.trials();
+            long allTrials = globalConfig == null ? 0 : globalConfig.trials();
             double exploration = Math.sqrt(
                     2.0 * Math.log(2.0 + Math.max(1, targetTrials)) / (1.0 + allTrials));
             double costPenalty = stats == null || allTrials == 0 ? 0.0
@@ -420,9 +421,9 @@ public final class EcstHistory {
         double best = Double.NEGATIVE_INFINITY;
         for (Map.Entry<String, ? extends Collection<String>> entry : candidateConfigs.entrySet()) {
             String candidate = entry.getKey();
-            Stats stats = selectTargetStats(candidate, feature);
+            Stats globalTarget = targetStats.get(TargetKey.parse(candidate));
             long coverage = targetCoverage(candidate);
-            long trials = stats == null ? 0 : stats.trials();
+            long trials = globalTarget == null ? 0 : globalTarget.trials();
             double novelty = 1.0 / Math.sqrt(1.0 + coverage);
             double reachability = maxReachability(candidate, entry.getValue(), feature);
             double exploration = Math.sqrt(2.0 * Math.log(2.0 + Math.max(1, totalTrials)) / (1.0 + trials));
@@ -614,20 +615,6 @@ public final class EcstHistory {
             }
         }
         return configStats.get(new ConfigTargetKey(transformKey, TargetKey.parse(targetKey)));
-    }
-
-    private Stats selectTargetStats(String targetKey, EcstFeature feature) {
-        if (feature != null) {
-            Stats exact = featureTargetStats.get(featureTargetKey(targetKey, feature));
-            if (hasEnoughFeatureSamples(exact)) {
-                return exact;
-            }
-            Stats coarse = coarseFeatureTargetStats.get(coarseFeatureTargetKey(targetKey, feature));
-            if (hasEnoughFeatureSamples(coarse)) {
-                return coarse;
-            }
-        }
-        return targetStats.get(TargetKey.parse(targetKey));
     }
 
     private static boolean hasEnoughFeatureSamples(Stats stats) {
