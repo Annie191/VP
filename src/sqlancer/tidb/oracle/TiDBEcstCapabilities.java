@@ -37,13 +37,15 @@ public final class TiDBEcstCapabilities {
     }
 
     public boolean supportsRepresentation(EcstTransformationConfig.Representation representation) {
-        return representation == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED;
+        return representation == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
+                || representation == EcstTransformationConfig.Representation.VIEW;
     }
 
     public boolean supportsReconstruction(EcstTransformationConfig.Reconstruction reconstruction) {
         return reconstruction == EcstTransformationConfig.Reconstruction.JOIN
                 || reconstruction == EcstTransformationConfig.Reconstruction.DERIVED_TABLE
-                || reconstruction == EcstTransformationConfig.Reconstruction.CTE;
+                || reconstruction == EcstTransformationConfig.Reconstruction.CTE
+                || reconstruction == EcstTransformationConfig.Reconstruction.VIEW;
     }
 
     public boolean supportsExpressionContext(EcstTransformationConfig.ExpressionContext context) {

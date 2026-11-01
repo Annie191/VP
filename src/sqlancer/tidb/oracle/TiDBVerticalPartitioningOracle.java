@@ -118,6 +118,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     public enum HavingTemplate {
         GROUP_DEPENDENCIES,
         GROUP_DEPENDENCIES_USE_ALIAS,
+        GROUP_DEPENDENCIES_MULTIROW,
+        GROUP_DEPENDENCIES_MULTIROW_USE_ALIAS,
         GROUP_EXPRESSION_PROBE
     }
 
@@ -235,6 +237,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         private final List<String> extraSetupStatements;
         private final String description;
         private final boolean orderedComparisonEnabled;
+        private boolean setupApplied;
 
         private VpQueryPair(VpSchema schema, ReconstructionStrategy reconstructionStrategy, String singleQuery,
                 String splitQuery, List<String> extraSetupStatements, String description,
@@ -982,7 +985,10 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                     filterPredicate);
         HavingTemplate havingTemplate = context == EcstTransformationConfig.ExpressionContext.HAVING
                 ? Randomly.fromOptions(HavingTemplate.GROUP_DEPENDENCIES,
-                        HavingTemplate.GROUP_DEPENDENCIES_USE_ALIAS)
+                        HavingTemplate.GROUP_DEPENDENCIES_USE_ALIAS,
+                        HavingTemplate.GROUP_DEPENDENCIES_MULTIROW,
+                        HavingTemplate.GROUP_DEPENDENCIES_MULTIROW_USE_ALIAS,
+                        HavingTemplate.GROUP_EXPRESSION_PROBE)
                 : null;
         String originalQuery = buildEcstSeedQuery(schema, targetExpression, filterPredicate, context,
                 dependencies, havingTemplate);
@@ -1118,13 +1124,18 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 return "SELECT MIN(" + quote(ROW_ID) + ") AS " + quote(ROW_ID) + ", " + targetExpression
                         + " AS ecst_value FROM "
                         + quote(schema.sourceTable) + " GROUP BY " + targetExpression
-                        + " HAVING " + predicate;
+                        + " HAVING COUNT(*) > 1 AND (" + predicate + ")";
             }
-            String having = havingTemplate == HavingTemplate.GROUP_DEPENDENCIES_USE_ALIAS ? "ecst_value > 0"
-                    : predicate;
+            boolean multiRow = havingTemplate == HavingTemplate.GROUP_DEPENDENCIES_MULTIROW
+                    || havingTemplate == HavingTemplate.GROUP_DEPENDENCIES_MULTIROW_USE_ALIAS;
+            boolean useAlias = havingTemplate == HavingTemplate.GROUP_DEPENDENCIES_USE_ALIAS
+                    || havingTemplate == HavingTemplate.GROUP_DEPENDENCIES_MULTIROW_USE_ALIAS;
+            String havingPredicate = useAlias ? "ecst_value > 0" : predicate;
+            String having = multiRow ? "COUNT(*) > 1 AND (" + havingPredicate + ")" : havingPredicate;
+            String groupBy = multiRow ? dependencyGroup : quote(ROW_ID) + ", " + dependencyGroup;
             return "SELECT MIN(" + quote(ROW_ID) + ") AS " + quote(ROW_ID) + ", " + targetExpression
                     + " AS ecst_value FROM "
-                    + quote(schema.sourceTable) + " GROUP BY " + quote(ROW_ID) + ", " + dependencyGroup
+                    + quote(schema.sourceTable) + " GROUP BY " + groupBy
                     + " HAVING " + having;
         default:
             throw new IllegalArgumentException("Unsupported ECST seed context: " + context);
@@ -1140,6 +1151,17 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 + " GROUP BY " + quote(ROW_ID) + ", " + targetExpression + " HAVING " + targetExpression + " > 0";
     }
 
+    String buildHavingMultiRowProbeForTest(String sourceTable, String targetExpression,
+            List<String> dependencies) {
+        if (dependencies == null || dependencies.isEmpty()) {
+            throw new IllegalArgumentException("HAVING probe requires dependencies");
+        }
+        String groupBy = dependencies.stream().map(this::quote).collect(Collectors.joining(", "));
+        return "SELECT MIN(" + quote(ROW_ID) + ") AS " + quote(ROW_ID) + ", " + targetExpression
+                + " AS ecst_value FROM " + quote(sourceTable) + " GROUP BY " + groupBy
+                + " HAVING COUNT(*) > 1 AND (" + targetExpression + " > 0)";
+    }
+
     /** Applies the selected ECST transformation to an existing source seed. */
     public EcstCase applyEcstTransformation(EcstSeed seed, EcstTransformationConfig config) throws Exception {
         return applyEcstTransformation(seed, config, null);
@@ -1149,7 +1171,10 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     public EcstCase applyEcstTransformation(EcstSeed seed, EcstTransformationConfig config, EcstTarget target)
             throws Exception {
         Objects.requireNonNull(seed, "seed");
-        if (config.getRepresentation() != EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
+        boolean vertical = config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED;
+        boolean view = config.getRepresentation() == EcstTransformationConfig.Representation.VIEW;
+        if ((!vertical && !view) || view && config.getReconstruction() != EcstTransformationConfig.Reconstruction.VIEW
+                || vertical && config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW
                 || !isEmbeddingCompatible(seed.expressionContext, config.getExpressionContext())) {
             throw new IgnoreMeException();
         }
@@ -1163,6 +1188,9 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             break;
         case CTE:
             reconstructionStrategy = ReconstructionStrategy.CTE;
+            break;
+        case VIEW:
+            reconstructionStrategy = ReconstructionStrategy.VIEW;
             break;
         default:
             throw new IgnoreMeException();
@@ -1287,6 +1315,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     /** Compatibility wrapper for callers that still use the old one-stage API. */
     public EcstCase createEcstCase(EcstTransformationConfig config) throws Exception {
         if (config.getRepresentation() != EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
+                && config.getRepresentation() != EcstTransformationConfig.Representation.VIEW
                 || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.ON) {
             throw new IgnoreMeException();
         }
@@ -1315,10 +1344,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     public EcstComparison compareEcstCase(EcstCase ecstCase) throws Exception {
         VpQueryPair pair = ecstCase.pair;
         try {
-            for (String setup : pair.extraSetupStatements) {
-                executeNoSchemaRefresh(setup);
-                pair.schema.setupStatements.add(setup);
-            }
+            prepareEcstCase(ecstCase);
             RowIdValidation rowIds = validateRowIdBijection(pair.schema);
             if (!rowIds.valid()) {
                 return incomparable("row-id bijection failed: " + rowIds.reason);
@@ -2759,7 +2785,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 ? qualifyForReconstruction(seed.targetExpression, vp)
                 : null;
         if (strategy != ReconstructionStrategy.JOIN && strategy != ReconstructionStrategy.DERIVED_TABLE
-                && strategy != ReconstructionStrategy.CTE) {
+                && strategy != ReconstructionStrategy.CTE && strategy != ReconstructionStrategy.VIEW) {
             throw new IgnoreMeException();
         }
         String projection = joinProjection(vp, "l", "r", false, projectionExpression);
@@ -2783,7 +2809,26 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             return "(WITH l AS (SELECT * FROM " + quote(vp.leftTable) + "), r AS (SELECT * FROM "
                     + quote(vp.rightTable) + ") SELECT " + projection + from + ") " + quote(vp.sourceTable);
         }
+        if (strategy == ReconstructionStrategy.VIEW) {
+            extraSetup.add("DROP VIEW IF EXISTS " + quote(vp.viewName));
+            extraSetup.add("CREATE VIEW " + quote(vp.viewName) + " AS SELECT " + projection + from);
+            return quote(vp.viewName) + " " + quote(vp.sourceTable);
+        }
         return reconstructedSubquery(vp, projection, from);
+    }
+
+    /** Applies deferred view setup before EXPLAIN can inspect a transformed query. */
+    public void prepareEcstCase(EcstCase ecstCase) throws Exception {
+        if (ecstCase == null || ecstCase.pair == null || ecstCase.pair.setupApplied) {
+            return;
+        }
+        for (String setup : ecstCase.pair.extraSetupStatements) {
+            executeNoSchemaRefresh(setup);
+            if (!ecstCase.pair.schema.setupStatements.contains(setup)) {
+                ecstCase.pair.schema.setupStatements.add(setup);
+            }
+        }
+        ecstCase.pair.setupApplied = true;
     }
 
     private String embedTargetOperation(String singleQuery, String relation, VpSchema vp, EcstSeed seed,

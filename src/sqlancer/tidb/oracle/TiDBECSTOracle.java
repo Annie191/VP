@@ -298,6 +298,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             }
             EcstObservation observation;
             try {
+                vp.prepareEcstCase(testCase);
                 observation = analyzer.analyze(testCase.getOriginalQuery(), testCase.getTransformedQuery(),
                         testCase.getOperation(), target);
             } catch (Exception | AssertionError failure) {
@@ -655,7 +656,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         }
         boolean boundaryReconstruction = config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
                 || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE
-                || config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE;
+                || config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE
+                || config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW;
         if (!boundaryReconstruction) {
             return false;
         }
@@ -710,10 +712,12 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     }
 
     private static boolean isApplicableToTiDb(EcstTransformationConfig config, QueryShape shape) {
-        return config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
-                && (config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
+        boolean vertical = config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED;
+        boolean view = config.getRepresentation() == EcstTransformationConfig.Representation.VIEW;
+        return (vertical && (config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
                         || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE
                         || config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE)
+                || view && config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW)
                 && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
                         || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.SELECT
                         || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING

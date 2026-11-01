@@ -18,9 +18,12 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         TiDBEcstCapabilities capabilities = new TiDBEcstCapabilities();
 
         assertTrue(capabilities.supportsRepresentation(EcstTransformationConfig.Representation.VERTICAL_PARTITIONED));
+        assertTrue(capabilities.supportsRepresentation(EcstTransformationConfig.Representation.VIEW));
+        assertTrue(!capabilities.supportsRepresentation(EcstTransformationConfig.Representation.REPLICATED));
         assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.JOIN));
         assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.DERIVED_TABLE));
         assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.CTE));
+        assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.VIEW));
         assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.WHERE));
         assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.SELECT));
         assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.HAVING));
@@ -46,6 +49,15 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(plain.hasProjection());
         assertTrue(aggregate.hasAggregation());
         assertTrue(aggregate.hasProjection());
+    }
+
+    @Test
+    void havingCanUseNonUniqueGroupsAndCount() {
+        TiDBVerticalPartitioningOracle oracle = new TiDBVerticalPartitioningOracle(null, false);
+        String query = oracle.buildHavingMultiRowProbeForTest("source", "`c0`", List.of("c0"));
+        assertTrue(query.contains("GROUP BY `c0`"));
+        assertTrue(!query.contains("GROUP BY `vp_rowid`"));
+        assertTrue(query.contains("COUNT(*) > 1"));
     }
 
     @Test
@@ -77,6 +89,15 @@ public class TiDBECSTOracleCandidateSynthesisTest {
                 == EcstTransformationConfig.ExpressionContext.INNER_WHERE));
         assertTrue(configurations.stream().anyMatch(c -> c.getExpressionContext()
                 == EcstTransformationConfig.ExpressionContext.INNER_SELECT));
+    }
+
+    @Test
+    void viewRepresentationHasAnExplicitMaterializationConfiguration() {
+        List<EcstTransformationConfig> configurations = TiDBECSTOracle.applicableConfigurations(
+                new EcstTarget("TIDB_LOCATION_SHIFT", EcstContextDimension.LOCATION, "ROOT", "COP_TIKV"));
+        assertTrue(configurations.stream().anyMatch(c -> c.getRepresentation()
+                == EcstTransformationConfig.Representation.VIEW
+                && c.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW));
     }
 
     @Test
