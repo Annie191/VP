@@ -13,10 +13,13 @@ public final class TiDBEcstRuleLibrary {
     public static List<EcstHistoricalRule> historicalRules() {
         List<EcstHistoricalRule> result = new ArrayList<>();
         for (TiDBEcstHistoricalCase historical : TiDBEcstHistoricalCase.all()) {
-            result.add(new EcstHistoricalRule(
-                    "TiDB historical VP difference " + historical.getIssue(),
-                    historical.getFamily(), historical.targetKey(), historical.configKey(),
-                    List.of(historical.getIssue()), historical.getEvidence()));
+            for (TiDBEcstHistoricalCase.ObservedTransition transition : historical.observedTransitions()) {
+                result.add(new EcstHistoricalRule(
+                        "TiDB historical VP difference " + historical.getIssue() + " "
+                                + transition.getDimension(),
+                        historical.getFamily(), transition.targetKey(), historical.configKey(),
+                        List.of(historical.getIssue()), List.of(transition.getEvidence())));
+            }
         }
         return result;
     }

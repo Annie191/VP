@@ -49,9 +49,12 @@ public class TiDBEcstHistoricalCaseTest {
     @Test
     void historicalRulesExposeConcreteBoundaryAndConfigurationEvidence() {
         List<EcstHistoricalRule> rules = TiDBEcstRuleLibrary.historicalRules();
-        assertEquals(16, rules.size());
+        assertTrue(rules.size() > 16);
         assertTrue(rules.stream().anyMatch(rule -> rule.getTargetKey().contains("LOCATION_COP_TIKV_TO_ROOT")));
         assertTrue(rules.stream().anyMatch(rule -> rule.getTargetKey().contains("ACCESS_PATH_INDEXREADER_TO_TABLEFULLSCAN")));
+        assertTrue(rules.stream().anyMatch(rule -> rule.getTargetKey().contains("OPERATOR_HASHAGG_TO_PROJECTION")));
+        assertTrue(rules.stream().anyMatch(rule -> rule.getTargetKey().contains("OPERATOR_SELECTION_TO_MERGEJOIN")));
+        assertTrue(rules.stream().anyMatch(rule -> rule.getTargetKey().contains("BOUNDARY_NON_PUSHDOWN_TO_PUSHDOWN")));
         assertTrue(rules.stream().anyMatch(rule -> rule.getConfiguration().contains("VIEW")));
         assertTrue(rules.stream().anyMatch(rule -> rule.getConfiguration().contains("CTE")));
         assertTrue(rules.stream().allMatch(rule -> !rule.getCaseIds().isEmpty() && !rule.getEvidence().isEmpty()));

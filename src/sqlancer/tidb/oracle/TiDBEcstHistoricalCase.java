@@ -3,6 +3,7 @@ package sqlancer.tidb.oracle;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.ArrayList;
 
 import sqlancer.common.oracle.ecst.EcstContextDimension;
 import sqlancer.common.oracle.ecst.EcstTransformationConfig;
@@ -14,6 +15,66 @@ import sqlancer.common.oracle.ecst.EcstTransformationConfig;
  * feedback loop can use the same target/configuration keys as generated cases.
  */
 public final class TiDBEcstHistoricalCase {
+    public static final class ObservedTransition {
+        private final EcstContextDimension dimension;
+        private final String from;
+        private final String to;
+        private final String evidence;
+
+        private ObservedTransition(EcstContextDimension dimension, String from, String to, String evidence) {
+            this.dimension = dimension;
+            this.from = from;
+            this.to = to;
+            this.evidence = evidence;
+        }
+
+        public EcstContextDimension getDimension() {
+            return dimension;
+        }
+
+        public String getFrom() {
+            return from;
+        }
+
+        public String getTo() {
+            return to;
+        }
+
+        public String getEvidence() {
+            return evidence;
+        }
+
+        public String targetKey() {
+            String family;
+            switch (dimension) {
+            case LOCATION:
+                family = "LOCATION";
+                break;
+            case BOUNDARY:
+                family = "PUSHDOWN";
+                break;
+            case ACCESS_PATH:
+                family = "ACCESS";
+                break;
+            default:
+                family = dimension.name();
+                break;
+            }
+            String source = dimension == EcstContextDimension.BOUNDARY ? boundaryLocation(from) : from;
+            String destination = dimension == EcstContextDimension.BOUNDARY ? boundaryLocation(to) : to;
+            return "TIDB_" + family + "_" + source + "_TO_" + destination;
+        }
+
+        private static String boundaryLocation(String value) {
+            if ("PUSHDOWN".equals(value)) {
+                return "COP";
+            }
+            if ("NON_PUSHDOWN".equals(value)) {
+                return "ROOT";
+            }
+            return value;
+        }
+    }
     private final String issue;
     private final String family;
     private final EcstTransformationConfig.ExpressionContext context;
@@ -88,8 +149,56 @@ public final class TiDBEcstHistoricalCase {
         return evidence;
     }
 
+    /**
+     * All independently visible context changes in the captured plan pair.
+     * The first transition is the case's primary target; the rest are
+     * secondary evidence and are never used to replace the primary target.
+     */
+    public List<ObservedTransition> observedTransitions() {
+        List<ObservedTransition> result = new ArrayList<>();
+        result.add(new ObservedTransition(dimension, from, to, String.join("; ", evidence)));
+        switch (issue) {
+        case "69178":
+        case "69191":
+        case "69292":
+        case "69296":
+        case "69308":
+        case "69358":
+            result.add(new ObservedTransition(EcstContextDimension.OPERATOR, "HASHAGG", "PROJECTION",
+                    "target expression is in cop HashAgg before reconstruction and root Projection after it"));
+            result.add(new ObservedTransition(EcstContextDimension.BOUNDARY, "PUSHDOWN", "NON_PUSHDOWN",
+                    "aggregate expression crosses the cop/root evaluation boundary"));
+            break;
+        case "69294":
+        case "69295":
+        case "69484":
+            result.add(new ObservedTransition(EcstContextDimension.OPERATOR, "SELECTION", "MERGEJOIN",
+                    "target predicate is represented by Join.other cond after reconstruction"));
+            result.add(new ObservedTransition(EcstContextDimension.BOUNDARY, "PUSHDOWN", "NON_PUSHDOWN",
+                    "predicate evaluation moves from cop Selection into the root join"));
+            break;
+        case "69480":
+            result.add(new ObservedTransition(EcstContextDimension.OPERATOR, "TOPN", "SORT",
+                    "ordering is implemented by cop TopN before and root Sort after reconstruction"));
+            result.add(new ObservedTransition(EcstContextDimension.BOUNDARY, "PUSHDOWN", "NON_PUSHDOWN",
+                    "ordering boundary crosses from cop to root"));
+            break;
+        case "69482":
+            result.add(new ObservedTransition(EcstContextDimension.BOUNDARY, "PUSHDOWN", "NON_PUSHDOWN",
+                    "TopN moves from cop below the view to root above the join"));
+            break;
+        case "69598":
+            result.add(new ObservedTransition(EcstContextDimension.BOUNDARY, "NON_PUSHDOWN", "PUSHDOWN",
+                    "correlated rowid condition is pushed from root HashJoin into inner cop Selections"));
+            break;
+        default:
+            break;
+        }
+        return Collections.unmodifiableList(result);
+    }
+
     public String targetKey() {
-        return "TIDB_" + dimension.name() + "_" + from + "_TO_" + to;
+        return new ObservedTransition(dimension, from, to, "").targetKey();
     }
 
     public String configKey() {
