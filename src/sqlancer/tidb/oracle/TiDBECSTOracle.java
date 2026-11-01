@@ -276,6 +276,19 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 cleanupSeed(seed);
                 continue;
             }
+            TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult data;
+            try {
+                data = vp.validateDataPreconditions(testCase);
+            } catch (Exception | AssertionError failure) {
+                data = TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult
+                        .unknown("data validation unavailable: " + failure.getMessage());
+            }
+            if (data.getStatus() != TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult.Status.DATA_VALID) {
+                semanticPreconditionRejects++;
+                writeCaseRecord(target, config, testCase, null, null, data);
+                cleanupSeed(seed);
+                continue;
+            }
             EcstObservation observation;
             try {
                 observation = analyzer.analyze(testCase.getOriginalQuery(), testCase.getTransformedQuery(),
@@ -886,7 +899,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         String comparisonStatus = comparison == null ? "NOT_RUN"
                 : comparison.isComparable() ? comparison.isEqual() ? "COMPARABLE_EQUAL" : "COMPARABLE_MISMATCH"
                         : "INCOMPARABLE";
-        String preconditionStatus = precondition == null ? "VALID" : precondition.isValid() ? "VALID" : "INVALID";
+        String preconditionStatus = precondition == null ? "DATA_VALID" : precondition.getStatus().name();
         if (comparison != null && !comparison.isComparable()) {
             status = "UNKNOWN";
             reason = comparison.getReason();

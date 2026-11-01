@@ -603,18 +603,30 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     public static final class EcstSemanticPreconditionResult {
-        private final List<String> violations;
+        public enum Status {
+            STATIC_LEGAL, DATA_VALID, INVALID, UNKNOWN
+        }
 
-        private EcstSemanticPreconditionResult(List<String> violations) {
+        private final List<String> violations;
+        private final Status status;
+
+        private EcstSemanticPreconditionResult(List<String> violations, Status status) {
             this.violations = List.copyOf(violations);
+            this.status = status;
         }
 
         public boolean isValid() {
-            return violations.isEmpty();
+            return status == Status.STATIC_LEGAL || status == Status.DATA_VALID;
         }
+
+        public Status getStatus() { return status; }
 
         public List<String> getViolations() {
             return violations;
+        }
+
+        public static EcstSemanticPreconditionResult unknown(String reason) {
+            return new EcstSemanticPreconditionResult(List.of(reason == null ? "unknown" : reason), Status.UNKNOWN);
         }
 
         @Override
@@ -1365,7 +1377,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         List<String> violations = new ArrayList<>();
         if (ecstCase == null || ecstCase.pair == null || ecstCase.pair.schema == null) {
             violations.add("missing ECST case or materialized schema");
-            return new EcstSemanticPreconditionResult(violations);
+            return new EcstSemanticPreconditionResult(violations,
+                    EcstSemanticPreconditionResult.Status.UNKNOWN);
         }
         if (ecstCase.targetExpression == null || ecstCase.targetExpression.isEmpty()) {
             violations.add("target expression is empty");
@@ -1425,7 +1438,29 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                     ecstCase.actualLayout, ecstCase.targetDependencies, ecstCase.leftDependencies,
                     ecstCase.rightDependencies));
         }
-        return new EcstSemanticPreconditionResult(violations);
+        return new EcstSemanticPreconditionResult(violations,
+                violations.isEmpty() ? EcstSemanticPreconditionResult.Status.STATIC_LEGAL
+                        : EcstSemanticPreconditionResult.Status.INVALID);
+    }
+
+    /** Validates materialized row identity before plan analysis or result comparison. */
+    public EcstSemanticPreconditionResult validateDataPreconditions(EcstCase ecstCase) {
+        if (ecstCase == null || ecstCase.pair == null || ecstCase.pair.schema == null) {
+            return new EcstSemanticPreconditionResult(List.of("missing ECST case or materialized schema"),
+                    EcstSemanticPreconditionResult.Status.UNKNOWN);
+        }
+        try {
+            RowIdValidation validation = validateRowIdBijection(ecstCase.pair.schema);
+            if (validation.valid()) {
+                return new EcstSemanticPreconditionResult(List.of(),
+                        EcstSemanticPreconditionResult.Status.DATA_VALID);
+            }
+            return new EcstSemanticPreconditionResult(List.of(validation.reason),
+                    EcstSemanticPreconditionResult.Status.INVALID);
+        } catch (SQLException failure) {
+            return new EcstSemanticPreconditionResult(List.of("row-id validation unavailable: " + failure.getMessage()),
+                    EcstSemanticPreconditionResult.Status.UNKNOWN);
+        }
     }
 
     private static List<String> dependencyLayoutViolations(EcstTransformationConfig.PartitionLayout requested,
