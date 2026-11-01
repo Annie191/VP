@@ -1126,7 +1126,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
         ControlledSplitPlan controlled = createControlledSplitPlan(base.columns, dependencies,
                 config.getPartitionLayout());
-        VpSchema vp = reconfigureSeedPartitions(seed.schema, controlled.splitPlan, controlled.splitStrategy, target);
+        VpSchema vp = reconfigureSeedPartitions(seed.schema, controlled.splitPlan, controlled.splitStrategy, target,
+                seed.targetDependencies);
         String targetExpression = seed.targetExpression;
         String singleQuery = seed.originalQuery;
         List<String> extraSetup = new ArrayList<>();
@@ -1169,7 +1170,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     private VpSchema reconfigureSeedPartitions(VpSchema schema, SplitPlan splitPlan, SplitStrategy strategy,
-            EcstTarget target)
+            EcstTarget target, List<String> targetDependencies)
             throws Exception {
         executeNoSchemaRefresh("DROP TABLE IF EXISTS " + quote(schema.rightTable));
         executeNoSchemaRefresh("DROP TABLE IF EXISTS " + quote(schema.leftTable));
@@ -1183,18 +1184,19 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         // The schema object is retained by the seed, so the selected split is the one used by the case.
         createPartitionTables(schema, helperEngineCandidate(schemaBaseInfo(schema)));
         populatePartitionTables(schema);
-        preparePartitionAccessPath(schema, splitPlan, target);
+        preparePartitionAccessPath(schema, splitPlan, target, targetDependencies);
         schema.setupStatements.add("ECST_RECONFIGURE_SPLIT=" + strategy);
         return schema;
     }
 
-    private void preparePartitionAccessPath(VpSchema schema, SplitPlan splitPlan, EcstTarget target) throws Exception {
+    private void preparePartitionAccessPath(VpSchema schema, SplitPlan splitPlan, EcstTarget target,
+            List<String> targetDependencies) throws Exception {
         if (target == null || target.getDimension() != EcstContextDimension.ACCESS_PATH
                 || !("INDEXLOOKUP".equals(target.getTo()) || "INDEXREADER".equals(target.getTo()))) {
             return;
         }
-        createAccessIndex(schema, schema.leftTable, splitPlan.leftColumns, "l");
-        createAccessIndex(schema, schema.rightTable, splitPlan.rightColumns, "r");
+        createAccessIndex(schema, schema.leftTable, splitPlan.leftColumns, targetDependencies, "l");
+        createAccessIndex(schema, schema.rightTable, splitPlan.rightColumns, targetDependencies, "r");
         if (!splitPlan.leftColumns.isEmpty()) {
             executeSetup(schema, "ANALYZE TABLE " + quote(schema.leftTable));
         }
@@ -1203,9 +1205,12 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         }
     }
 
-    private void createAccessIndex(VpSchema schema, String tableName, List<VpColumn> columns, String suffix)
+    private void createAccessIndex(VpSchema schema, String tableName, List<VpColumn> columns,
+            List<String> targetDependencies, String suffix)
             throws Exception {
         List<VpColumn> indexable = columns.stream().filter(column -> isTiDBHelperIndexableStatic(column.type))
+                .filter(column -> targetDependencies != null && targetDependencies.stream()
+                        .anyMatch(dependency -> dependency.equalsIgnoreCase(column.name)))
                 .collect(Collectors.toList());
         if (indexable.isEmpty()) {
             return;

@@ -182,6 +182,18 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void accessPathUsesTheJoinInputContainingTargetDependency() {
+        String plan = "Projection | 1 root | | cast(test.l.c0, bigint BINARY)->Column#1\n"
+                + "└─MergeJoin | 1 root | | inner join, left key:test.l.id, right key:test.r.id\n"
+                + "  ├─TableReader(Build) | 1 root | | data:TableFullScan\n"
+                + "  │ └─TableFullScan | 1 cop[tikv] | table:l, columns:c0\n"
+                + "  └─TableReader(Probe) | 1 root | | data:IndexReader\n"
+                + "    └─IndexReader | 1 cop[tikv] | index:idx(c1)\n";
+        EcstContext context = TiDBExecutionContextAnalyzer.parse(plan, "CAST(`c0` AS SIGNED)");
+        assertEquals("TABLEFULLSCAN", context.getAccessPath());
+    }
+
+    @Test
     void realTwoCastArithmeticPlansAreLocatable() throws Exception {
         EcstContext projection = TiDBExecutionContextAnalyzer.parse(fixture("two_cast_projection"),
                 "(CAST(`a` AS SIGNED) + CAST(`b` AS SIGNED))");

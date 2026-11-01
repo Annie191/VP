@@ -633,7 +633,7 @@ public final class TiDBExecutionContextAnalyzer {
         String boundary = "ROOT".equals(location) || "MPP".equals(location) ? "NON_PUSHDOWN"
                 : "COP_TIKV".equals(location) || "COP_TIFLASH".equals(location) ? "PUSHDOWN" : "UNKNOWN";
         // Session variables and CAST syntax do not establish executor evaluation semantics.
-        return new EcstContext(location, node.operator, boundary, accessPath(node), evaluation);
+        return new EcstContext(location, node.operator, boundary, accessPath(node, target), evaluation);
     }
 
     private static EcstContext contextForCandidates(List<Candidate> candidates,
@@ -723,6 +723,52 @@ public final class TiDBExecutionContextAnalyzer {
             return "UNKNOWN";
         }
         return paths.values().iterator().next();
+    }
+
+    /** Resolves a path only when target dependencies identify one join input. */
+    private static String accessPath(PlanNode node, TargetPattern target) {
+        if (target == null) {
+            return accessPath(node);
+        }
+        String operator = node.operator.toLowerCase(Locale.ROOT);
+        if (operator.contains("join")) {
+            Set<String> paths = new LinkedHashSet<>();
+            for (PlanNode child : node.children) {
+                if (containsTargetDependency(child, target)) {
+                    paths.add(firstAccessPath(child));
+                }
+            }
+            return paths.size() == 1 ? paths.iterator().next() : "UNKNOWN";
+        }
+        List<String> childPaths = new ArrayList<>();
+        for (PlanNode child : node.children) {
+            if (containsTargetDependency(child, target)) {
+                String path = accessPath(child, target);
+                if (!"UNKNOWN".equals(path)) {
+                    childPaths.add(path);
+                }
+            }
+        }
+        Set<String> distinct = new LinkedHashSet<>(childPaths);
+        if (distinct.size() == 1) {
+            return distinct.iterator().next();
+        }
+        if (distinct.size() > 1) {
+            return "UNKNOWN";
+        }
+        return accessPath(node);
+    }
+
+    private static boolean containsTargetDependency(PlanNode node, TargetPattern target) {
+        if (!Collections.disjoint(logicalReferences(node.raw, target), target.references)) {
+            return true;
+        }
+        for (PlanNode child : node.children) {
+            if (containsTargetDependency(child, target)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Map<String, String> accessPaths(PlanNode node) {
