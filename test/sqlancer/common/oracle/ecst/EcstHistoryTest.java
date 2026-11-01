@@ -189,6 +189,21 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void featureCostUsesTheFeatureBucketTrialDenominator() {
+        EcstHistory history = new EcstHistory();
+        EcstFeature feature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "SINGLE_DEPENDENCY");
+        for (int i = 0; i < 3; i++) {
+            history.observe("target", "config", EcstShiftStatus.SUCCESS, Set.of(), 10_000_000_000L, feature);
+        }
+        for (int i = 0; i < 9; i++) {
+            history.observe("target", "config", EcstShiftStatus.FAILURE, Set.of(), 1L);
+        }
+
+        EcstHistory.Decision decision = history.chooseTransformDecision("target", Map.of("config", feature));
+        assertEquals(10.0, decision.getCostSeconds(), 0.000001);
+    }
+
+    @Test
     public void unknownTrialsReduceTransformExploration() {
         EcstHistory history = new EcstHistory();
         double initialExploration = history.chooseTransformDecision("target", List.of("config"))

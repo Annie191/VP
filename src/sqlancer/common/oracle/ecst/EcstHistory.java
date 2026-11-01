@@ -249,6 +249,10 @@ public final class EcstHistory {
             return exploration;
         }
 
+        public double getCostSeconds() {
+            return costSeconds;
+        }
+
         @Override
         public String toString() {
             return key + "{score=" + score + ",p=" + successRate + ",explore=" + exploration + ",costSeconds="
@@ -384,8 +388,9 @@ public final class EcstHistory {
             long allTrials = globalConfig == null ? 0 : globalConfig.trials();
             double exploration = Math.sqrt(
                     2.0 * Math.log(2.0 + Math.max(1, targetTrials)) / (1.0 + allTrials));
-            double costPenalty = stats == null || allTrials == 0 ? 0.0
-                    : ((double) stats.costNanos() / allTrials) / 1_000_000_000.0;
+            long statsTrials = stats == null ? 0 : stats.trials();
+            double costPenalty = stats == null || statsTrials == 0 ? 0.0
+                    : ((double) stats.costNanos() / statsTrials) / 1_000_000_000.0;
             double score = rate + 0.25 * exploration - 0.01 * costPenalty;
             if (score > best || score == best && Randomly.getBoolean()) {
                 best = score;
