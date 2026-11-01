@@ -536,6 +536,14 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             return dependencyLayout(targetDependencies, schema.leftColumns, schema.rightColumns).name();
         }
 
+        /** Intrinsic query feature; partition side placement belongs to the transformation config. */
+        public String getDependencyClass() {
+            if (targetDependencies.isEmpty()) {
+                return "NO_DEPENDENCY";
+            }
+            return targetDependencies.size() == 1 ? "SINGLE_DEPENDENCY" : "MULTI_DEPENDENCY";
+        }
+
         public String getDependencyLayout(EcstTransformationConfig.PartitionLayout layout) {
             if (layout == EcstTransformationConfig.PartitionLayout.CROSS_SIDE) {
                 return targetDependencies.size() >= 2 ? DependencyLayout.CROSS_SIDE.name()
@@ -551,7 +559,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
 
         /** A stable feature vector for target scheduling before a transformed case exists. */
         public EcstFeature features() {
-            return new EcstFeature("TiDB", getExpressionType(), expressionContext.name(), getDependencyLayout(),
+            return new EcstFeature("TiDB", getExpressionType(), expressionContext.name(), getDependencyClass(),
                     getQueryShape());
         }
 

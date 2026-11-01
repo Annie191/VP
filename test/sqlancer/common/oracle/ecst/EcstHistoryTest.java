@@ -105,6 +105,13 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void intrinsicFeatureDoesNotEncodeTransformationPartitionLayout() {
+        EcstFeature feature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "MULTI_DEPENDENCY");
+        assertTrue(!feature.key().contains("SAME_SIDE"));
+        assertTrue(!feature.key().contains("CROSS_SIDE"));
+    }
+
+    @Test
     public void reachabilityUsesObservedSuccessRateBelowPriorFloor() {
         EcstHistory history = new EcstHistory();
         for (int i = 0; i < 8; i++) {

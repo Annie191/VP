@@ -216,7 +216,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 if (isRecoverable(failure)) continue;
                 throw failure;
             }
-            EcstFeature feature = featureForSeed(seed, config);
+            EcstFeature feature = featureForSeed(seed);
             long started = System.nanoTime();
             TiDBVerticalPartitioningOracle.EcstCase testCase;
             try {
@@ -725,7 +725,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         }
         Map<String, EcstFeature> features = new LinkedHashMap<>();
         for (EcstTransformationConfig candidate : applicable) {
-            features.put(candidate.stableKey(), featureForSeed(seed, candidate));
+            features.put(candidate.stableKey(), featureForSeed(seed));
         }
         String chosen = history.chooseTransformDecision(target.getKey(), features).getKey();
         for (EcstTransformationConfig candidate : applicable) {
@@ -736,10 +736,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         return applicable.get(state.getRandomly().getInteger(0, applicable.size()));
     }
 
-    private EcstFeature featureForSeed(TiDBVerticalPartitioningOracle.EcstSeed seed,
-            EcstTransformationConfig config) {
-        return new EcstFeature("TiDB", seed.getExpressionType(), config.getExpressionContext().name(),
-                seed.getDependencyLayout(config.getPartitionLayout()), seed.getQueryShape());
+    private EcstFeature featureForSeed(TiDBVerticalPartitioningOracle.EcstSeed seed) {
+        return new EcstFeature("TiDB", seed.getExpressionType(), seed.getExpressionContext().name(),
+                seed.getDependencyClass(), seed.getQueryShape());
     }
 
     private String formatBug(EcstTarget target, TiDBVerticalPartitioningOracle.EcstCase testCase,
