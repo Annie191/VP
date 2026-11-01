@@ -373,6 +373,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             int generated = 0;
             int ruleAccepted = 0;
             int legal = 0;
+            int structuralApplicable = 0;
+            int capabilitySupported = 0;
             int applicableCount = 0;
             List<EcstTransformationConfig> applicable = new ArrayList<>();
             for (EcstTransformationConfig config : enumerateConfigurationSpace()) {
@@ -391,9 +393,15 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 if (!isDependencyLayoutApplicable(seed, config)) {
                     continue;
                 }
+                if (!isStructurallyApplicable(target, config, shape,
+                        seed.getDependencyLayout(config.getPartitionLayout()))) {
+                    continue;
+                }
+                structuralApplicable++;
                 if (!capabilities.supports(config, target, seed, seedContext)) {
                     continue;
                 }
+                capabilitySupported++;
                 applicableCount++;
                 applicable.add(config);
             }
@@ -403,8 +411,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 candidateRejectReasons.add(target.getKey() + ": no applicable configuration after rule/legal/seed/layout/capability checks");
             }
             synthesis.add(target.getKey() + "{generated=" + generated + ",ruleAccepted=" + ruleAccepted
-                    + ",legal=" + legal + ",applicable=" + applicableCount + ",allCandidates=" + applicable.size()
-                    + "}");
+                    + ",semanticLegal=" + legal + ",structuralApplicable=" + structuralApplicable
+                    + ",capabilitySupported=" + capabilitySupported + ",applicable=" + applicableCount
+                    + ",allCandidates=" + applicable.size() + "}");
         }
         lastSynthesisSummary = "capabilities=" + capabilities.describe() + "; queryShape=" + shape
                 + "; accessPathPreparation=" + seed.getAccessPathPreparation() + "; "
@@ -576,6 +585,60 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             return "CROSS_SIDE".equals(actual);
         }
         return "SAME_SIDE".equals(actual) || "SINGLE_SIDE".equals(actual);
+    }
+
+    /**
+     * Checks whether the selected layout can structurally induce the requested
+     * direction. Plan analysis remains the final authority on the observed shift.
+     */
+    private static boolean isStructurallyApplicable(EcstTarget target, EcstTransformationConfig config,
+            QueryShape shape, String dependencyLayout) {
+        if (target == null || config == null || shape == null || dependencyLayout == null) {
+            return false;
+        }
+        boolean crossSide = "CROSS_SIDE".equals(dependencyLayout);
+        if (crossSide && shape.maxDependencies < 2) {
+            return false;
+        }
+        boolean boundaryReconstruction = config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
+                || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE;
+        if (!boundaryReconstruction) {
+            return false;
+        }
+        switch (target.getDimension()) {
+        case LOCATION:
+            if (isPushdownLocation(target.getTo())) {
+                // A complete cross-side expression cannot be evaluated by one Cop scan.
+                return !crossSide;
+            }
+            if (isPushdownLocation(target.getFrom()) && "ROOT".equals(target.getTo())) {
+                // A join/derived boundary, including a cross-side dependency, can lift evaluation to Root.
+                return boundaryReconstruction;
+            }
+            return false;
+        case BOUNDARY:
+            if ("PUSHDOWN".equals(target.getTo())) {
+                // Every target input must be available on the pushed-down relation side.
+                return !crossSide;
+            }
+            if ("PUSHDOWN".equals(target.getFrom()) && "NON_PUSHDOWN".equals(target.getTo())) {
+                return boundaryReconstruction;
+            }
+            return false;
+        case ACCESS_PATH:
+            return !crossSide && config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE;
+        default:
+            return false;
+        }
+    }
+
+    static boolean structurallyApplicableForTest(EcstTarget target, EcstTransformationConfig config,
+            String dependencyLayout, QueryShape shape) {
+        return isStructurallyApplicable(target, config, shape, dependencyLayout);
+    }
+
+    private static boolean isPushdownLocation(String location) {
+        return "COP_TIKV".equals(location) || "COP_TIFLASH".equals(location);
     }
 
     private static boolean isApplicableToTiDb(EcstTransformationConfig config, QueryShape shape) {

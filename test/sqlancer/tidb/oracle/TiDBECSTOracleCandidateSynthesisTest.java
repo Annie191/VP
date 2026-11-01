@@ -138,6 +138,37 @@ public class TiDBECSTOracleCandidateSynthesisTest {
     }
 
     @Test
+    void structuralApplicabilityRespectsMigrationDirectionAndDependencyLayout() {
+        EcstTransformationConfig crossSideJoinWhere = new EcstTransformationConfig(
+                EcstTransformationConfig.Representation.VERTICAL_PARTITIONED,
+                EcstTransformationConfig.PartitionLayout.CROSS_SIDE,
+                EcstTransformationConfig.Reconstruction.JOIN,
+                EcstTransformationConfig.ExpressionContext.WHERE);
+        EcstTransformationConfig sameSideJoinWhere = new EcstTransformationConfig(
+                EcstTransformationConfig.Representation.VERTICAL_PARTITIONED,
+                EcstTransformationConfig.PartitionLayout.SAME_SIDE,
+                EcstTransformationConfig.Reconstruction.JOIN,
+                EcstTransformationConfig.ExpressionContext.WHERE);
+        EcstTarget rootToCop = new EcstTarget("root-cop", EcstContextDimension.LOCATION, "ROOT", "COP_TIKV");
+        EcstTarget copToRoot = new EcstTarget("cop-root", EcstContextDimension.LOCATION, "COP_TIKV", "ROOT");
+        EcstTarget nonPushdownToPushdown = new EcstTarget("root-push", EcstContextDimension.BOUNDARY,
+                "NON_PUSHDOWN", "PUSHDOWN");
+        EcstTarget pushdownToNonPushdown = new EcstTarget("push-root", EcstContextDimension.BOUNDARY,
+                "PUSHDOWN", "NON_PUSHDOWN");
+
+        assertTrue(!TiDBECSTOracle.structurallyApplicableForTest(rootToCop, crossSideJoinWhere, "CROSS_SIDE",
+                TiDBECSTOracle.QueryShape.synthetic()));
+        assertTrue(TiDBECSTOracle.structurallyApplicableForTest(rootToCop, sameSideJoinWhere, "SAME_SIDE",
+                TiDBECSTOracle.QueryShape.synthetic()));
+        assertTrue(TiDBECSTOracle.structurallyApplicableForTest(copToRoot, crossSideJoinWhere, "CROSS_SIDE",
+                TiDBECSTOracle.QueryShape.synthetic()));
+        assertTrue(!TiDBECSTOracle.structurallyApplicableForTest(nonPushdownToPushdown, crossSideJoinWhere,
+                "CROSS_SIDE", TiDBECSTOracle.QueryShape.synthetic()));
+        assertTrue(TiDBECSTOracle.structurallyApplicableForTest(pushdownToNonPushdown, crossSideJoinWhere,
+                "CROSS_SIDE", TiDBECSTOracle.QueryShape.synthetic()));
+    }
+
+    @Test
     void directComparisonFilterCanPrepareAnAccessPath() {
         assertTrue(TiDBVerticalPartitioningOracle.isSargableAccessPredicateForTest("`c0` > 0", "c0"));
         assertTrue(!TiDBVerticalPartitioningOracle.isSargableAccessPredicateForTest(
