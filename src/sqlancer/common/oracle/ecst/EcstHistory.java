@@ -591,6 +591,14 @@ public final class EcstHistory {
                         + direction.substring(marker + "_TO_".length());
             }
         }
+        if (targetKey.startsWith("TIDB_OPERATOR_")) {
+            String direction = targetKey.substring("TIDB_OPERATOR_".length());
+            int marker = direction.indexOf("_TO_");
+            if (marker > 0) {
+                return "OPERATOR:" + direction.substring(0, marker) + "->"
+                        + direction.substring(marker + "_TO_".length());
+            }
+        }
         return null;
     }
 

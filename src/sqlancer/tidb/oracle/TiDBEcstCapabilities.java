@@ -76,6 +76,10 @@ public final class TiDBEcstCapabilities {
                     && isOneOf(target.getTo(), "NON_PUSHDOWN", "PUSHDOWN");
         case ACCESS_PATH:
             return seed.getAccessPathPreparation().supports(target, seedContext, seed.getExpressionContext());
+        case OPERATOR:
+            return isOneOf(target.getFrom(), "SELECTION", "MERGEJOIN")
+                    && isOneOf(target.getTo(), "SELECTION", "MERGEJOIN")
+                    && !target.getFrom().equals(target.getTo());
         default:
             return false;
         }
@@ -86,7 +90,9 @@ public final class TiDBEcstCapabilities {
         return config != null && supportsRepresentation(config.getRepresentation())
                 && supportsReconstruction(config.getReconstruction())
                 && supportsExpressionContext(config.getExpressionContext())
-                && supportsTarget(target, seed, seedContext);
+                && supportsTarget(target, seed, seedContext)
+                && (target.getDimension() != sqlancer.common.oracle.ecst.EcstContextDimension.OPERATOR
+                        || config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE);
     }
 
     public String describe() {

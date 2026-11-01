@@ -32,6 +32,10 @@ public final class EcstRuleLibrary {
                                 EcstTransformationConfig.ExpressionContext.ON,
                                 EcstTransformationConfig.ExpressionContext.JOIN_ON,
                                 EcstTransformationConfig.ExpressionContext.INNER_WHERE,
-                                EcstTransformationConfig.ExpressionContext.INNER_SELECT)));
+                                EcstTransformationConfig.ExpressionContext.INNER_SELECT)),
+                new EcstRule("Join operator shift", "TIDB_OPERATOR_SHIFT", relationRepresentations,
+                        relationalReconstructions, EnumSet.of(EcstTransformationConfig.ExpressionContext.WHERE,
+                                EcstTransformationConfig.ExpressionContext.JOIN_ON,
+                                EcstTransformationConfig.ExpressionContext.INNER_WHERE)));
     }
 }

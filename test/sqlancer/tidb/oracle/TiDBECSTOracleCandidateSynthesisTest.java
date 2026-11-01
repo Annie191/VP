@@ -83,6 +83,8 @@ public class TiDBECSTOracleCandidateSynthesisTest {
                 && "ROOT".equals(target.getFrom()) && "COP_TIKV".equals(target.getTo())));
         assertTrue(targets.stream().anyMatch(target -> target.getDimension() == EcstContextDimension.BOUNDARY
                 && "NON_PUSHDOWN".equals(target.getFrom()) && "PUSHDOWN".equals(target.getTo())));
+        assertTrue(targets.stream().anyMatch(target -> target.getDimension() == EcstContextDimension.OPERATOR
+                && "SELECTION".equals(target.getFrom()) && "MERGEJOIN".equals(target.getTo())));
     }
 
     @Test

@@ -88,10 +88,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     }
 
     static List<EcstTarget> defaultTargets() {
-        return allTargets().stream().filter(target -> !target.getKey().contains("TIFLASH")).collect(Collectors.toList());
+        return targetCatalog().stream().filter(target -> !target.getKey().contains("TIFLASH")).collect(Collectors.toList());
     }
 
-    static List<EcstTarget> allTargets() {
+    /** Active target catalog used by target selection; auxiliary shifts remain history observations only. */
+    static List<EcstTarget> targetCatalog() {
         return Arrays.asList(
                 new EcstTarget("TIDB_LOCATION_ROOT_TO_COP_TIKV", EcstContextDimension.LOCATION, "ROOT", "COP_TIKV"),
                 new EcstTarget("TIDB_LOCATION_ROOT_TO_COP_TIFLASH", EcstContextDimension.LOCATION, "ROOT",
@@ -110,7 +111,15 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 new EcstTarget("TIDB_ACCESS_TABLEFULLSCAN_TO_INDEXREADER", EcstContextDimension.ACCESS_PATH,
                         "TABLEFULLSCAN", "INDEXREADER"),
                 new EcstTarget("TIDB_ACCESS_INDEXREADER_TO_TABLEFULLSCAN", EcstContextDimension.ACCESS_PATH,
-                        "INDEXREADER", "TABLEFULLSCAN"));
+                        "INDEXREADER", "TABLEFULLSCAN"),
+                new EcstTarget("TIDB_OPERATOR_SELECTION_TO_MERGEJOIN", EcstContextDimension.OPERATOR,
+                        "SELECTION", "MERGEJOIN"),
+                new EcstTarget("TIDB_OPERATOR_MERGEJOIN_TO_SELECTION", EcstContextDimension.OPERATOR,
+                        "MERGEJOIN", "SELECTION"));
+    }
+
+    static List<EcstTarget> allTargets() {
+        return targetCatalog();
     }
 
     @Override
@@ -541,6 +550,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             return "TIDB_PUSHDOWN_SHIFT";
         case ACCESS_PATH:
             return "TIDB_ACCESS_PATH_SHIFT";
+        case OPERATOR:
+            return "TIDB_OPERATOR_SHIFT";
         default:
             return target.getKey();
         }
@@ -569,7 +580,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.JOIN_ON) {
             return target.getDimension() == EcstContextDimension.LOCATION
                     || target.getDimension() == EcstContextDimension.BOUNDARY
-                    || target.getDimension() == EcstContextDimension.ACCESS_PATH;
+                    || target.getDimension() == EcstContextDimension.ACCESS_PATH
+                    || target.getDimension() == EcstContextDimension.OPERATOR;
         }
         if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING) {
             return shape.hasAggregation;
@@ -644,6 +656,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             return false;
         case ACCESS_PATH:
             return !crossSide && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
+                    || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_WHERE);
+        case OPERATOR:
+            return crossSide && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
+                    || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.JOIN_ON
                     || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_WHERE);
         default:
             return false;

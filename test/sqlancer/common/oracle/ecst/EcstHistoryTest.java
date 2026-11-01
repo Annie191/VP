@@ -77,6 +77,16 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void operatorTargetCoverageUsesItsOwnDirection() {
+        EcstHistory history = new EcstHistory();
+        String target = "TIDB_OPERATOR_SELECTION_TO_MERGEJOIN";
+        history.observe(target, "config", EcstShiftStatus.SUCCESS, Set.of("OPERATOR:MERGEJOIN->SELECTION"), 1);
+        assertEquals(0, history.getTargetCoverage(target));
+        history.observe(target, "config", EcstShiftStatus.SUCCESS, Set.of("OPERATOR:SELECTION->MERGEJOIN"), 1);
+        assertEquals(1, history.getTargetCoverage(target));
+    }
+
+    @Test
     public void featureBucketsRemainVisibleAndDoNotCollapseIntoOneKey() {
         EcstHistory history = new EcstHistory();
         EcstFeature where = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "NUMERIC_DEPENDENCY");
