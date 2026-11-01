@@ -70,6 +70,12 @@ public class TiDBECSTOracleCandidateSynthesisTest {
                 == EcstTransformationConfig.ExpressionContext.SELECT));
         assertTrue(configurations.stream().anyMatch(c -> c.getExpressionContext()
                 == EcstTransformationConfig.ExpressionContext.HAVING));
+        assertTrue(configurations.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.JOIN_ON));
+        assertTrue(configurations.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.INNER_WHERE));
+        assertTrue(configurations.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.INNER_SELECT));
     }
 
     @Test

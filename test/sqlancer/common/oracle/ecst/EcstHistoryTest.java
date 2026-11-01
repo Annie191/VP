@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
@@ -119,6 +122,27 @@ public class EcstHistoryTest {
         EcstFeature feature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "MULTI_DEPENDENCY");
         assertTrue(!feature.key().contains("SAME_SIDE"));
         assertTrue(!feature.key().contains("CROSS_SIDE"));
+    }
+
+    @Test
+    public void concurrentFeedbackKeepsGlobalCountsAndCoverageConsistent() throws Exception {
+        EcstHistory history = new EcstHistory();
+        ExecutorService workers = Executors.newFixedThreadPool(4);
+        for (int worker = 0; worker < 4; worker++) {
+            workers.submit(() -> {
+                for (int i = 0; i < 25; i++) {
+                    history.observe("TIDB_LOCATION_ROOT_TO_COP_TIKV", "config", EcstShiftStatus.SUCCESS,
+                            Set.of("LOCATION:ROOT->COP_TIKV"), 1);
+                    history.observe("TIDB_LOCATION_ROOT_TO_COP_TIKV", "config", EcstShiftStatus.FAILURE, Set.of(), 1);
+                    history.observe("TIDB_LOCATION_ROOT_TO_COP_TIKV", "config", EcstShiftStatus.UNKNOWN, Set.of(), 1);
+                }
+            });
+        }
+        workers.shutdown();
+        assertTrue(workers.awaitTermination(10, TimeUnit.SECONDS));
+        assertEquals(300, history.getTotalTrials());
+        assertEquals(100, history.getTargetCoverage("TIDB_LOCATION_ROOT_TO_COP_TIKV"));
+        assertEquals(100, history.getShiftCoverage("LOCATION:ROOT->COP_TIKV"));
     }
 
     @Test

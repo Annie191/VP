@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import sqlancer.Randomly;
 
@@ -213,7 +214,7 @@ public final class EcstHistory {
     private final ConcurrentMap<ShiftKey, Boolean> observedShifts = new ConcurrentHashMap<>();
     /** N_cov[s]: count of tests in which the concrete migration s was confirmed. */
     private final ConcurrentMap<ShiftKey, Long> shiftCoverage = new ConcurrentHashMap<>();
-    private volatile long totalTrials;
+    private final AtomicLong totalTrials = new AtomicLong();
     private volatile String lastTargetDecision = "<none>";
     private volatile String lastTransformDecision = "<none>";
 
@@ -262,7 +263,7 @@ public final class EcstHistory {
 
     public void recordTrial(String targetKey) {
         targetStats.computeIfAbsent(TargetKey.parse(targetKey), ignored -> new Stats()).recordTrial();
-        totalTrials++;
+        totalTrials.incrementAndGet();
     }
 
     public void recordTrial(EcstTarget target) {
@@ -338,7 +339,7 @@ public final class EcstHistory {
         for (String shift : distinctShifts) {
             recordCoverage(shift);
         }
-        totalTrials++;
+        totalTrials.incrementAndGet();
     }
 
     public String chooseTransform(String targetKey, Collection<String> candidates) {
@@ -426,7 +427,7 @@ public final class EcstHistory {
             long trials = globalTarget == null ? 0 : globalTarget.trials();
             double novelty = 1.0 / Math.sqrt(1.0 + coverage);
             double reachability = maxReachability(candidate, entry.getValue(), feature);
-            double exploration = Math.sqrt(2.0 * Math.log(2.0 + Math.max(1, totalTrials)) / (1.0 + trials));
+            double exploration = Math.sqrt(2.0 * Math.log(2.0 + Math.max(1, totalTrials.get())) / (1.0 + trials));
             double score = novelty + reachability + exploration;
             if (score > best || score == best && Randomly.getBoolean()) {
                 best = score;
@@ -451,7 +452,7 @@ public final class EcstHistory {
     }
 
     public long getTotalTrials() {
-        return totalTrials;
+        return totalTrials.get();
     }
 
     public boolean hasObservedShift(String shift) {
@@ -486,7 +487,7 @@ public final class EcstHistory {
 
     public String formatSummary() {
         StringBuilder sb = new StringBuilder();
-        sb.append("totalTrials=").append(totalTrials).append(System.lineSeparator());
+        sb.append("totalTrials=").append(totalTrials.get()).append(System.lineSeparator());
         for (Map.Entry<ConfigTargetKey, Stats> entry : configStats.entrySet()) {
             sb.append(entry.getKey()).append(':').append(entry.getValue().summary()).append(System.lineSeparator());
         }
