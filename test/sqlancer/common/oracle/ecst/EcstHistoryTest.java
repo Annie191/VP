@@ -7,6 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
@@ -77,6 +80,16 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void operatorTargetCoverageUsesItsOwnDirection() {
+        EcstHistory history = new EcstHistory();
+        String target = "TIDB_OPERATOR_SELECTION_TO_MERGEJOIN";
+        history.observe(target, "config", EcstShiftStatus.SUCCESS, Set.of("OPERATOR:MERGEJOIN->SELECTION"), 1);
+        assertEquals(0, history.getTargetCoverage(target));
+        history.observe(target, "config", EcstShiftStatus.SUCCESS, Set.of("OPERATOR:SELECTION->MERGEJOIN"), 1);
+        assertEquals(1, history.getTargetCoverage(target));
+    }
+
+    @Test
     public void featureBucketsRemainVisibleAndDoNotCollapseIntoOneKey() {
         EcstHistory history = new EcstHistory();
         EcstFeature where = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "NUMERIC_DEPENDENCY");
@@ -102,6 +115,50 @@ public class EcstHistoryTest {
         EcstHistory.Decision decision = history.chooseTargetDecision(
                 Map.of("target-good", List.of("config"), "target-bad", List.of("config")), feature);
         assertEquals("target-good", decision.getKey());
+    }
+
+    @Test
+    public void intrinsicFeatureDoesNotEncodeTransformationPartitionLayout() {
+        EcstFeature feature = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "MULTI_DEPENDENCY");
+        assertTrue(!feature.key().contains("SAME_SIDE"));
+        assertTrue(!feature.key().contains("CROSS_SIDE"));
+    }
+
+    @Test
+    public void concurrentFeedbackKeepsGlobalCountsAndCoverageConsistent() throws Exception {
+        EcstHistory history = new EcstHistory();
+        ExecutorService workers = Executors.newFixedThreadPool(4);
+        for (int worker = 0; worker < 4; worker++) {
+            workers.submit(() -> {
+                for (int i = 0; i < 25; i++) {
+                    history.observe("TIDB_LOCATION_ROOT_TO_COP_TIKV", "config", EcstShiftStatus.SUCCESS,
+                            Set.of("LOCATION:ROOT->COP_TIKV"), 1);
+                    history.observe("TIDB_LOCATION_ROOT_TO_COP_TIKV", "config", EcstShiftStatus.FAILURE, Set.of(), 1);
+                    history.observe("TIDB_LOCATION_ROOT_TO_COP_TIKV", "config", EcstShiftStatus.UNKNOWN, Set.of(), 1);
+                }
+            });
+        }
+        workers.shutdown();
+        assertTrue(workers.awaitTermination(10, TimeUnit.SECONDS));
+        assertEquals(300, history.getTotalTrials());
+        assertEquals(100, history.getTargetCoverage("TIDB_LOCATION_ROOT_TO_COP_TIKV"));
+        assertEquals(100, history.getShiftCoverage("LOCATION:ROOT->COP_TIKV"));
+    }
+
+    @Test
+    public void explorationUsesGlobalTrialsWhenFeatureBucketChanges() {
+        EcstFeature observed = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "SINGLE_DEPENDENCY");
+        EcstFeature query = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "MULTI_DEPENDENCY");
+        EcstHistory history = new EcstHistory();
+        for (int i = 0; i < 6; i++) {
+            history.observe("target", "config", EcstShiftStatus.SUCCESS, Set.of(), 1, observed);
+        }
+        EcstHistory.Decision targetDecision = history.chooseTargetDecision(
+                Map.of("target", List.of("config")), query);
+        EcstHistory.Decision transformDecision = history.chooseTransformDecision(
+                "target", Map.of("config", query));
+        assertTrue(targetDecision.getExploration() < Math.sqrt(2.0 * Math.log(2.0) / 1.0));
+        assertTrue(transformDecision.getExploration() < Math.sqrt(2.0 * Math.log(2.0 + 6.0) / 1.0));
     }
 
     @Test

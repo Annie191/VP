@@ -42,13 +42,17 @@ public final class TiDBEcstCapabilities {
 
     public boolean supportsReconstruction(EcstTransformationConfig.Reconstruction reconstruction) {
         return reconstruction == EcstTransformationConfig.Reconstruction.JOIN
-                || reconstruction == EcstTransformationConfig.Reconstruction.DERIVED_TABLE;
+                || reconstruction == EcstTransformationConfig.Reconstruction.DERIVED_TABLE
+                || reconstruction == EcstTransformationConfig.Reconstruction.CTE;
     }
 
     public boolean supportsExpressionContext(EcstTransformationConfig.ExpressionContext context) {
         return context == EcstTransformationConfig.ExpressionContext.WHERE
                 || context == EcstTransformationConfig.ExpressionContext.SELECT
-                || context == EcstTransformationConfig.ExpressionContext.HAVING;
+                || context == EcstTransformationConfig.ExpressionContext.HAVING
+                || context == EcstTransformationConfig.ExpressionContext.JOIN_ON
+                || context == EcstTransformationConfig.ExpressionContext.INNER_WHERE
+                || context == EcstTransformationConfig.ExpressionContext.INNER_SELECT;
     }
 
     /**
@@ -72,6 +76,10 @@ public final class TiDBEcstCapabilities {
                     && isOneOf(target.getTo(), "NON_PUSHDOWN", "PUSHDOWN");
         case ACCESS_PATH:
             return seed.getAccessPathPreparation().supports(target, seedContext, seed.getExpressionContext());
+        case OPERATOR:
+            return isOneOf(target.getFrom(), "SELECTION", "MERGEJOIN")
+                    && isOneOf(target.getTo(), "SELECTION", "MERGEJOIN")
+                    && !target.getFrom().equals(target.getTo());
         default:
             return false;
         }
@@ -82,7 +90,9 @@ public final class TiDBEcstCapabilities {
         return config != null && supportsRepresentation(config.getRepresentation())
                 && supportsReconstruction(config.getReconstruction())
                 && supportsExpressionContext(config.getExpressionContext())
-                && supportsTarget(target, seed, seedContext);
+                && supportsTarget(target, seed, seedContext)
+                && (target.getDimension() != sqlancer.common.oracle.ecst.EcstContextDimension.OPERATOR
+                        || config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE);
     }
 
     public String describe() {

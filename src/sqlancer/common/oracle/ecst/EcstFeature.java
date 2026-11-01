@@ -3,11 +3,12 @@ package sqlancer.common.oracle.ecst;
 import java.util.Objects;
 import java.util.Locale;
 
-/** Query-side features used to condition ECST feedback without making every combination a separate state. */
+/** Query-side features used to condition ECST feedback without duplicating transformation configuration state. */
 public final class EcstFeature {
     private final String dbms;
     private final String expressionType;
     private final String clause;
+    /** Intrinsic dependency class; SAME_SIDE/CROSS_SIDE placement is carried by the transform key. */
     private final String dependencyClass;
     private final String queryShape;
 

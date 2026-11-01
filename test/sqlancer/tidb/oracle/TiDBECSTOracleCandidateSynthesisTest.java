@@ -19,9 +19,13 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(capabilities.supportsRepresentation(EcstTransformationConfig.Representation.VERTICAL_PARTITIONED));
         assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.JOIN));
         assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.DERIVED_TABLE));
+        assertTrue(capabilities.supportsReconstruction(EcstTransformationConfig.Reconstruction.CTE));
         assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.WHERE));
         assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.SELECT));
         assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.HAVING));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.JOIN_ON));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.INNER_WHERE));
+        assertTrue(capabilities.supportsExpressionContext(EcstTransformationConfig.ExpressionContext.INNER_SELECT));
         assertEquals("TiDB ECST prototype capability set", capabilities.describe());
     }
 
@@ -47,7 +51,7 @@ public class TiDBECSTOracleCandidateSynthesisTest {
     void enumeratesTheFullTransformationProductBeforeFiltering() {
         List<EcstTransformationConfig> configurations = TiDBECSTOracle.enumerateConfigurationSpace();
 
-        assertEquals(4 * 2 * 4 * 4, configurations.size());
+        assertEquals(4 * 2 * 4 * 7, configurations.size());
         assertTrue(configurations.stream().anyMatch(c -> c.getRepresentation()
                 == EcstTransformationConfig.Representation.VIEW));
         assertTrue(configurations.stream().anyMatch(c -> c.getReconstruction()
@@ -66,6 +70,12 @@ public class TiDBECSTOracleCandidateSynthesisTest {
                 == EcstTransformationConfig.ExpressionContext.SELECT));
         assertTrue(configurations.stream().anyMatch(c -> c.getExpressionContext()
                 == EcstTransformationConfig.ExpressionContext.HAVING));
+        assertTrue(configurations.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.JOIN_ON));
+        assertTrue(configurations.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.INNER_WHERE));
+        assertTrue(configurations.stream().anyMatch(c -> c.getExpressionContext()
+                == EcstTransformationConfig.ExpressionContext.INNER_SELECT));
     }
 
     @Test
@@ -79,6 +89,8 @@ public class TiDBECSTOracleCandidateSynthesisTest {
                 && "ROOT".equals(target.getFrom()) && "COP_TIKV".equals(target.getTo())));
         assertTrue(targets.stream().anyMatch(target -> target.getDimension() == EcstContextDimension.BOUNDARY
                 && "NON_PUSHDOWN".equals(target.getFrom()) && "PUSHDOWN".equals(target.getTo())));
+        assertTrue(targets.stream().anyMatch(target -> target.getDimension() == EcstContextDimension.OPERATOR
+                && "SELECTION".equals(target.getFrom()) && "MERGEJOIN".equals(target.getTo())));
     }
 
     @Test
@@ -135,6 +147,37 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(!unavailable.supports(target, context, EcstTransformationConfig.ExpressionContext.WHERE));
         assertTrue(available.supports(target, context, EcstTransformationConfig.ExpressionContext.WHERE));
         assertTrue(!available.supports(target, context, EcstTransformationConfig.ExpressionContext.SELECT));
+    }
+
+    @Test
+    void structuralApplicabilityRespectsMigrationDirectionAndDependencyLayout() {
+        EcstTransformationConfig crossSideJoinWhere = new EcstTransformationConfig(
+                EcstTransformationConfig.Representation.VERTICAL_PARTITIONED,
+                EcstTransformationConfig.PartitionLayout.CROSS_SIDE,
+                EcstTransformationConfig.Reconstruction.JOIN,
+                EcstTransformationConfig.ExpressionContext.WHERE);
+        EcstTransformationConfig sameSideJoinWhere = new EcstTransformationConfig(
+                EcstTransformationConfig.Representation.VERTICAL_PARTITIONED,
+                EcstTransformationConfig.PartitionLayout.SAME_SIDE,
+                EcstTransformationConfig.Reconstruction.JOIN,
+                EcstTransformationConfig.ExpressionContext.WHERE);
+        EcstTarget rootToCop = new EcstTarget("root-cop", EcstContextDimension.LOCATION, "ROOT", "COP_TIKV");
+        EcstTarget copToRoot = new EcstTarget("cop-root", EcstContextDimension.LOCATION, "COP_TIKV", "ROOT");
+        EcstTarget nonPushdownToPushdown = new EcstTarget("root-push", EcstContextDimension.BOUNDARY,
+                "NON_PUSHDOWN", "PUSHDOWN");
+        EcstTarget pushdownToNonPushdown = new EcstTarget("push-root", EcstContextDimension.BOUNDARY,
+                "PUSHDOWN", "NON_PUSHDOWN");
+
+        assertTrue(!TiDBECSTOracle.structurallyApplicableForTest(rootToCop, crossSideJoinWhere, "CROSS_SIDE",
+                TiDBECSTOracle.QueryShape.synthetic()));
+        assertTrue(TiDBECSTOracle.structurallyApplicableForTest(rootToCop, sameSideJoinWhere, "SAME_SIDE",
+                TiDBECSTOracle.QueryShape.synthetic()));
+        assertTrue(TiDBECSTOracle.structurallyApplicableForTest(copToRoot, crossSideJoinWhere, "CROSS_SIDE",
+                TiDBECSTOracle.QueryShape.synthetic()));
+        assertTrue(!TiDBECSTOracle.structurallyApplicableForTest(nonPushdownToPushdown, crossSideJoinWhere,
+                "CROSS_SIDE", TiDBECSTOracle.QueryShape.synthetic()));
+        assertTrue(TiDBECSTOracle.structurallyApplicableForTest(pushdownToNonPushdown, crossSideJoinWhere,
+                "CROSS_SIDE", TiDBECSTOracle.QueryShape.synthetic()));
     }
 
     @Test

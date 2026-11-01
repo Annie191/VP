@@ -72,6 +72,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int seedSkipRecordsWritten;
     private volatile String lastCommittedCaseId = "";
     private final List<String> candidateRejectReasons = new ArrayList<>();
+    private static final int MAX_CONFIG_ATTEMPTS_PER_SEED = 4;
 
     public TiDBECSTOracle(TiDBGlobalState state) {
         this.state = state;
@@ -88,10 +89,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     }
 
     static List<EcstTarget> defaultTargets() {
-        return allTargets().stream().filter(target -> !target.getKey().contains("TIFLASH")).collect(Collectors.toList());
+        return targetCatalog().stream().filter(target -> !target.getKey().contains("TIFLASH")).collect(Collectors.toList());
     }
 
-    static List<EcstTarget> allTargets() {
+    /** Active target catalog used by target selection; auxiliary shifts remain history observations only. */
+    static List<EcstTarget> targetCatalog() {
         return Arrays.asList(
                 new EcstTarget("TIDB_LOCATION_ROOT_TO_COP_TIKV", EcstContextDimension.LOCATION, "ROOT", "COP_TIKV"),
                 new EcstTarget("TIDB_LOCATION_ROOT_TO_COP_TIFLASH", EcstContextDimension.LOCATION, "ROOT",
@@ -110,7 +112,15 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 new EcstTarget("TIDB_ACCESS_TABLEFULLSCAN_TO_INDEXREADER", EcstContextDimension.ACCESS_PATH,
                         "TABLEFULLSCAN", "INDEXREADER"),
                 new EcstTarget("TIDB_ACCESS_INDEXREADER_TO_TABLEFULLSCAN", EcstContextDimension.ACCESS_PATH,
-                        "INDEXREADER", "TABLEFULLSCAN"));
+                        "INDEXREADER", "TABLEFULLSCAN"),
+                new EcstTarget("TIDB_OPERATOR_SELECTION_TO_MERGEJOIN", EcstContextDimension.OPERATOR,
+                        "SELECTION", "MERGEJOIN"),
+                new EcstTarget("TIDB_OPERATOR_MERGEJOIN_TO_SELECTION", EcstContextDimension.OPERATOR,
+                        "MERGEJOIN", "SELECTION"));
+    }
+
+    static List<EcstTarget> allTargets() {
+        return targetCatalog();
     }
 
     @Override
@@ -180,6 +190,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             }
             EcstTarget target = null;
             EcstTransformationConfig config = null;
+            Map<String, List<EcstTransformationConfig>> candidateSets = null;
             try {
                 List<EcstTarget> validTargets = supportedTargets(seed, seedContext);
                 if (seedParsed.extractionStatus() == TiDBExecutionContextAnalyzer.ExtractionStatus.EXPRESSION_NOT_FOUND
@@ -197,7 +208,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     cleanupSeed(seed);
                     continue;
                 }
-                Map<String, List<EcstTransformationConfig>> candidateSets = synthesizeCandidateSets(seed, seedContext,
+                candidateSets = synthesizeCandidateSets(seed, seedContext,
                         validTargets);
                 if (candidateSets.isEmpty()) {
                     noConfigurationSkips++;
@@ -207,8 +218,6 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     continue;
                 }
                 target = chooseTarget(candidateSets, seed.features());
-                List<EcstTransformationConfig> applicable = candidateSets.get(target.getKey());
-                config = chooseConfig(target, applicable, seed);
             } catch (Exception | AssertionError failure) {
                 recordFailure(config == null ? EcstPhase.CONFIGURATION_SYNTHESIS : EcstPhase.TARGET_SELECTION,
                         seed, target, config, failure);
@@ -216,54 +225,74 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 if (isRecoverable(failure)) continue;
                 throw failure;
             }
-            EcstFeature feature = featureForSeed(seed, config);
+            EcstFeature feature = featureForSeed(seed);
             long started = System.nanoTime();
-            TiDBVerticalPartitioningOracle.EcstCase testCase;
-            try {
-                testCase = vp.applyEcstTransformation(seed, config, target);
-            } catch (IgnoreMeException | IllegalArgumentException ignored) {
-                creationSkips++;
-                recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, ignored);
-                cleanupSeed(seed);
-                continue;
-            } catch (Exception failure) {
-                recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, failure);
-                cleanupSeed(seed);
-                if (isRecoverable(failure)) continue;
-                throw failure;
-            } catch (AssertionError failure) {
-                recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, failure);
-                cleanupSeed(seed);
-                throw failure;
-            }
-            try {
-                EcstContext refreshedSeedContext = analyzer.extractContext(testCase.getOriginalQuery(),
-                        testCase.getOperation()).context();
-                if (!sameContext(seedContext, refreshedSeedContext)) {
-                    recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config, testCase,
-                            new IllegalStateException("SEED_CONTEXT_CHANGED: seed=" + seedContext + ", refreshed="
-                                    + refreshedSeedContext));
+            TiDBVerticalPartitioningOracle.EcstCase testCase = null;
+            List<EcstTransformationConfig> remaining = new ArrayList<>(candidateSets.get(target.getKey()));
+            int candidateAttempts = 0;
+            while (testCase == null && !remaining.isEmpty()
+                    && candidateAttempts++ < MAX_CONFIG_ATTEMPTS_PER_SEED) {
+                config = chooseConfig(target, remaining, seed);
+                remaining.remove(config);
+                TiDBVerticalPartitioningOracle.EcstCase candidate;
+                try {
+                    candidate = vp.applyEcstTransformation(seed, config, target);
+                } catch (IgnoreMeException | IllegalArgumentException ignored) {
+                    creationSkips++;
+                    recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, ignored);
+                    continue;
+                } catch (Exception failure) {
+                    recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, failure);
+                    if (isRecoverable(failure)) continue;
                     cleanupSeed(seed);
+                    throw failure;
+                } catch (AssertionError failure) {
+                    recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, failure);
+                    cleanupSeed(seed);
+                    throw failure;
+                }
+                try {
+                    EcstContext refreshedSeedContext = analyzer.extractContext(candidate.getOriginalQuery(),
+                            candidate.getOperation()).context();
+                    if (!sameContext(seedContext, refreshedSeedContext)) {
+                        recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config,
+                                new IllegalStateException("SEED_CONTEXT_CHANGED: seed=" + seedContext + ", refreshed="
+                                        + refreshedSeedContext));
+                        continue;
+                    }
+                } catch (Exception failure) {
+                    recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config, candidate, failure);
+                    if (isRecoverable(failure)) continue;
+                    cleanupSeed(seed);
+                    throw failure;
+                }
+                TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult semantic;
+                try {
+                    semantic = vp.checkSemanticPreconditions(candidate);
+                } catch (Exception | AssertionError failure) {
+                    recordFailure(EcstPhase.PRECONDITION_CHECK, seed, target, config, candidate, failure);
+                    if (isRecoverable(failure)) continue;
+                    cleanupSeed(seed);
+                    throw failure;
+                }
+                if (!semantic.isValid()) {
+                    semanticPreconditionRejects++;
+                    writeCaseRecord(target, config, candidate, null, null, semantic);
                     continue;
                 }
-            } catch (Exception failure) {
-                recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config, testCase, failure);
-                cleanupSeed(seed);
-                if (isRecoverable(failure)) continue;
-                throw failure;
+                TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult data = vp
+                        .validateDataPreconditions(candidate);
+                if (data.getStatus() != TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult.Status.DATA_VALID) {
+                    semanticPreconditionRejects++;
+                    writeCaseRecord(target, config, candidate, null, null, data);
+                    continue;
+                }
+                testCase = candidate;
             }
-            TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult semantic;
-            try {
-                semantic = vp.checkSemanticPreconditions(testCase);
-            } catch (Exception | AssertionError failure) {
-                recordFailure(EcstPhase.PRECONDITION_CHECK, seed, target, config, testCase, failure);
-                cleanupSeed(seed);
-                if (isRecoverable(failure)) continue;
-                throw failure;
-            }
-            if (!semantic.isValid()) {
-                semanticPreconditionRejects++;
-                writeCaseRecord(target, config, testCase, null, null, semantic);
+            if (testCase == null) {
+                noConfigurationSkips++;
+                candidateSetSkips++;
+                candidateRejectReasons.add(target.getKey() + ": all candidate configurations failed or were exhausted");
                 cleanupSeed(seed);
                 continue;
             }
@@ -280,6 +309,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
             boolean keepArtifacts = false;
             TiDBVerticalPartitioningOracle.EcstComparison comparison = null;
+            TiDBVerticalPartitioningOracle.EcstBugValidation bugValidation = null;
             try {
                 comparison = vp.compareEcstCase(testCase);
                 if (!comparison.isComparable()) {
@@ -295,9 +325,13 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 completed++;
                 completedCases = completed;
                 if (!comparison.isEqual()) {
-                    bugCandidates++;
                     keepArtifacts = true;
-                    throw new AssertionError(formatBug(target, testCase, observation, comparison));
+                    bugValidation = vp.validateBugCandidate(testCase, comparison);
+                    if (!bugValidation.isReproduced()) {
+                        continue;
+                    }
+                    bugCandidates++;
+                    throw new AssertionError(formatBug(target, testCase, observation, comparison, bugValidation));
                 }
             } catch (Exception failure) {
                 executionFailures++;
@@ -305,7 +339,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 if (isRecoverable(failure)) continue;
                 throw failure;
             } finally {
-                writeCaseRecord(target, config, testCase, observation, comparison, null);
+                writeCaseRecord(target, config, testCase, observation, comparison, null, bugValidation);
                 history.observe(target.getKey(), config.stableKey(), observation.getStatus(),
                         observation.getObservedShifts(), System.nanoTime() - started, feature);
                 lastCommittedCaseId = runId + "-" + caseSequence;
@@ -373,6 +407,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             int generated = 0;
             int ruleAccepted = 0;
             int legal = 0;
+            int structuralApplicable = 0;
+            int capabilitySupported = 0;
             int applicableCount = 0;
             List<EcstTransformationConfig> applicable = new ArrayList<>();
             for (EcstTransformationConfig config : enumerateConfigurationSpace()) {
@@ -391,9 +427,15 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 if (!isDependencyLayoutApplicable(seed, config)) {
                     continue;
                 }
+                if (!isStructurallyApplicable(target, config, shape,
+                        seed.getDependencyLayout(config.getPartitionLayout()))) {
+                    continue;
+                }
+                structuralApplicable++;
                 if (!capabilities.supports(config, target, seed, seedContext)) {
                     continue;
                 }
+                capabilitySupported++;
                 applicableCount++;
                 applicable.add(config);
             }
@@ -403,8 +445,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 candidateRejectReasons.add(target.getKey() + ": no applicable configuration after rule/legal/seed/layout/capability checks");
             }
             synthesis.add(target.getKey() + "{generated=" + generated + ",ruleAccepted=" + ruleAccepted
-                    + ",legal=" + legal + ",applicable=" + applicableCount + ",allCandidates=" + applicable.size()
-                    + "}");
+                    + ",semanticLegal=" + legal + ",structuralApplicable=" + structuralApplicable
+                    + ",capabilitySupported=" + capabilitySupported + ",applicable=" + applicableCount
+                    + ",allCandidates=" + applicable.size() + "}");
         }
         lastSynthesisSummary = "capabilities=" + capabilities.describe() + "; queryShape=" + shape
                 + "; accessPathPreparation=" + seed.getAccessPathPreparation() + "; "
@@ -532,6 +575,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             return "TIDB_PUSHDOWN_SHIFT";
         case ACCESS_PATH:
             return "TIDB_ACCESS_PATH_SHIFT";
+        case OPERATOR:
+            return "TIDB_OPERATOR_SHIFT";
         default:
             return target.getKey();
         }
@@ -557,6 +602,12 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             return shape.hasJoin && (target.getDimension() == EcstContextDimension.BOUNDARY
                     || target.getDimension() == EcstContextDimension.ACCESS_PATH);
         }
+        if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.JOIN_ON) {
+            return target.getDimension() == EcstContextDimension.LOCATION
+                    || target.getDimension() == EcstContextDimension.BOUNDARY
+                    || target.getDimension() == EcstContextDimension.ACCESS_PATH
+                    || target.getDimension() == EcstContextDimension.OPERATOR;
+        }
         if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING) {
             return shape.hasAggregation;
         }
@@ -566,7 +617,18 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     /** TiDB currently has a VP materializer for these contexts; other legal configs remain visible as future work. */
     private static boolean isApplicableToSeed(EcstTransformationConfig config, QueryShape shape,
             EcstTransformationConfig.ExpressionContext seedExpressionContext) {
-        return config.getExpressionContext() == seedExpressionContext && shape.hasBaseTable;
+        if (!shape.hasBaseTable) {
+            return false;
+        }
+        EcstTransformationConfig.ExpressionContext embedded = config.getExpressionContext();
+        if (embedded == seedExpressionContext) {
+            return true;
+        }
+        return seedExpressionContext == EcstTransformationConfig.ExpressionContext.WHERE
+                && (embedded == EcstTransformationConfig.ExpressionContext.JOIN_ON
+                        || embedded == EcstTransformationConfig.ExpressionContext.INNER_WHERE)
+                || seedExpressionContext == EcstTransformationConfig.ExpressionContext.SELECT
+                        && embedded == EcstTransformationConfig.ExpressionContext.INNER_SELECT;
     }
 
     private static boolean isDependencyLayoutApplicable(TiDBVerticalPartitioningOracle.EcstSeed seed,
@@ -578,13 +640,77 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         return "SAME_SIDE".equals(actual) || "SINGLE_SIDE".equals(actual);
     }
 
+    /**
+     * Checks whether the selected layout can structurally induce the requested
+     * direction. Plan analysis remains the final authority on the observed shift.
+     */
+    private static boolean isStructurallyApplicable(EcstTarget target, EcstTransformationConfig config,
+            QueryShape shape, String dependencyLayout) {
+        if (target == null || config == null || shape == null || dependencyLayout == null) {
+            return false;
+        }
+        boolean crossSide = "CROSS_SIDE".equals(dependencyLayout);
+        if (crossSide && shape.maxDependencies < 2) {
+            return false;
+        }
+        boolean boundaryReconstruction = config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
+                || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE
+                || config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE;
+        if (!boundaryReconstruction) {
+            return false;
+        }
+        switch (target.getDimension()) {
+        case LOCATION:
+            if (isPushdownLocation(target.getTo())) {
+                // A complete cross-side expression cannot be evaluated by one Cop scan.
+                return !crossSide;
+            }
+            if (isPushdownLocation(target.getFrom()) && "ROOT".equals(target.getTo())) {
+                // A join/derived boundary, including a cross-side dependency, can lift evaluation to Root.
+                return boundaryReconstruction;
+            }
+            return false;
+        case BOUNDARY:
+            if ("PUSHDOWN".equals(target.getTo())) {
+                // Every target input must be available on the pushed-down relation side.
+                return !crossSide;
+            }
+            if ("PUSHDOWN".equals(target.getFrom()) && "NON_PUSHDOWN".equals(target.getTo())) {
+                return boundaryReconstruction;
+            }
+            return false;
+        case ACCESS_PATH:
+            return !crossSide && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
+                    || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_WHERE);
+        case OPERATOR:
+            return crossSide && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
+                    || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.JOIN_ON
+                    || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_WHERE);
+        default:
+            return false;
+        }
+    }
+
+    static boolean structurallyApplicableForTest(EcstTarget target, EcstTransformationConfig config,
+            String dependencyLayout, QueryShape shape) {
+        return isStructurallyApplicable(target, config, shape, dependencyLayout);
+    }
+
+    private static boolean isPushdownLocation(String location) {
+        return "COP_TIKV".equals(location) || "COP_TIFLASH".equals(location);
+    }
+
     private static boolean isApplicableToTiDb(EcstTransformationConfig config, QueryShape shape) {
         return config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
                 && (config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
-                        || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE)
+                        || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE
+                        || config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE)
                 && (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.WHERE
                         || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.SELECT
-                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING)
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.HAVING
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.JOIN_ON
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_WHERE
+                        || config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_SELECT)
                 && shape.hasBaseTable;
     }
 
@@ -662,7 +788,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         }
         Map<String, EcstFeature> features = new LinkedHashMap<>();
         for (EcstTransformationConfig candidate : applicable) {
-            features.put(candidate.stableKey(), featureForSeed(seed, candidate));
+            features.put(candidate.stableKey(), featureForSeed(seed));
         }
         String chosen = history.chooseTransformDecision(target.getKey(), features).getKey();
         for (EcstTransformationConfig candidate : applicable) {
@@ -673,15 +799,15 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         return applicable.get(state.getRandomly().getInteger(0, applicable.size()));
     }
 
-    private EcstFeature featureForSeed(TiDBVerticalPartitioningOracle.EcstSeed seed,
-            EcstTransformationConfig config) {
-        return new EcstFeature("TiDB", seed.getExpressionType(), config.getExpressionContext().name(),
-                seed.getDependencyLayout(config.getPartitionLayout()), seed.getQueryShape());
+    private EcstFeature featureForSeed(TiDBVerticalPartitioningOracle.EcstSeed seed) {
+        return new EcstFeature("TiDB", seed.getExpressionType(), seed.getExpressionContext().name(),
+                seed.getDependencyClass(), seed.getQueryShape());
     }
 
     private String formatBug(EcstTarget target, TiDBVerticalPartitioningOracle.EcstCase testCase,
             EcstObservation observation,
-            TiDBVerticalPartitioningOracle.EcstComparison comparison) {
+            TiDBVerticalPartitioningOracle.EcstComparison comparison,
+            TiDBVerticalPartitioningOracle.EcstBugValidation bugValidation) {
         return "[ECST BUG CANDIDATE]" + System.lineSeparator() + "target=" + target + System.lineSeparator()
                 + "config=" + testCase.getDescription() + System.lineSeparator() + "shiftStatus="
                 + observation.getStatus() + System.lineSeparator() + "shiftReason=" + observation.getReason()
@@ -700,7 +826,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + testCase.getTransformedQuery() + System.lineSeparator() + "originalSample="
                 + comparison.getOriginalSample() + System.lineSeparator() + "transformedSample="
                 + comparison.getTransformedSample() + System.lineSeparator() + "comparisonReason="
-                + comparison.getReason() + System.lineSeparator() + "history="
+                + comparison.getReason() + System.lineSeparator() + "bugValidation=" + bugValidation
+                + System.lineSeparator() + "history="
                 + history.formatSummary() + System.lineSeparator() + "generationInfo="
                 + testCase.getGenerationInfo() + System.lineSeparator() + "materializationSetup="
                 + testCase.getMaterializationSetup();
@@ -778,6 +905,14 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             TiDBVerticalPartitioningOracle.EcstCase testCase, EcstObservation observation,
             TiDBVerticalPartitioningOracle.EcstComparison comparison,
             TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult precondition) {
+        writeCaseRecord(target, config, testCase, observation, comparison, precondition, null);
+    }
+
+    private void writeCaseRecord(EcstTarget target, EcstTransformationConfig config,
+            TiDBVerticalPartitioningOracle.EcstCase testCase, EcstObservation observation,
+            TiDBVerticalPartitioningOracle.EcstComparison comparison,
+            TiDBVerticalPartitioningOracle.EcstSemanticPreconditionResult precondition,
+            TiDBVerticalPartitioningOracle.EcstBugValidation bugValidation) {
         String status = observation == null ? "UNKNOWN" : observation.getStatus().name();
         String reason = observation == null ? "case did not reach plan analysis" : observation.getReason();
         String originalPlan = observation == null ? "" : observation.getOriginalPlan();
@@ -786,9 +921,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         String comparisonStatus = comparison == null ? "NOT_RUN"
                 : comparison.isComparable() ? comparison.isEqual() ? "COMPARABLE_EQUAL" : "COMPARABLE_MISMATCH"
                         : "INCOMPARABLE";
-        String preconditionStatus = precondition == null ? "VALID" : precondition.isValid() ? "VALID" : "INVALID";
+        String preconditionStatus = precondition == null ? "DATA_VALID" : precondition.getStatus().name();
         if (comparison != null && !comparison.isComparable()) {
-            status = "UNKNOWN";
             reason = comparison.getReason();
         }
         String observedShifts = observation == null ? "[]"
@@ -808,6 +942,20 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + "\",\"sourceCommit\":\"" + EcstFailureRecord.json(sourceCommit())
                 + "\",\"shiftStatus\":\"" + shiftStatus + "\",\"comparisonStatus\":\""
                 + comparisonStatus + "\",\"preconditionStatus\":\"" + preconditionStatus
+                + "\",\"bugValidation\":\""
+                + EcstFailureRecord.json(bugValidation == null ? "" : bugValidation.toString())
+                + "\",\"evidenceLevel\":\""
+                + (observation == null ? "PLAN_ONLY" : observation.getEvidenceLevel().name())
+                + "\",\"originalResultSample\":\""
+                + EcstFailureRecord.json(comparison == null ? "" : comparison.getOriginalSample())
+                + "\",\"transformedResultSample\":\""
+                + EcstFailureRecord.json(comparison == null ? "" : comparison.getTransformedSample())
+                + "\",\"resultDifference\":\""
+                + EcstFailureRecord.json(comparison != null && !comparison.isEqual() ? comparison.getReason() : "")
+                + "\",\"minimizationStatus\":\""
+                + EcstFailureRecord.json(bugValidation == null ? "NOT_ATTEMPTED" : bugValidation.getMinimizationStatus())
+                + "\",\"interventionStatus\":\""
+                + EcstFailureRecord.json(bugValidation == null ? "INCONCLUSIVE" : bugValidation.getInterventionStatus())
                 + "\",\"observedShifts\":" + observedShifts
                 + ",\"originalQuery\":\"" + EcstFailureRecord.json(testCase.getOriginalQuery())
                 + "\",\"transformedQuery\":\"" + EcstFailureRecord.json(testCase.getTransformedQuery())
@@ -827,7 +975,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + "\",\"transformedEvidence\":\""
                 + EcstFailureRecord.json(observation == null ? "" : observation.getTransformedEvidence())
                 + "\",\"generationInfo\":\"" + EcstFailureRecord.json(testCase.getGenerationInfo())
-                + "\",\"setup\":" + EcstFailureRecord.jsonArray(testCase.getMaterializationSetup()) + "}";
+                + "\",\"setup\":" + EcstFailureRecord.jsonArray(testCase.getMaterializationSetup())
+                + ",\"sourceDataReplay\":" + EcstFailureRecord.jsonArray(testCase.getMaterializationSetup()) + "}";
         appendJsonLine("ecst-cases.jsonl", line);
         caseRecordsWritten++;
     }

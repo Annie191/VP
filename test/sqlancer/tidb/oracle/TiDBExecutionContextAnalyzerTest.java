@@ -1,6 +1,7 @@
 package sqlancer.tidb.oracle;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -178,6 +179,18 @@ public class TiDBExecutionContextAnalyzerTest {
         EcstContext context = TiDBExecutionContextAnalyzer.parse(plan, "CAST(`a` AS SIGNED)");
         assertEquals("SELECTION", context.getOperator());
         assertEquals("INDEXLOOKUP", context.getAccessPath());
+    }
+
+    @Test
+    void accessPathUsesTheJoinInputContainingTargetDependency() {
+        String plan = "Projection | 1 root | | cast(test.l.c0, bigint BINARY)->Column#1\n"
+                + "└─MergeJoin | 1 root | | inner join, left key:test.l.id, right key:test.r.id\n"
+                + "  ├─TableReader(Build) | 1 root | | data:TableFullScan\n"
+                + "  │ └─TableFullScan | 1 cop[tikv] | table:l, columns:c0\n"
+                + "  └─TableReader(Probe) | 1 root | | data:IndexReader\n"
+                + "    └─IndexReader | 1 cop[tikv] | index:idx(c1)\n";
+        EcstContext context = TiDBExecutionContextAnalyzer.parse(plan, "CAST(`c0` AS SIGNED)");
+        assertEquals("TABLEFULLSCAN", context.getAccessPath());
     }
 
     @Test
@@ -390,6 +403,28 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void differentConstantsDoNotMatchTheSameIfFingerprint() {
+        String plan = "Projection | 1 root | | if(gt(cast(test.t.c0, bigint BINARY), 0), "
+                + "cast(test.t.c1, bigint BINARY), 1)->Column#1\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "IF(CAST(`c0` AS SIGNED) > 0, CAST(`c1` AS SIGNED), 0)", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+    }
+
+    @Test
+    void constantsAndUnsupportedRewriteContentsAreCompared() {
+        TiDBExecutionContextAnalyzer.ExprFingerprint zero = TiDBExecutionContextAnalyzer.ExprFingerprint
+                .parse("gt(c0, 0)");
+        TiDBExecutionContextAnalyzer.ExprFingerprint same = TiDBExecutionContextAnalyzer.ExprFingerprint
+                .parse("gt(c0, 0)");
+        assertEquals(zero, same);
+        assertEquals(zero.hashCode(), same.hashCode());
+        assertNotEquals(zero, TiDBExecutionContextAnalyzer.ExprFingerprint.parse("gt(c0, 1)"));
+        assertNotEquals(TiDBExecutionContextAnalyzer.ExprFingerprint.parse("(c0, 0)"),
+                TiDBExecutionContextAnalyzer.ExprFingerprint.parse("(c0, 1)"));
+    }
+
+    @Test
     void doesNotEraseFromBinaryCastMapping() {
         String plan = "Projection | 1 root | | char_length(cast(from_binary(test.t.c0), var_string(19)))->Column#1\n";
         TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
@@ -405,8 +440,24 @@ public class TiDBExecutionContextAnalyzerTest {
                 "`c0` > 0", "UNKNOWN");
         assertEquals(TiDBExecutionContextAnalyzer.ExtractionStatus.ABSORBED_IN_INDEX_RANGE,
                 parsed.extractionStatus());
+        assertEquals("UNKNOWN", parsed.context().getLocation());
+        assertEquals("UNKNOWN", parsed.context().getOperator());
+        assertEquals("UNKNOWN", parsed.context().getBoundary());
         assertEquals("INDEXREADER", parsed.context().getAccessPath());
         assertTrue(parsed.evidence().contains("IndexRangeScan"));
+    }
+
+    @Test
+    void indexRangeEvidenceMustReferenceTheTargetDependencies() {
+        String plan = "IndexReader | 1 root | | index:IndexRangeScan\n"
+                + "└─IndexRangeScan | 1 cop[tikv] | table:t, index:idx(c1) | range:(0,+inf]\n";
+        TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
+                "`c0` > 0", "UNKNOWN");
+        assertEquals(TiDBExecutionContextAnalyzer.ExtractionStatus.EXPRESSION_NOT_FOUND,
+                parsed.extractionStatus());
+        assertEquals("UNKNOWN", parsed.context().getLocation());
+        assertEquals("UNKNOWN", parsed.context().getBoundary());
+        assertEquals("UNKNOWN", parsed.context().getAccessPath());
     }
 
     @Test

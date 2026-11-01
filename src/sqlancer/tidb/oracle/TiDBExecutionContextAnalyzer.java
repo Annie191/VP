@@ -74,7 +74,7 @@ public final class TiDBExecutionContextAnalyzer {
         }
         ParsedContext parsed = parsePlan(plan, operation, evaluation);
         return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
-                ? relationAccessContext(plan, evaluation) : parsed;
+                ? relationAccessContext(plan, evaluation, operation) : parsed;
     }
 
     /** Compatibility accessor for callers that only need the normalized context. */
@@ -118,10 +118,10 @@ public final class TiDBExecutionContextAnalyzer {
             ParsedContext transformed = parsePlan(transformedPlan, operation, evaluation);
             if (target != null && target.getDimension() == sqlancer.common.oracle.ecst.EcstContextDimension.ACCESS_PATH) {
                 if (original.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND) {
-                    original = relationAccessContext(originalPlan, evaluation);
+                    original = relationAccessContext(originalPlan, evaluation, operation);
                 }
                 if (transformed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND) {
-                    transformed = relationAccessContext(transformedPlan, evaluation);
+                    transformed = relationAccessContext(transformedPlan, evaluation, operation);
                 }
             }
             boolean originalMatched = original.matched || target != null
@@ -150,7 +150,7 @@ public final class TiDBExecutionContextAnalyzer {
                             : UnknownReason.UNKNOWN_BECAUSE_OPERATION_MAPPING
                     : UnknownReason.NONE;
             return observation(original, transformed, status, shifts,
-                    status == EcstShiftStatus.SUCCESS ? "confirmed target migration"
+                    status == EcstShiftStatus.SUCCESS ? "observed target migration in execution plan; causal execution evidence unavailable"
                             : status == EcstShiftStatus.FAILURE ? "target migration not observed"
                                     : "target migration cannot be determined", unknownReason);
         } catch (RuntimeException e) {
@@ -189,15 +189,16 @@ public final class TiDBExecutionContextAnalyzer {
 
     /** Package-visible evidence entry point for focused analyzer tests. */
     static ParsedContext parseWithEvidence(String plan, String targetExpression, String evaluation) {
-        ParsedContext parsed = parsePlan(plan, operationFor(targetExpression), evaluation);
+        EcstOperation operation = operationFor(targetExpression);
+        ParsedContext parsed = parsePlan(plan, operation, evaluation);
         return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
-                ? relationAccessContext(plan, evaluation) : parsed;
+                ? relationAccessContext(plan, evaluation, operation) : parsed;
     }
 
     static ParsedContext parseWithEvidence(String plan, EcstOperation operation, String evaluation) {
         ParsedContext parsed = parsePlan(plan, operation, evaluation);
         return parsed.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND
-                ? relationAccessContext(plan, evaluation) : parsed;
+                ? relationAccessContext(plan, evaluation, operation) : parsed;
     }
 
     private EcstObservation observation(ParsedContext original, ParsedContext transformed, EcstShiftStatus status,
@@ -276,19 +277,70 @@ public final class TiDBExecutionContextAnalyzer {
         return new ParsedContext(context, plan, best.expression.owner.raw, evidence, status, reason, candidates);
     }
 
-    private static ParsedContext relationAccessContext(String plan, String evaluation) {
+    private static ParsedContext relationAccessContext(String plan, String evaluation, EcstOperation operation) {
         List<PlanNode> nodes = parseNodes(plan);
         PlanNode accessRoot = nodes.isEmpty() ? null : nodes.get(0);
-        boolean absorbed = plan != null && (plan.toLowerCase(Locale.ROOT).contains("indexrangescan")
-                || plan.toLowerCase(Locale.ROOT).contains("indexfullscan"));
-        if (accessRoot == null || !absorbed) {
+        TargetPattern target = TargetPattern.create(operation);
+        List<PlanNode> indexRanges = nodes.stream().filter(TiDBExecutionContextAnalyzer::isIndexRangeNode)
+                .collect(java.util.stream.Collectors.toList());
+        if (accessRoot == null || target == null || indexRanges.isEmpty()
+                || indexRanges.stream().noneMatch(node -> indexRangeMatchesTarget(node, target))) {
             return ParsedContext.unknown(plan, "target expression fingerprint was not found in a plan node",
                     MatchStatus.NOT_FOUND);
         }
-        EcstContext context = contextFor(accessRoot, parseEvaluationEnvironment(evaluation), null);
+        String relationAccessPath = accessPath(accessRoot);
+        if ("UNKNOWN".equals(relationAccessPath)) {
+            return ParsedContext.unknown(plan, "index range evidence did not expose a relation access path",
+                    MatchStatus.NOT_FOUND);
+        }
+        EcstContext context = new EcstContext("UNKNOWN", "UNKNOWN", "UNKNOWN", relationAccessPath,
+                parseEvaluationEnvironment(evaluation));
         String evidence = "sessionMetadata=" + evaluation + "; extractionStatus=ABSORBED_IN_INDEX_RANGE"
-                + "; relationAccessPath=" + context.getAccessPath() + "; plan=" + plan;
+                + "; relationAccessPath=" + context.getAccessPath() + "; location=UNKNOWN; boundary=UNKNOWN"
+                + "; targetReferences=" + target.references + "; plan=" + plan;
         return ParsedContext.absorbed(context, plan, evidence);
+    }
+
+    private static boolean isIndexRangeNode(PlanNode node) {
+        String operator = node.operator.toLowerCase(Locale.ROOT);
+        return operator.contains("indexrangescan") || operator.contains("indexfullscan");
+    }
+
+    private static boolean indexRangeMatchesTarget(PlanNode node, TargetPattern target) {
+        Set<String> required = canonicalDependencyReferences(target);
+        if (required.isEmpty()) {
+            return false;
+        }
+        Set<String> rangeReferences = indexRangeReferences(node, target);
+        return required.stream().allMatch(reference -> rangeReferences.stream().anyMatch(rangeReference ->
+                rangeReference.equals(reference)
+                        || rangeReference.substring(rangeReference.lastIndexOf('.') + 1)
+                                .equals(reference.substring(reference.lastIndexOf('.') + 1))));
+    }
+
+    private static Set<String> indexRangeReferences(PlanNode node, TargetPattern target) {
+        String raw = node.raw;
+        String lower = raw.toLowerCase(Locale.ROOT);
+        int indexStart = lower.indexOf("index:");
+        if (indexStart < 0) {
+            return Set.of();
+        }
+        int rangeStart = lower.indexOf("range:", indexStart + "index:".length());
+        int end = rangeStart < 0 ? raw.length() : rangeStart;
+        String indexDescriptor = raw.substring(indexStart + "index:".length(), end);
+        return logicalReferences(indexDescriptor, target);
+    }
+
+    private static Set<String> canonicalDependencyReferences(TargetPattern target) {
+        Set<String> result = new LinkedHashSet<>();
+        for (String dependency : target.references) {
+            String canonical = target.lineage.getOrDefault(dependency, dependency);
+            result.add(canonical);
+        }
+        for (String canonical : target.lineage.values()) {
+            result.add(canonical);
+        }
+        return result;
     }
 
     private static boolean allCandidatesRepresentSameOperation(List<Candidate> candidates) {
@@ -581,7 +633,7 @@ public final class TiDBExecutionContextAnalyzer {
         String boundary = "ROOT".equals(location) || "MPP".equals(location) ? "NON_PUSHDOWN"
                 : "COP_TIKV".equals(location) || "COP_TIFLASH".equals(location) ? "PUSHDOWN" : "UNKNOWN";
         // Session variables and CAST syntax do not establish executor evaluation semantics.
-        return new EcstContext(location, node.operator, boundary, accessPath(node), evaluation);
+        return new EcstContext(location, node.operator, boundary, accessPath(node, target), evaluation);
     }
 
     private static EcstContext contextForCandidates(List<Candidate> candidates,
@@ -671,6 +723,52 @@ public final class TiDBExecutionContextAnalyzer {
             return "UNKNOWN";
         }
         return paths.values().iterator().next();
+    }
+
+    /** Resolves a path only when target dependencies identify one join input. */
+    private static String accessPath(PlanNode node, TargetPattern target) {
+        if (target == null) {
+            return accessPath(node);
+        }
+        String operator = node.operator.toLowerCase(Locale.ROOT);
+        if (operator.contains("join")) {
+            Set<String> paths = new LinkedHashSet<>();
+            for (PlanNode child : node.children) {
+                if (containsTargetDependency(child, target)) {
+                    paths.add(firstAccessPath(child));
+                }
+            }
+            return paths.size() == 1 ? paths.iterator().next() : "UNKNOWN";
+        }
+        List<String> childPaths = new ArrayList<>();
+        for (PlanNode child : node.children) {
+            if (containsTargetDependency(child, target)) {
+                String path = accessPath(child, target);
+                if (!"UNKNOWN".equals(path)) {
+                    childPaths.add(path);
+                }
+            }
+        }
+        Set<String> distinct = new LinkedHashSet<>(childPaths);
+        if (distinct.size() == 1) {
+            return distinct.iterator().next();
+        }
+        if (distinct.size() > 1) {
+            return "UNKNOWN";
+        }
+        return accessPath(node);
+    }
+
+    private static boolean containsTargetDependency(PlanNode node, TargetPattern target) {
+        if (!Collections.disjoint(logicalReferences(node.raw, target), target.references)) {
+            return true;
+        }
+        for (PlanNode child : node.children) {
+            if (containsTargetDependency(child, target)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Map<String, String> accessPaths(PlanNode node) {
@@ -1300,10 +1398,17 @@ public final class TiDBExecutionContextAnalyzer {
         public boolean equals(Object other) {
             if (!(other instanceof ExprFingerprint)) return false;
             ExprFingerprint that = (ExprFingerprint) other;
-            boolean castLengthCompatible = !"CAST".equals(kind) || !"CHAR".equals(resultType)
-                    || "*".equals(constant) || "*".equals(that.constant) || constant.equals(that.constant);
-            return castLengthCompatible && kind.equals(that.kind) && resultType.equals(that.resultType)
-                    && children.equals(that.children) && java.util.Objects.equals(column, that.column);
+            return kind.equals(that.kind) && resultType.equals(that.resultType)
+                    && children.equals(that.children) && java.util.Objects.equals(column, that.column)
+                    && constantsEqual(that);
+        }
+
+        private boolean constantsEqual(ExprFingerprint that) {
+            if ("CAST".equals(kind) && "CHAR".equals(resultType)) {
+                return "*".equals(constant) || "*".equals(that.constant)
+                        || java.util.Objects.equals(constant, that.constant);
+            }
+            return java.util.Objects.equals(constant, that.constant);
         }
 
         @Override

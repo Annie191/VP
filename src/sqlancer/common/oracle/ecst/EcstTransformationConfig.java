@@ -30,7 +30,10 @@ public final class EcstTransformationConfig {
         WHERE,
         SELECT,
         HAVING,
-        ON
+        ON,
+        JOIN_ON,
+        INNER_WHERE,
+        INNER_SELECT
     }
 
     private final Representation representation;
