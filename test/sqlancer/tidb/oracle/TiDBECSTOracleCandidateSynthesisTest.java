@@ -1,6 +1,7 @@
 package sqlancer.tidb.oracle;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
@@ -197,5 +198,14 @@ public class TiDBECSTOracleCandidateSynthesisTest {
 
         assertEquals("SELECT `vp_rowid`, ecst_value AS ecst_value, `c0` AS ecst_input FROM `source`", rewritten);
         assertEquals(3, rewritten.substring(0, rewritten.indexOf(" FROM ")).split(",").length);
+    }
+
+    @Test
+    void resultNormalizationKeepsStringSemanticsSeparateFromNumbers() {
+        assertEquals("001", TiDBVerticalPartitioningOracle.canonicalizeTypedValue("001", "VARCHAR"));
+        assertEquals("1", TiDBVerticalPartitioningOracle.canonicalizeTypedValue("001", "DECIMAL"));
+        assertEquals("1", TiDBVerticalPartitioningOracle.canonicalizeTypedValue("001", "BIGINT"));
+        assertNotEquals(TiDBVerticalPartitioningOracle.canonicalizeTypedValue("001", "VARCHAR"),
+                TiDBVerticalPartitioningOracle.canonicalizeTypedValue("1", "VARCHAR"));
     }
 }

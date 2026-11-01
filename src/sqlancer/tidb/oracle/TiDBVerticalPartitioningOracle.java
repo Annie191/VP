@@ -3508,25 +3508,86 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     private String canonicalizeRow(SQLancerResultSet rs, int columnCount) throws SQLException {
         StringBuilder sb = new StringBuilder();
         for (int i = 1; i <= columnCount; i++) {
-            String value = rs.getString(i);
+            String type = rs.getType(i);
+            String value;
+            if (isBinaryResultType(type)) {
+                byte[] bytes = rs.getBytes(i);
+                value = bytes == null ? null : "B:" + hex(bytes);
+            } else {
+                value = rs.getString(i);
+            }
             if (value == null) {
                 sb.append("N;");
             } else {
-                String canonical = canonicalizeValue(value);
+                String canonical = isBinaryResultType(type) ? value : canonicalizeTypedValue(value, type);
                 sb.append("S:").append(canonical.length()).append(":").append(canonical).append(";");
             }
         }
         return sb.toString();
     }
 
-    private String canonicalizeValue(String value) {
-        try {
-            BigDecimal decimal = new BigDecimal(value);
-            String plain = decimal.stripTrailingZeros().toPlainString();
-            return Objects.equals(plain, "-0") ? "0" : plain;
-        } catch (NumberFormatException ignored) {
+    static String canonicalizeTypedValue(String value, String type) {
+        if (value == null) {
+            return null;
+        }
+        String upper = type == null ? "" : type.toUpperCase(Locale.ROOT);
+        if (isCharacterResultType(upper) || isTemporalResultType(upper)
+                || isFloatingResultType(upper) || isBinaryResultType(upper)) {
             return value;
         }
+        if (isDecimalResultType(upper)) {
+            try {
+                BigDecimal decimal = new BigDecimal(value);
+                String plain = decimal.stripTrailingZeros().toPlainString();
+                return Objects.equals(plain, "-0") ? "0" : plain;
+            } catch (NumberFormatException ignored) {
+                return value;
+            }
+        }
+        if (isIntegerResultType(upper)) {
+            try {
+                return new java.math.BigInteger(value.trim()).toString();
+            } catch (NumberFormatException ignored) {
+                return value;
+            }
+        }
+        return value;
+    }
+
+    private static boolean isCharacterResultType(String type) {
+        return type.contains("CHAR") || type.contains("TEXT") || type.contains("CLOB")
+                || type.contains("STRING");
+    }
+
+    private static boolean isTemporalResultType(String type) {
+        return type.contains("DATE") || type.contains("TIME") || type.contains("YEAR");
+    }
+
+    private static boolean isFloatingResultType(String type) {
+        return type.contains("FLOAT") || type.contains("DOUBLE") || type.contains("REAL");
+    }
+
+    private static boolean isBinaryResultType(String type) {
+        return type != null && (type.contains("BINARY") || type.contains("BLOB") || type.contains("BIT"));
+    }
+
+    private static boolean isDecimalResultType(String type) {
+        return type.contains("DECIMAL") || type.contains("NUMERIC");
+    }
+
+    private static boolean isIntegerResultType(String type) {
+        return !isDecimalResultType(type) && !isFloatingResultType(type)
+                && (type.contains("TINYINT") || type.contains("SMALLINT") || type.contains("MEDIUMINT")
+                        || type.contains("INT") || type.contains("BIGINT"));
+    }
+
+    private static String hex(byte[] bytes) {
+        StringBuilder result = new StringBuilder(bytes.length * 2);
+        for (byte value : bytes) {
+            result.append(Character.forDigit((value >>> 4) & 0x0f, 16));
+            result.append(Character.forDigit(value & 0x0f, 16));
+        }
+        return result.toString();
     }
 
     private String formatBugReport(VpQueryPair pair, QueryResultMultiset singleRows, QueryResultMultiset splitRows)
