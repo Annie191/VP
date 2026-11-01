@@ -150,7 +150,7 @@ public final class TiDBExecutionContextAnalyzer {
                             : UnknownReason.UNKNOWN_BECAUSE_OPERATION_MAPPING
                     : UnknownReason.NONE;
             return observation(original, transformed, status, shifts,
-                    status == EcstShiftStatus.SUCCESS ? "confirmed target migration"
+                    status == EcstShiftStatus.SUCCESS ? "observed target migration in execution plan; causal execution evidence unavailable"
                             : status == EcstShiftStatus.FAILURE ? "target migration not observed"
                                     : "target migration cannot be determined", unknownReason);
         } catch (RuntimeException e) {

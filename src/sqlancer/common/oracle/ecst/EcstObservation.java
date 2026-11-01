@@ -6,6 +6,9 @@ import java.util.Set;
 
 /** Result of comparing the plans of an original and transformed query. */
 public final class EcstObservation {
+    public enum EvidenceLevel {
+        PLAN_ONLY, EXECUTION_OBSERVED, INTERVENTION_CONFIRMED
+    }
     public enum UnknownReason {
         NONE, UNKNOWN_BECAUSE_PLAN, UNKNOWN_BECAUSE_EVALUATION_EVIDENCE, UNKNOWN_BECAUSE_OPERATION_MAPPING
     }
@@ -21,6 +24,7 @@ public final class EcstObservation {
     private final String originalEvidence;
     private final String transformedEvidence;
     private final UnknownReason unknownReason;
+    private final EvidenceLevel evidenceLevel;
 
     public EcstObservation(EcstContext original, EcstContext transformed, EcstShiftStatus status,
             Set<String> observedShifts, String reason) {
@@ -51,6 +55,7 @@ public final class EcstObservation {
         this.originalEvidence = originalEvidence == null ? "" : originalEvidence;
         this.transformedEvidence = transformedEvidence == null ? "" : transformedEvidence;
         this.unknownReason = unknownReason == null ? UnknownReason.NONE : unknownReason;
+        this.evidenceLevel = EvidenceLevel.PLAN_ONLY;
     }
 
     public EcstContext getOriginal() {
@@ -99,5 +104,9 @@ public final class EcstObservation {
 
     public UnknownReason getUnknownReason() {
         return unknownReason;
+    }
+
+    public EvidenceLevel getEvidenceLevel() {
+        return evidenceLevel;
     }
 }
