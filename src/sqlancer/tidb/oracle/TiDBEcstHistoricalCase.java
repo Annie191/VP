@@ -16,16 +16,23 @@ import sqlancer.common.oracle.ecst.EcstTransformationConfig;
  */
 public final class TiDBEcstHistoricalCase {
     public static final class ObservedTransition {
+        public enum Kind {
+            PRIMARY_TARGET, SECONDARY_MIGRATION, STRUCTURAL_PRESERVATION
+        }
+
         private final EcstContextDimension dimension;
         private final String from;
         private final String to;
         private final String evidence;
+        private final Kind kind;
 
-        private ObservedTransition(EcstContextDimension dimension, String from, String to, String evidence) {
+        private ObservedTransition(EcstContextDimension dimension, String from, String to, String evidence,
+                Kind kind) {
             this.dimension = dimension;
             this.from = from;
             this.to = to;
             this.evidence = evidence;
+            this.kind = kind;
         }
 
         public EcstContextDimension getDimension() {
@@ -42,6 +49,14 @@ public final class TiDBEcstHistoricalCase {
 
         public String getEvidence() {
             return evidence;
+        }
+
+        public Kind getKind() {
+            return kind;
+        }
+
+        public boolean isCoverageEligible() {
+            return kind != Kind.STRUCTURAL_PRESERVATION && !from.equals(to);
         }
 
         public String targetKey() {
@@ -156,7 +171,10 @@ public final class TiDBEcstHistoricalCase {
      */
     public List<ObservedTransition> observedTransitions() {
         List<ObservedTransition> result = new ArrayList<>();
-        result.add(new ObservedTransition(dimension, from, to, String.join("; ", evidence)));
+        boolean primaryMigration = !from.equals(to);
+        result.add(new ObservedTransition(dimension, from, to, String.join("; ", evidence),
+                primaryMigration ? ObservedTransition.Kind.PRIMARY_TARGET
+                        : ObservedTransition.Kind.STRUCTURAL_PRESERVATION));
         switch (issue) {
         case "69178":
         case "69191":
@@ -165,31 +183,39 @@ public final class TiDBEcstHistoricalCase {
         case "69308":
         case "69358":
             result.add(new ObservedTransition(EcstContextDimension.OPERATOR, "HASHAGG", "PROJECTION",
-                    "target expression is in cop HashAgg before reconstruction and root Projection after it"));
+                    "target expression is in cop HashAgg before reconstruction and root Projection after it",
+                    ObservedTransition.Kind.SECONDARY_MIGRATION));
             result.add(new ObservedTransition(EcstContextDimension.BOUNDARY, "PUSHDOWN", "NON_PUSHDOWN",
-                    "aggregate expression crosses the cop/root evaluation boundary"));
+                    "aggregate expression crosses the cop/root evaluation boundary",
+                    ObservedTransition.Kind.SECONDARY_MIGRATION));
             break;
         case "69294":
         case "69295":
         case "69484":
             result.add(new ObservedTransition(EcstContextDimension.OPERATOR, "SELECTION", "MERGEJOIN",
-                    "target predicate is represented by Join.other cond after reconstruction"));
+                    "target predicate is represented by Join.other cond after reconstruction",
+                    ObservedTransition.Kind.SECONDARY_MIGRATION));
             result.add(new ObservedTransition(EcstContextDimension.BOUNDARY, "PUSHDOWN", "NON_PUSHDOWN",
-                    "predicate evaluation moves from cop Selection into the root join"));
+                    "predicate evaluation moves from cop Selection into the root join",
+                    ObservedTransition.Kind.SECONDARY_MIGRATION));
             break;
         case "69480":
             result.add(new ObservedTransition(EcstContextDimension.OPERATOR, "TOPN", "SORT",
-                    "ordering is implemented by cop TopN before and root Sort after reconstruction"));
+                    "ordering is implemented by cop TopN before and root Sort after reconstruction",
+                    ObservedTransition.Kind.SECONDARY_MIGRATION));
             result.add(new ObservedTransition(EcstContextDimension.BOUNDARY, "PUSHDOWN", "NON_PUSHDOWN",
-                    "ordering boundary crosses from cop to root"));
+                    "ordering boundary crosses from cop to root",
+                    ObservedTransition.Kind.SECONDARY_MIGRATION));
             break;
         case "69482":
             result.add(new ObservedTransition(EcstContextDimension.BOUNDARY, "PUSHDOWN", "NON_PUSHDOWN",
-                    "TopN moves from cop below the view to root above the join"));
+                    "TopN moves from cop below the view to root above the join",
+                    ObservedTransition.Kind.SECONDARY_MIGRATION));
             break;
         case "69598":
             result.add(new ObservedTransition(EcstContextDimension.BOUNDARY, "NON_PUSHDOWN", "PUSHDOWN",
-                    "correlated rowid condition is pushed from root HashJoin into inner cop Selections"));
+                    "correlated rowid condition is pushed from root HashJoin into inner cop Selections",
+                    ObservedTransition.Kind.SECONDARY_MIGRATION));
             break;
         default:
             break;
@@ -198,7 +224,7 @@ public final class TiDBEcstHistoricalCase {
     }
 
     public String targetKey() {
-        return new ObservedTransition(dimension, from, to, "").targetKey();
+        return new ObservedTransition(dimension, from, to, "", ObservedTransition.Kind.PRIMARY_TARGET).targetKey();
     }
 
     public String configKey() {

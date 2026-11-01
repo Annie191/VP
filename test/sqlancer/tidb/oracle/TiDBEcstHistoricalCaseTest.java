@@ -55,6 +55,9 @@ public class TiDBEcstHistoricalCaseTest {
         assertTrue(rules.stream().anyMatch(rule -> rule.getTargetKey().contains("OPERATOR_HASHAGG_TO_PROJECTION")));
         assertTrue(rules.stream().anyMatch(rule -> rule.getTargetKey().contains("OPERATOR_SELECTION_TO_MERGEJOIN")));
         assertTrue(rules.stream().anyMatch(rule -> rule.getTargetKey().contains("BOUNDARY_NON_PUSHDOWN_TO_PUSHDOWN")));
+        assertTrue(rules.stream().anyMatch(rule -> rule.getKind() == EcstHistoricalRule.Kind.SECONDARY_MIGRATION));
+        assertTrue(rules.stream().anyMatch(rule -> rule.getKind() == EcstHistoricalRule.Kind.STRUCTURAL_PRESERVATION));
+        assertTrue(rules.stream().filter(EcstHistoricalRule::isCoverageEligible).count() > 16);
         assertTrue(rules.stream().anyMatch(rule -> rule.getConfiguration().contains("VIEW")));
         assertTrue(rules.stream().anyMatch(rule -> rule.getConfiguration().contains("CTE")));
         assertTrue(rules.stream().allMatch(rule -> !rule.getCaseIds().isEmpty() && !rule.getEvidence().isEmpty()));

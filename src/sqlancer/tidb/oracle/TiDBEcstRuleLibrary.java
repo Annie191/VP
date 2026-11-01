@@ -18,7 +18,9 @@ public final class TiDBEcstRuleLibrary {
                         "TiDB historical VP difference " + historical.getIssue() + " "
                                 + transition.getDimension(),
                         historical.getFamily(), transition.targetKey(), historical.configKey(),
-                        List.of(historical.getIssue()), List.of(transition.getEvidence())));
+                        List.of(historical.getIssue()), List.of(transition.getEvidence()),
+                        sqlancer.common.oracle.ecst.EcstHistoricalRule.Kind.valueOf(
+                                transition.getKind().name()))));
             }
         }
         return result;
