@@ -89,7 +89,11 @@ public final class TiDBEcstCapabilities {
 
     public boolean supports(EcstTransformationConfig config, EcstTarget target,
             TiDBVerticalPartitioningOracle.EcstSeed seed, EcstContext seedContext) {
-        return config != null && supportsRepresentation(config.getRepresentation())
+        boolean representationMatchesReconstruction = config != null
+                && (config.getRepresentation() == EcstTransformationConfig.Representation.VIEW)
+                        == (config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW);
+        return config != null && representationMatchesReconstruction
+                && supportsRepresentation(config.getRepresentation())
                 && supportsReconstruction(config.getReconstruction())
                 && supportsExpressionContext(config.getExpressionContext())
                 && supportsTarget(target, seed, seedContext)

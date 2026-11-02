@@ -601,6 +601,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 && config.getReconstruction() != EcstTransformationConfig.Reconstruction.VIEW) {
             return false;
         }
+        if (config.getRepresentation() != EcstTransformationConfig.Representation.VIEW
+                && config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW) {
+            return false;
+        }
         if (config.getRepresentation() == EcstTransformationConfig.Representation.REPLICATED
                 && config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE) {
             return false;
