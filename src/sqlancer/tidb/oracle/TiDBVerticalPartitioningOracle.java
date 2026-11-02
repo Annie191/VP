@@ -691,18 +691,43 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     private static final class QueryResultMultiset {
+        private final List<ColumnSignature> outputSchema;
         private final Map<String, Integer> rows;
         private final Map<String, List<ApproximateKind>> approximateColumns;
         private final List<String> orderedRows;
         private final List<List<ApproximateKind>> orderedApproximateColumns;
 
-        private QueryResultMultiset(Map<String, Integer> rows, Map<String, List<ApproximateKind>> approximateColumns,
+        private QueryResultMultiset(List<ColumnSignature> outputSchema, Map<String, Integer> rows,
+                Map<String, List<ApproximateKind>> approximateColumns,
                 List<String> orderedRows, List<List<ApproximateKind>> orderedApproximateColumns) {
+            this.outputSchema = outputSchema;
             this.rows = rows;
             this.approximateColumns = approximateColumns;
             this.orderedRows = orderedRows;
             this.orderedApproximateColumns = orderedApproximateColumns;
         }
+    }
+
+    private static final class ColumnSignature {
+        private final String label;
+        private final String typeName;
+        private final int jdbcType;
+
+        private ColumnSignature(String label, String typeName, int jdbcType) {
+            this.label = label == null ? "" : label;
+            this.typeName = typeName == null ? "" : typeName.toUpperCase(Locale.ROOT);
+            this.jdbcType = jdbcType;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (!(other instanceof ColumnSignature)) return false;
+            ColumnSignature that = (ColumnSignature) other;
+            return label.equals(that.label) && typeName.equals(that.typeName) && jdbcType == that.jdbcType;
+        }
+
+        @Override
+        public int hashCode() { return Objects.hash(label, typeName, jdbcType); }
     }
 
     private enum ApproximateKind {
@@ -3637,6 +3662,9 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     private boolean resultMultisetsMatch(QueryResultMultiset left, QueryResultMultiset right) {
+        if (!left.outputSchema.equals(right.outputSchema)) {
+            return false;
+        }
         if (left.rows.equals(right.rows)) {
             return true;
         }
@@ -3756,6 +3784,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         Map<String, List<ApproximateKind>> approximateColumns = new LinkedHashMap<>();
         List<String> orderedRows = new ArrayList<>();
         List<List<ApproximateKind>> orderedApproximateColumns = new ArrayList<>();
+        List<ColumnSignature> outputSchema = new ArrayList<>();
         SQLancerResultSet rs = null;
         boolean completed = false;
         Main.nrQueries.addAndGet(1);
@@ -3765,6 +3794,9 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 throw new IgnoreMeException();
             }
             int columnCount = rs.getColumnCount();
+            for (int i = 1; i <= columnCount; i++) {
+                outputSchema.add(new ColumnSignature(rs.getColumnLabel(i), rs.getType(i), rs.getJdbcType(i)));
+            }
             while (rs.next()) {
                 String row = canonicalizeRow(rs, columnCount);
                 List<ApproximateKind> rowApproximateColumns = getApproximateColumns(rs, columnCount);
@@ -3794,7 +3826,16 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 rs.close();
             }
         }
-        return new QueryResultMultiset(rows, approximateColumns, orderedRows, orderedApproximateColumns);
+        return new QueryResultMultiset(outputSchema, rows, approximateColumns, orderedRows, orderedApproximateColumns);
+    }
+
+    static boolean resultSchemasCompatibleForTest(List<String> leftTypes, List<String> rightTypes) {
+        if (leftTypes == null || rightTypes == null || leftTypes.size() != rightTypes.size()) return false;
+        for (int i = 0; i < leftTypes.size(); i++) {
+            if (!new ColumnSignature("", leftTypes.get(i), java.sql.Types.OTHER)
+                    .equals(new ColumnSignature("", rightTypes.get(i), java.sql.Types.OTHER))) return false;
+        }
+        return true;
     }
 
     private List<ApproximateKind> getApproximateColumns(SQLancerResultSet rs, int columnCount) throws SQLException {

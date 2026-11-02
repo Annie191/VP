@@ -4,7 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.File;
+import java.nio.file.Files;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 
@@ -117,6 +122,14 @@ public class TiDBECSTOracleCandidateSynthesisTest {
     @Test
     void ecstKeepsOnlyABoundedEmptyTableSamplingBudget() {
         assertEquals(0.05, TiDBVerticalPartitioningOracle.ecstEmptyBaseTableProbabilityForTest(), 0.000001);
+    }
+
+    @Test
+    void resultSchemaMismatchIsRejectedEvenWhenRowsAreEmpty() {
+        assertTrue(!TiDBVerticalPartitioningOracle.resultSchemasCompatibleForTest(
+                List.of("BIGINT"), List.of("VARCHAR")));
+        assertTrue(TiDBVerticalPartitioningOracle.resultSchemasCompatibleForTest(
+                List.of("BIGINT", "VARCHAR"), List.of("BIGINT", "VARCHAR")));
     }
 
     @Test
@@ -248,15 +261,34 @@ public class TiDBECSTOracleCandidateSynthesisTest {
     }
 
     @Test
-    void innerSelectPreservesOutputShapeIncludingSiblingColumn() {
-        String target = "COALESCE(CAST(`c0` AS SIGNED), 0)";
+    void innerSelectPreservesSiblingProjectionColumns() {
+        String target = "COALESCE(CAST(`c1` AS SIGNED), 0)";
         String original = "SELECT `vp_rowid`, " + target
-                + " AS ecst_value, `c0` AS ecst_input FROM `source`";
+                + " AS ecst_value, `c1` AS ecst_input FROM `source`";
 
         String rewritten = TiDBVerticalPartitioningOracle.rewriteInnerSelectProjection(original, target);
 
-        assertEquals("SELECT `vp_rowid`, ecst_value AS ecst_value, `c0` AS ecst_input FROM `source`", rewritten);
-        assertEquals(3, rewritten.substring(0, rewritten.indexOf(" FROM ")).split(",").length);
+        assertEquals("SELECT `vp_rowid`, ecst_value AS ecst_value, `c1` AS ecst_input FROM `source`", rewritten);
+    }
+
+    @Test
+    void concurrentJsonLinesAreWrittenAtomically() throws Exception {
+        File directory = Files.createTempDirectory("ecst-json-log").toFile();
+        ExecutorService workers = Executors.newFixedThreadPool(8);
+        for (int worker = 0; worker < 8; worker++) {
+            final int workerId = worker;
+            workers.submit(() -> {
+                for (int i = 0; i < 100; i++) {
+                    TiDBECSTOracle.appendJsonLineForTest(directory, "cases.jsonl",
+                            "{\"worker\":" + workerId + ",\"case\":" + i + "}");
+                }
+            });
+        }
+        workers.shutdown();
+        assertTrue(workers.awaitTermination(10, TimeUnit.SECONDS));
+        List<String> lines = Files.readAllLines(new File(directory, "cases.jsonl").toPath());
+        assertEquals(800, lines.size());
+        assertTrue(lines.stream().allMatch(line -> line.matches("\\{\\\"worker\\\":\\d+,\\\"case\\\":\\d+\\}")));
     }
 
     @Test
