@@ -68,6 +68,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int seedRefreshes;
     private int seedRefreshAttempts;
     private int seedRefreshExpectedSkips;
+    private long rootCopCandidateGenerated;
+    private long rootCopPreconditionAccepted;
+    private long rootCopExplainAnalyzed;
+    private long rootCopMigrationSuccess;
     private long runId;
     private int caseSequence;
     private int caseRecordsWritten;
@@ -302,6 +306,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     continue;
                 }
                 testCase = candidate;
+                if ("TIDB_LOCATION_ROOT_TO_COP_TIKV".equals(target.getKey())) {
+                    rootCopPreconditionAccepted++;
+                }
             }
             if (testCase == null) {
                 noConfigurationSkips++;
@@ -315,6 +322,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 vp.prepareEcstCase(testCase);
                 observation = analyzer.analyze(testCase.getOriginalQuery(), testCase.getTransformedQuery(),
                         testCase.getOperation(), target);
+                if ("TIDB_LOCATION_ROOT_TO_COP_TIKV".equals(target.getKey())) {
+                    rootCopExplainAnalyzed++;
+                }
             } catch (Exception | AssertionError failure) {
                 recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config, testCase, failure);
                 cleanupSeed(seed);
@@ -357,6 +367,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 writeCaseRecord(target, config, testCase, observation, comparison, null, bugValidation);
                 history.observe(target.getKey(), config.stableKey(), observation.getStatus(),
                         observation.getObservedShifts(), System.nanoTime() - started, feature);
+                if ("TIDB_LOCATION_ROOT_TO_COP_TIKV".equals(target.getKey())
+                        && observation.getStatus() == EcstShiftStatus.SUCCESS) {
+                    rootCopMigrationSuccess++;
+                }
                 lastCommittedCaseId = runId + "-" + caseSequence;
                 if (!keepArtifacts) {
                     cleanupSeed(seed);
@@ -456,6 +470,9 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             }
             if (!applicable.isEmpty()) {
                 result.put(target.getKey(), applicable);
+                if ("TIDB_LOCATION_ROOT_TO_COP_TIKV".equals(target.getKey())) {
+                    rootCopCandidateGenerated += applicable.size();
+                }
             } else {
                 candidateRejectReasons.add(target.getKey() + ": no applicable configuration after rule/legal/seed/layout/capability checks");
             }
@@ -1120,6 +1137,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             writer.write("generationExpectedSkips=" + generationExpectedSkips + System.lineSeparator());
             writer.write("seedRefreshAttempts=" + seedRefreshAttempts + System.lineSeparator());
             writer.write("seedRefreshExpectedSkips=" + seedRefreshExpectedSkips + System.lineSeparator());
+            writer.write("rootCopCandidateGenerated=" + rootCopCandidateGenerated + System.lineSeparator());
+            writer.write("rootCopPreconditionAccepted=" + rootCopPreconditionAccepted + System.lineSeparator());
+            writer.write("rootCopExplainAnalyzed=" + rootCopExplainAnalyzed + System.lineSeparator());
+            writer.write("rootCopMigrationSuccess=" + rootCopMigrationSuccess + System.lineSeparator());
             writer.write("executionFailures=" + executionFailures + System.lineSeparator());
             writer.write("comparisonSkips=" + comparisonSkips + System.lineSeparator());
             writer.write("comparableComparisons=" + comparableComparisons + System.lineSeparator());

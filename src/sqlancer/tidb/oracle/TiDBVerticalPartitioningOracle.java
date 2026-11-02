@@ -1040,12 +1040,17 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             String targetExpression = expression.expression;
             EcstAccessPathPreparation accessPathPreparation = prepareEcstSourceAccessPath(schema, dependencies,
                     filterPredicate);
+        boolean duplicateDependencyGroup = context == EcstTransformationConfig.ExpressionContext.HAVING
+                && hasDuplicateDependencyGroup(schema, dependencies);
         HavingTemplate havingTemplate = context == EcstTransformationConfig.ExpressionContext.HAVING
-                ? Randomly.fromOptions(HavingTemplate.GROUP_DEPENDENCIES,
-                        HavingTemplate.GROUP_DEPENDENCIES_USE_ALIAS,
-                        HavingTemplate.GROUP_DEPENDENCIES_MULTIROW,
-                        HavingTemplate.GROUP_DEPENDENCIES_MULTIROW_USE_ALIAS,
-                        HavingTemplate.GROUP_EXPRESSION_PROBE)
+                ? duplicateDependencyGroup
+                        ? Randomly.fromOptions(HavingTemplate.GROUP_DEPENDENCIES,
+                                HavingTemplate.GROUP_DEPENDENCIES_USE_ALIAS,
+                                HavingTemplate.GROUP_DEPENDENCIES_MULTIROW,
+                                HavingTemplate.GROUP_DEPENDENCIES_MULTIROW_USE_ALIAS,
+                                HavingTemplate.GROUP_EXPRESSION_PROBE)
+                        : Randomly.fromOptions(HavingTemplate.GROUP_DEPENDENCIES,
+                                HavingTemplate.GROUP_DEPENDENCIES_USE_ALIAS)
                 : null;
         String originalQuery = buildEcstSeedQuery(schema, targetExpression, filterPredicate, context,
                 dependencies, havingTemplate);
@@ -1063,6 +1068,16 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             if (failure instanceof Exception) throw (Exception) failure;
             if (failure instanceof Error) throw (Error) failure;
             throw new RuntimeException(failure);
+        }
+    }
+
+    private boolean hasDuplicateDependencyGroup(VpSchema schema, List<VpColumn> dependencies) throws SQLException {
+        if (dependencies == null || dependencies.isEmpty()) return false;
+        String groupBy = dependencies.stream().map(column -> quote(column.name)).collect(Collectors.joining(", "));
+        String sql = "SELECT 1 FROM " + quote(schema.sourceTable) + " GROUP BY " + groupBy
+                + " HAVING COUNT(*) > 1 LIMIT 1";
+        try (Statement statement = state.getConnection().createStatement(); ResultSet rows = statement.executeQuery(sql)) {
+            return rows.next();
         }
     }
 
@@ -4013,7 +4028,10 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     private static boolean isBinaryResultType(String type) {
-        return type != null && (type.contains("BINARY") || type.contains("BLOB") || type.contains("BIT"));
+        if (type == null) return false;
+        String upper = type.toUpperCase(Locale.ROOT);
+        return upper.contains("BINARY") || upper.contains("VARBINARY") || upper.contains("BLOB")
+                || upper.contains("BIT");
     }
 
     private static boolean isDecimalResultType(String type) {
