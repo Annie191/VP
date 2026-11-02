@@ -98,9 +98,12 @@ public class TiDBECSTOracleCandidateSynthesisTest {
         assertTrue(configurations.stream().anyMatch(c -> c.getRepresentation()
                 == EcstTransformationConfig.Representation.VIEW
                 && c.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW));
-        assertTrue(configurations.stream().noneMatch(c -> c.getRepresentation()
-                != EcstTransformationConfig.Representation.VIEW
+        assertTrue(configurations.stream().anyMatch(c -> c.getRepresentation()
+                == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED
                 && c.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW));
+        assertTrue(configurations.stream().anyMatch(c -> c.getRepresentation()
+                == EcstTransformationConfig.Representation.VIEW
+                && c.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE));
     }
 
     @Test

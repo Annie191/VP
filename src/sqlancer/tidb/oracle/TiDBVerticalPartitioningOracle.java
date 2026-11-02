@@ -1173,8 +1173,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         Objects.requireNonNull(seed, "seed");
         boolean vertical = config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED;
         boolean view = config.getRepresentation() == EcstTransformationConfig.Representation.VIEW;
-        if ((!vertical && !view) || view && config.getReconstruction() != EcstTransformationConfig.Reconstruction.VIEW
-                || vertical && config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW
+        if ((!vertical && !view) || view && config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
                 || !isEmbeddingCompatible(seed.expressionContext, config.getExpressionContext())) {
             throw new IgnoreMeException();
         }
@@ -1202,6 +1201,26 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         if (config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE
                 && dependencies.size() < 2) {
             throw new IgnoreMeException();
+        }
+
+        if (view) {
+            VpSchema vp = seed.schema;
+            List<String> extraSetup = new ArrayList<>();
+            String relation = buildEcstViewReconstructionRelation(vp, reconstructionStrategy, seed,
+                    config.getExpressionContext(), extraSetup);
+            String splitQuery = embedTargetOperation(seed.originalQuery, relation, vp, seed,
+                    config.getExpressionContext());
+            VpQueryPair pair = new VpQueryPair(vp, reconstructionStrategy, seed.originalQuery, splitQuery, extraSetup,
+                    "ECST config=" + config.stableKey() + ", target=" + seed.targetExpression, false);
+            String generationInfo = "rowCount=" + base.rowCount + ",representation=VIEW,relationView="
+                    + vp.viewName + ",reconstruction=" + config.getReconstruction() + ",expressionType="
+                    + seed.getExpressionType() + ",expressionFamily=" + seed.getExpressionFamily()
+                    + ",filterPredicate=" + seed.getFilterPredicate() + ",dependencyCount="
+                    + seed.targetDependencies.size() + ",requestedLayout=" + config.getPartitionLayout()
+                    + ",actualLayout=SINGLE_SIDE";
+            return new EcstCase(pair, seed.operation, seed.accessPathPreparation, config, DependencyLayout.SINGLE_SIDE,
+                    seed.targetExpression, base.tableName, seed.targetDependencies,
+                    seed.targetDependencies, List.of(), generationInfo);
         }
 
         ControlledSplitPlan controlled = createControlledSplitPlan(base.columns, dependencies,
@@ -1415,6 +1434,23 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         return new RowIdValidation(true, "row-id bijection verified");
     }
 
+    private RowIdValidation validateViewRowIdBijection(VpSchema schema) throws SQLException {
+        long sourceCount = countRows(schema.sourceTable);
+        long viewCount = countRows(schema.viewName);
+        if (sourceCount != viewCount) {
+            return new RowIdValidation(false, "view row counts source=" + sourceCount + ", view=" + viewCount);
+        }
+        long missingView = countMissingRowIds(schema.sourceTable, schema.viewName);
+        if (missingView != 0) {
+            return new RowIdValidation(false, "source-to-view missing row ids=" + missingView);
+        }
+        long missingSource = countMissingRowIds(schema.viewName, schema.sourceTable);
+        if (missingSource != 0) {
+            return new RowIdValidation(false, "view-to-source missing row ids=" + missingSource);
+        }
+        return new RowIdValidation(true, "source/view row-id bijection verified");
+    }
+
     private long countRows(String table) throws SQLException {
         try (Statement statement = state.getConnection().createStatement();
                 ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM " + quote(table))) {
@@ -1495,7 +1531,10 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                     List.of("relation metadata validation unavailable: " + failure.getMessage()),
                     EcstSemanticPreconditionResult.Status.UNKNOWN);
         }
-        if (!containsSetupToken(ecstCase.pair.schema.setupStatements, quote(ROW_ID) + " BIGINT NOT NULL PRIMARY KEY")) {
+        if ((ecstCase.appliedConfig == null
+                || ecstCase.appliedConfig.getRepresentation() != EcstTransformationConfig.Representation.VIEW)
+                && !containsSetupToken(ecstCase.pair.schema.setupStatements,
+                        quote(ROW_ID) + " BIGINT NOT NULL PRIMARY KEY")) {
             violations.add("materialized partitions do not prove unique non-null row identity");
         }
         String transformed = ecstCase.pair.splitQuery == null ? ""
@@ -1541,11 +1580,18 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         }
         String normalized = definition == null ? "" : definition.toLowerCase(Locale.ROOT);
         List<String> violations = new ArrayList<>();
-        if (!normalized.contains(schema.leftTable.toLowerCase(Locale.ROOT))) {
-            violations.add("view definition does not reference left partition: " + schema.leftTable);
-        }
-        if (!normalized.contains(schema.rightTable.toLowerCase(Locale.ROOT))) {
-            violations.add("view definition does not reference right partition: " + schema.rightTable);
+        if (ecstCase.appliedConfig != null
+                && ecstCase.appliedConfig.getRepresentation() == EcstTransformationConfig.Representation.VIEW) {
+            if (!normalized.contains(schema.sourceTable.toLowerCase(Locale.ROOT))) {
+                violations.add("full relation view does not reference source table: " + schema.sourceTable);
+            }
+        } else {
+            if (!normalized.contains(schema.leftTable.toLowerCase(Locale.ROOT))) {
+                violations.add("view definition does not reference left partition: " + schema.leftTable);
+            }
+            if (!normalized.contains(schema.rightTable.toLowerCase(Locale.ROOT))) {
+                violations.add("view definition does not reference right partition: " + schema.rightTable);
+            }
         }
         if (!normalized.contains(ROW_ID.toLowerCase(Locale.ROOT))) {
             violations.add("view definition does not preserve row identity: " + ROW_ID);
@@ -1567,7 +1613,10 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                     EcstSemanticPreconditionResult.Status.UNKNOWN);
         }
         try {
-            RowIdValidation validation = validateRowIdBijection(ecstCase.pair.schema);
+            RowIdValidation validation = ecstCase.appliedConfig != null
+                    && ecstCase.appliedConfig.getRepresentation() == EcstTransformationConfig.Representation.VIEW
+                            ? validateViewRowIdBijection(ecstCase.pair.schema)
+                            : validateRowIdBijection(ecstCase.pair.schema);
             if (!validation.valid()) {
                 return new EcstSemanticPreconditionResult(List.of(validation.reason),
                         EcstSemanticPreconditionResult.Status.INVALID);
@@ -1596,6 +1645,20 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         VpSchema schema = ecstCase.pair.schema;
         Map<String, RelationColumnMetadata> source = describeColumns(schema.sourceTable);
         List<String> violations = new ArrayList<>();
+        if (ecstCase.appliedConfig != null
+                && ecstCase.appliedConfig.getRepresentation() == EcstTransformationConfig.Representation.VIEW) {
+            Map<String, RelationColumnMetadata> view = describeColumns(schema.viewName);
+            for (Map.Entry<String, RelationColumnMetadata> entry : source.entrySet()) {
+                RelationColumnMetadata viewMetadata = view.get(entry.getKey());
+                if (viewMetadata == null) {
+                    violations.add("view column metadata missing for " + entry.getKey());
+                } else if (!entry.getValue().type.equals(viewMetadata.type)) {
+                    violations.add("view column type changed for " + entry.getKey() + ": source="
+                            + entry.getValue().type + ", view=" + viewMetadata.type);
+                }
+            }
+            return violations;
+        }
         String sourceTableCollation = tableCollation(schema.sourceTable);
         for (String table : List.of(schema.leftTable, schema.rightTable)) {
             Map<String, RelationColumnMetadata> partition = describeColumns(table);
@@ -1658,6 +1721,15 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             RelationColumnMetadata metadata = source.get(dependency.toLowerCase(Locale.ROOT));
             if (metadata == null) {
                 violations.add("source metadata missing for dependency " + dependency);
+                continue;
+            }
+            if (ecstCase.appliedConfig != null
+                    && ecstCase.appliedConfig.getRepresentation() == EcstTransformationConfig.Representation.VIEW) {
+                long mismatches = countDependencyValueMismatches(schema.sourceTable, schema.viewName, dependency,
+                        metadata);
+                if (mismatches != 0) {
+                    violations.add("source/view value mismatch for " + dependency + ": " + mismatches);
+                }
                 continue;
             }
             if (containsColumn(schema.leftColumns, dependency)) {
@@ -2814,6 +2886,38 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         String quotedNeedle = " FROM " + quote(sourceTable);
         if (singleQuery.contains(quotedNeedle)) {
             return singleQuery.replace(quotedNeedle, " FROM " + relation);
+        }
+        throw new IgnoreMeException();
+    }
+
+    private String buildEcstViewReconstructionRelation(VpSchema vp, ReconstructionStrategy strategy, EcstSeed seed,
+            EcstTransformationConfig.ExpressionContext context, List<String> extraSetup) throws Exception {
+        if (context == EcstTransformationConfig.ExpressionContext.JOIN_ON) {
+            throw new IgnoreMeException();
+        }
+        String projection = context == EcstTransformationConfig.ExpressionContext.INNER_SELECT
+                ? "*, " + seed.targetExpression + " AS ecst_value" : "*";
+        String predicate = context == EcstTransformationConfig.ExpressionContext.INNER_WHERE
+                ? seed.filterPredicate : null;
+        extraSetup.add("DROP VIEW IF EXISTS " + quote(vp.viewName));
+        extraSetup.add("CREATE VIEW " + quote(vp.viewName) + " AS SELECT * FROM " + quote(vp.sourceTable));
+        if (strategy == ReconstructionStrategy.VIEW) {
+            if (predicate != null || context == EcstTransformationConfig.ExpressionContext.INNER_SELECT) {
+                extraSetup.remove(extraSetup.size() - 1);
+                String suffix = predicate == null ? "" : " WHERE " + predicate;
+                extraSetup.add("CREATE VIEW " + quote(vp.viewName) + " AS SELECT " + projection + " FROM "
+                        + quote(vp.sourceTable) + suffix);
+            }
+            return quote(vp.viewName) + " " + quote(vp.sourceTable);
+        }
+        String source = quote(vp.viewName);
+        String suffix = predicate == null ? "" : " WHERE " + predicate;
+        if (strategy == ReconstructionStrategy.DERIVED_TABLE) {
+            return "(SELECT " + projection + " FROM " + source + suffix + ") " + quote(vp.sourceTable);
+        }
+        if (strategy == ReconstructionStrategy.CTE) {
+            return "(WITH ecst_view_base AS (SELECT * FROM " + source + ") SELECT " + projection
+                    + " FROM ecst_view_base" + suffix + ") " + quote(vp.sourceTable);
         }
         throw new IgnoreMeException();
     }
