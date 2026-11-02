@@ -1528,6 +1528,58 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         dropArtifacts(ecstCase.pair.schema);
     }
 
+    /** Returns a standalone replay bundle with source rows materialized as literal INSERT values. */
+    public List<String> getSourceDataReplay(EcstCase ecstCase) throws SQLException {
+        if (ecstCase == null || ecstCase.pair == null || ecstCase.pair.schema == null) return List.of();
+        VpSchema schema = ecstCase.pair.schema;
+        List<String> replay = new ArrayList<>();
+        String source = quote(schema.sourceTable);
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet ddl = statement.executeQuery("SHOW CREATE TABLE " + source)) {
+            if (ddl.next()) replay.add(ddl.getString(2));
+        }
+        List<String> columns = new ArrayList<>();
+        columns.add(quote(ROW_ID));
+        columns.addAll(schema.columns.stream().map(column -> quote(column.name)).collect(Collectors.toList()));
+        String selectColumns = String.join(", ", columns);
+        StringBuilder values = new StringBuilder();
+        int rows = 0;
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet data = statement.executeQuery("SELECT " + selectColumns + " FROM " + source + " ORDER BY "
+                        + quote(ROW_ID))) {
+            while (data.next()) {
+                if (rows > 0 && rows % 128 == 0) {
+                    replay.add("INSERT INTO " + source + " (" + selectColumns + ") VALUES " + values);
+                    values.setLength(0);
+                }
+                if (values.length() > 0) values.append(", ");
+                values.append('(');
+                for (int i = 1; i <= data.getMetaData().getColumnCount(); i++) {
+                    if (i > 1) values.append(", ");
+                    values.append(sqlLiteral(data.getObject(i)));
+                }
+                values.append(')');
+                rows++;
+            }
+        }
+        if (values.length() > 0) replay.add("INSERT INTO " + source + " (" + selectColumns + ") VALUES " + values);
+        for (String setup : schema.setupStatements) {
+            String normalized = setup.trim().toLowerCase(Locale.ROOT);
+            if (normalized.startsWith("create table " + schema.sourceTable.toLowerCase(Locale.ROOT))
+                    || normalized.startsWith("insert into " + schema.sourceTable.toLowerCase(Locale.ROOT))
+                    || normalized.startsWith("ecst_reconfigure_split=")) continue;
+            replay.add(setup);
+        }
+        return replay;
+    }
+
+    private static String sqlLiteral(Object value) {
+        if (value == null) return "NULL";
+        if (value instanceof byte[]) return "X'" + hex((byte[]) value) + "'";
+        if (value instanceof Number || value instanceof Boolean) return String.valueOf(value);
+        return "'" + String.valueOf(value).replace("\\", "\\\\").replace("'", "''") + "'";
+    }
+
     /**
      * Checks semantic obligations before plan analysis or result comparison. This is deliberately independent from
      * both the execution-context analyzer and the result oracle.

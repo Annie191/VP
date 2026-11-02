@@ -5,6 +5,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -71,6 +72,7 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private int caseRecordsWritten;
     private int seedSkipRecordsWritten;
     private volatile String lastCommittedCaseId = "";
+    private volatile String cachedDbVersion;
     private final List<String> candidateRejectReasons = new ArrayList<>();
     private static final int MAX_CONFIG_ATTEMPTS_PER_SEED = 4;
 
@@ -963,6 +965,12 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 ? "PRESENT" : "ABSENT";
         String lineage = testCase == null || testCase.getOperation() == null ? "{}"
                 : EcstFailureRecord.json(String.valueOf(testCase.getOperation().getDependencyLineage()));
+        List<String> sourceDataReplay;
+        try {
+            sourceDataReplay = vp.getSourceDataReplay(testCase);
+        } catch (Exception failure) {
+            sourceDataReplay = List.of("-- source data snapshot unavailable: " + failure.getMessage());
+        }
         String caseId = runId + "-" + (++caseSequence);
         String line = "{\"type\":\"case\",\"target\":\"" + EcstFailureRecord.json(target.getKey())
                 + "\",\"config\":\"" + EcstFailureRecord.json(config.stableKey()) + "\",\"status\":\""
@@ -1006,7 +1014,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 + EcstFailureRecord.json(observation == null ? "" : observation.getTransformedEvidence())
                 + "\",\"generationInfo\":\"" + EcstFailureRecord.json(testCase.getGenerationInfo())
                 + "\",\"setup\":" + EcstFailureRecord.jsonArray(testCase.getMaterializationSetup())
-                + ",\"sourceDataReplay\":" + EcstFailureRecord.jsonArray(testCase.getMaterializationSetup()) + "}";
+                + ",\"sourceDataReplay\":" + EcstFailureRecord.jsonArray(sourceDataReplay)
+                + ",\"dbVersion\":\"" + EcstFailureRecord.json(dbVersion()) + "\"}";
         appendJsonLine("ecst-cases.jsonl", line);
         caseRecordsWritten++;
     }
@@ -1057,13 +1066,25 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         String property = System.getProperty("git.commit", "");
         if (!property.isEmpty()) return property;
         String environment = System.getenv("GIT_COMMIT");
-        return environment == null || environment.isEmpty() ? "UNKNOWN" : environment;
+        if (environment != null && !environment.isEmpty()) return environment;
+        try {
+            Process process = new ProcessBuilder("git", "rev-parse", "HEAD").redirectErrorStream(true).start();
+            if (process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
+                String resolved = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+                if (!resolved.isEmpty()) return resolved;
+            }
+        } catch (Exception ignored) {
+            // Keep UNKNOWN when the runtime is not a Git checkout.
+        }
+        return "UNKNOWN";
     }
 
     private String dbVersion() {
+        if (cachedDbVersion != null) return cachedDbVersion;
         try (java.sql.Statement statement = state.getConnection().createStatement();
                 java.sql.ResultSet result = statement.executeQuery("SELECT VERSION()")) {
-            return result.next() ? result.getString(1) : "UNKNOWN";
+            cachedDbVersion = result.next() ? result.getString(1) : "UNKNOWN";
+            return cachedDbVersion;
         } catch (Exception ignored) {
             return "UNKNOWN";
         }
