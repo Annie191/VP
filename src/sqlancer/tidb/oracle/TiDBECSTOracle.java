@@ -252,6 +252,16 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                     throw failure;
                 }
                 try {
+                    // VIEW-backed candidates must exist before metadata and semantic checks
+                    // inspect the transformed relation.
+                    vp.prepareEcstCase(candidate);
+                } catch (Exception | AssertionError failure) {
+                    recordFailure(EcstPhase.MATERIALIZATION, seed, target, config, candidate, failure);
+                    if (isRecoverable(failure)) continue;
+                    cleanupSeed(seed);
+                    throw failure;
+                }
+                try {
                     EcstContext refreshedSeedContext = analyzer.extractContext(candidate.getOriginalQuery(),
                             candidate.getOperation()).context();
                     if (!sameContext(seedContext, refreshedSeedContext)) {
