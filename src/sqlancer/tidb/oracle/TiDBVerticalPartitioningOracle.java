@@ -1542,7 +1542,10 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         if (ecstCase.appliedConfig == null) {
             violations.add("missing applied ECST configuration");
         } else {
-            if (ecstCase.appliedConfig.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW) {
+            boolean usesViewRelation = ecstCase.appliedConfig.getRepresentation()
+                    == EcstTransformationConfig.Representation.VIEW
+                    || ecstCase.appliedConfig.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW;
+            if (usesViewRelation) {
                 String expectedView = quote(ecstCase.pair.schema.viewName).toLowerCase(Locale.ROOT);
                 if (!transformed.contains(expectedView)) {
                     violations.add("transformed query does not reference the expected view: "
