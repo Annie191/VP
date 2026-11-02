@@ -38,6 +38,7 @@ import sqlancer.tidb.TiDBSchema.TiDBTable;
  */
 public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     private static final AtomicLong RUN_IDS = new AtomicLong();
+    private static volatile String cachedSourceCommit;
     private final TiDBGlobalState state;
     private final TiDBVerticalPartitioningOracle vp;
     private final TiDBExecutionContextAnalyzer analyzer;
@@ -1063,20 +1064,21 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
     }
 
     private static String sourceCommit() {
+        if (cachedSourceCommit != null) return cachedSourceCommit;
         String property = System.getProperty("git.commit", "");
-        if (!property.isEmpty()) return property;
+        if (!property.isEmpty()) return cachedSourceCommit = property;
         String environment = System.getenv("GIT_COMMIT");
-        if (environment != null && !environment.isEmpty()) return environment;
+        if (environment != null && !environment.isEmpty()) return cachedSourceCommit = environment;
         try {
             Process process = new ProcessBuilder("git", "rev-parse", "HEAD").redirectErrorStream(true).start();
             if (process.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) {
                 String resolved = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
-                if (!resolved.isEmpty()) return resolved;
+                if (!resolved.isEmpty()) return cachedSourceCommit = resolved;
             }
         } catch (Exception ignored) {
             // Keep UNKNOWN when the runtime is not a Git checkout.
         }
-        return "UNKNOWN";
+        return cachedSourceCommit = "UNKNOWN";
     }
 
     private String dbVersion() {
