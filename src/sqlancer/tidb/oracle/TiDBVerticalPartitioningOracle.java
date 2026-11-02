@@ -1500,13 +1500,26 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         }
         String transformed = ecstCase.pair.splitQuery == null ? ""
                 : ecstCase.pair.splitQuery.toLowerCase(java.util.Locale.ROOT);
-        if (!transformed.contains(ecstCase.pair.schema.leftTable.toLowerCase(java.util.Locale.ROOT))
-                || !transformed.contains(ecstCase.pair.schema.rightTable.toLowerCase(java.util.Locale.ROOT))) {
-            violations.add("transformed query does not reference both materialized partitions");
-        }
         if (ecstCase.appliedConfig == null) {
             violations.add("missing applied ECST configuration");
         } else {
+            if (ecstCase.appliedConfig.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW) {
+                String expectedView = quote(ecstCase.pair.schema.viewName).toLowerCase(Locale.ROOT);
+                if (!transformed.contains(expectedView)) {
+                    violations.add("transformed query does not reference the expected view: "
+                            + ecstCase.pair.schema.viewName);
+                }
+                try {
+                    violations.addAll(validateViewDefinition(ecstCase));
+                } catch (SQLException failure) {
+                    return new EcstSemanticPreconditionResult(
+                            List.of("view definition validation unavailable: " + failure.getMessage()),
+                            EcstSemanticPreconditionResult.Status.UNKNOWN);
+                }
+            } else if (!transformed.contains(ecstCase.pair.schema.leftTable.toLowerCase(Locale.ROOT))
+                    || !transformed.contains(ecstCase.pair.schema.rightTable.toLowerCase(Locale.ROOT))) {
+                violations.add("transformed query does not reference both materialized partitions");
+            }
             violations.addAll(dependencyLayoutViolations(ecstCase.appliedConfig.getPartitionLayout(),
                     ecstCase.actualLayout, ecstCase.targetDependencies, ecstCase.leftDependencies,
                     ecstCase.rightDependencies));
@@ -1514,6 +1527,37 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         return new EcstSemanticPreconditionResult(violations,
                 violations.isEmpty() ? EcstSemanticPreconditionResult.Status.STATIC_LEGAL
                         : EcstSemanticPreconditionResult.Status.INVALID);
+    }
+
+    private List<String> validateViewDefinition(EcstCase ecstCase) throws SQLException {
+        VpSchema schema = ecstCase.pair.schema;
+        String definition;
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet rows = statement.executeQuery("SHOW CREATE VIEW " + quote(schema.viewName))) {
+            if (!rows.next()) {
+                return List.of("expected view does not exist: " + schema.viewName);
+            }
+            definition = rows.getString(2);
+        }
+        String normalized = definition == null ? "" : definition.toLowerCase(Locale.ROOT);
+        List<String> violations = new ArrayList<>();
+        if (!normalized.contains(schema.leftTable.toLowerCase(Locale.ROOT))) {
+            violations.add("view definition does not reference left partition: " + schema.leftTable);
+        }
+        if (!normalized.contains(schema.rightTable.toLowerCase(Locale.ROOT))) {
+            violations.add("view definition does not reference right partition: " + schema.rightTable);
+        }
+        if (!normalized.contains(ROW_ID.toLowerCase(Locale.ROOT))) {
+            violations.add("view definition does not preserve row identity: " + ROW_ID);
+        }
+        return violations;
+    }
+
+    static boolean viewReferenceMatchesForTest(String transformedQuery, String viewName) {
+        if (transformedQuery == null || viewName == null || viewName.isEmpty()) {
+            return false;
+        }
+        return transformedQuery.toLowerCase(Locale.ROOT).contains(("`" + viewName + "`").toLowerCase(Locale.ROOT));
     }
 
     /** Validates materialized row identity before plan analysis or result comparison. */

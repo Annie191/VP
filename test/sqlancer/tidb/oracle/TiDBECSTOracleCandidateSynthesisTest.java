@@ -104,6 +104,14 @@ public class TiDBECSTOracleCandidateSynthesisTest {
     }
 
     @Test
+    void viewSemanticReferenceUsesTheViewNameInsteadOfPartitionNames() {
+        assertTrue(TiDBVerticalPartitioningOracle.viewReferenceMatchesForTest(
+                "SELECT `vp_rowid` FROM `vp_v` `source`", "vp_v"));
+        assertTrue(!TiDBVerticalPartitioningOracle.viewReferenceMatchesForTest(
+                "SELECT `vp_rowid` FROM `vp_l` JOIN `vp_r`", "vp_v"));
+    }
+
+    @Test
     void targetDefinitionsCarryConcreteDirections() {
         List<EcstTarget> targets = TiDBECSTOracle.defaultTargets();
 
