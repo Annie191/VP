@@ -89,9 +89,7 @@ public final class TiDBEcstCapabilities {
 
     public boolean supports(EcstTransformationConfig config, EcstTarget target,
             TiDBVerticalPartitioningOracle.EcstSeed seed, EcstContext seedContext) {
-        boolean representationMatchesReconstruction = config != null
-                && (config.getRepresentation() == EcstTransformationConfig.Representation.VIEW)
-                        == (config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW);
+        boolean representationMatchesReconstruction = config != null && supportsRepresentationReconstruction(config);
         return config != null && representationMatchesReconstruction
                 && supportsRepresentation(config.getRepresentation())
                 && supportsReconstruction(config.getReconstruction())
@@ -99,6 +97,21 @@ public final class TiDBEcstCapabilities {
                 && supportsTarget(target, seed, seedContext)
                 && (target.getDimension() != sqlancer.common.oracle.ecst.EcstContextDimension.OPERATOR
                         || config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE);
+    }
+
+    private static boolean supportsRepresentationReconstruction(EcstTransformationConfig config) {
+        if (config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED) {
+            return config.getReconstruction() == EcstTransformationConfig.Reconstruction.JOIN
+                    || config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE
+                    || config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE
+                    || config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW;
+        }
+        if (config.getRepresentation() == EcstTransformationConfig.Representation.VIEW) {
+            return config.getReconstruction() == EcstTransformationConfig.Reconstruction.DERIVED_TABLE
+                    || config.getReconstruction() == EcstTransformationConfig.Reconstruction.CTE
+                    || config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW;
+        }
+        return false;
     }
 
     public String describe() {
