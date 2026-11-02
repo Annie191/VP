@@ -84,6 +84,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     private static int schemaShapeSamples;
 
     private final TiDBGlobalState state;
+    private final boolean requireNonEmptyBaseTable;
+    private final double emptyBaseTableProbability;
     private final ExpectedErrors errors = new ExpectedErrors();
 
     private enum BaseShape {
@@ -735,7 +737,14 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
     }
 
     TiDBVerticalPartitioningOracle(TiDBGlobalState state, boolean registerVpStatistics) {
+        this(state, registerVpStatistics, false, 0.0);
+    }
+
+    TiDBVerticalPartitioningOracle(TiDBGlobalState state, boolean registerVpStatistics,
+            boolean requireNonEmptyBaseTable, double emptyBaseTableProbability) {
         this.state = state;
+        this.requireNonEmptyBaseTable = requireNonEmptyBaseTable;
+        this.emptyBaseTableProbability = Math.max(0.0, Math.min(1.0, emptyBaseTableProbability));
         if (registerVpStatistics) {
             registerVpStatsShutdownHook();
         }
@@ -809,7 +818,30 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         if (candidates.isEmpty()) {
             throw new IgnoreMeException();
         }
+        List<TiDBTable> nonEmpty = new ArrayList<>();
+        List<TiDBTable> empty = new ArrayList<>();
+        for (TiDBTable candidate : candidates) {
+            if (getRowCount(candidate.getName()) > 0) {
+                nonEmpty.add(candidate);
+            } else {
+                empty.add(candidate);
+            }
+        }
+        if (!nonEmpty.isEmpty()) {
+            if (!empty.isEmpty() && emptyBaseTableProbability > 0.0
+                    && state.getRandomly().getDouble() < emptyBaseTableProbability) {
+                return createBaseTableInfo(Randomly.fromList(empty));
+            }
+            return createBaseTableInfo(Randomly.fromList(nonEmpty));
+        }
+        if (requireNonEmptyBaseTable) {
+            throw new IgnoreMeException();
+        }
         return createBaseTableInfo(Randomly.fromList(candidates));
+    }
+
+    static double ecstEmptyBaseTableProbabilityForTest() {
+        return 0.05;
     }
 
     private BaseTableInfo createBaseTableInfo(TiDBTable base) throws Exception {

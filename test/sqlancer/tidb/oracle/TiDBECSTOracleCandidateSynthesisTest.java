@@ -115,6 +115,11 @@ public class TiDBECSTOracleCandidateSynthesisTest {
     }
 
     @Test
+    void ecstKeepsOnlyABoundedEmptyTableSamplingBudget() {
+        assertEquals(0.05, TiDBVerticalPartitioningOracle.ecstEmptyBaseTableProbabilityForTest(), 0.000001);
+    }
+
+    @Test
     void targetDefinitionsCarryConcreteDirections() {
         List<EcstTarget> targets = TiDBECSTOracle.defaultTargets();
 

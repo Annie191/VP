@@ -78,7 +78,8 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
         this.state = state;
         this.capabilities = new TiDBEcstCapabilities(state);
         this.targets = capabilities.supportedTargets(state);
-        this.vp = new TiDBVerticalPartitioningOracle(state, false);
+        this.vp = new TiDBVerticalPartitioningOracle(state, false, false,
+                TiDBVerticalPartitioningOracle.ecstEmptyBaseTableProbabilityForTest());
         this.analyzer = new TiDBExecutionContextAnalyzer(state);
         this.seedPool = new EcstSeedPool(vp);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
