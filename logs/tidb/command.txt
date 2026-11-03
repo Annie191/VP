@@ -1,0 +1,15 @@
+timeout --signal=TERM --kill-after=60s 18000s java -jar /home/lwm/sqlancer/target/sqlancer-2.0.0.jar \
+  --num-threads 4 \
+  --timeout-seconds 18000 \
+  --num-tries 1000000 \
+  --database-prefix ecstshort5h_20261103 \
+  --num-queries 50 \
+  --host 127.0.0.1 \
+  --port 4009 \
+  --username root \
+  --password '' \
+  tidb \
+  --oracle ECST \
+  --ecst-max-candidates 16 \
+  --max-num-tables 2 \
+  --max-num-indexes 20

@@ -1,8 +1,9 @@
-finished_at_utc=2026-11-01T13:39:03Z
-elapsed_approx=30m10s
-termination=timeout_1800s
-last_progress=Executed 11377 queries; Threads shut down: 0
+finished_at_utc=2026-11-02T23:59:10Z
+launcher_pid=601823
+termination=timeout_18000s
+last_progress=Executed 50660 queries; Threads shut down: 0
+run_finished=true
+run_scoped_case_records=36219
+run_scoped_seed_skips=1533
+run_scoped_malformed_jsonl=0
 bug_candidates=0
-comparable_mismatches=0
-parseable_jsonl_records=5287
-malformed_jsonl_lines=0
