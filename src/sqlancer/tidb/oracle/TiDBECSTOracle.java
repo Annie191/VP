@@ -332,7 +332,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 try {
                     EcstContext refreshedSeedContext = analyzer.extractContext(candidate.getOriginalQuery(),
                             candidate.getOperation()).context();
-                    if (!sameContext(seedContext, refreshedSeedContext)) {
+                    boolean rootToCopSelectionTemplate = isRootToCopTarget(target)
+                            && seed.getExpressionContext() == EcstTransformationConfig.ExpressionContext.SELECT
+                            && "SELECTION_PREDICATE".equals(candidate.getOperation().getExpectedRole())
+                            && sameLocationBoundary(seedContext, refreshedSeedContext);
+                    if (!sameContext(seedContext, refreshedSeedContext) && !rootToCopSelectionTemplate) {
                         recordFailure(EcstPhase.PLAN_ANALYSIS, seed, target, config,
                                 new IllegalStateException("SEED_CONTEXT_CHANGED: seed=" + seedContext + ", refreshed="
                                         + refreshedSeedContext));
@@ -469,6 +473,21 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
             }
         }
         return true;
+    }
+
+    private static boolean sameLocationBoundary(EcstContext before, EcstContext after) {
+        return before != null && after != null && before.getLocation().equals(after.getLocation())
+                && before.getBoundary().equals(after.getBoundary());
+    }
+
+    private static boolean isRootToCopTarget(EcstTarget target) {
+        if (target == null) return false;
+        if (target.getDimension() == EcstContextDimension.LOCATION) {
+            return "ROOT".equals(target.getFrom()) && ("COP_TIKV".equals(target.getTo())
+                    || "COP_TIFLASH".equals(target.getTo()));
+        }
+        return target.getDimension() == EcstContextDimension.BOUNDARY
+                && "NON_PUSHDOWN".equals(target.getFrom()) && "PUSHDOWN".equals(target.getTo());
     }
 
     private boolean isLowReachabilitySuppressed(EcstTarget target,
@@ -785,10 +804,10 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
                 && (embedded == EcstTransformationConfig.ExpressionContext.JOIN_ON
                         || embedded == EcstTransformationConfig.ExpressionContext.INNER_WHERE)
                 || seedExpressionContext == EcstTransformationConfig.ExpressionContext.SELECT
-                        && (embedded == EcstTransformationConfig.ExpressionContext.INNER_SELECT
-                                || isConcreteRootToCopTarget(target)
-                                        && (embedded == EcstTransformationConfig.ExpressionContext.WHERE
-                                                || embedded == EcstTransformationConfig.ExpressionContext.INNER_WHERE));
+                        && (isConcreteRootToCopTarget(target)
+                                ? embedded == EcstTransformationConfig.ExpressionContext.WHERE
+                                        || embedded == EcstTransformationConfig.ExpressionContext.INNER_WHERE
+                                : embedded == EcstTransformationConfig.ExpressionContext.INNER_SELECT);
     }
 
     private static boolean isDependencyLayoutApplicable(TiDBVerticalPartitioningOracle.EcstSeed seed,
@@ -875,9 +894,11 @@ public final class TiDBECSTOracle implements TestOracle<TiDBGlobalState> {
 
     private static boolean isRootToCopInductionContext(EcstTarget target,
             EcstTransformationConfig.ExpressionContext context) {
-        return isRootToCopInductionContext(context)
-                || context == EcstTransformationConfig.ExpressionContext.SELECT
-                        && isConcreteRootToCopTarget(target);
+        if (isConcreteRootToCopTarget(target)) {
+            return context == EcstTransformationConfig.ExpressionContext.WHERE
+                    || context == EcstTransformationConfig.ExpressionContext.INNER_WHERE;
+        }
+        return isRootToCopInductionContext(context);
     }
 
     private static boolean isConcreteRootToCopTarget(EcstTarget target) {

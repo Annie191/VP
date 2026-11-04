@@ -272,7 +272,7 @@ public class TiDBECSTOracleCandidateSynthesisTest {
     }
 
     @Test
-    void concreteRootToCopTemplateKeepsProjectionSeedsReachable() {
+    void concreteRootToCopTemplateUsesPredicateContexts() {
         EcstTarget rootToCop = new EcstTarget("TIDB_LOCATION_ROOT_TO_COP_TIKV", EcstContextDimension.LOCATION,
                 "ROOT", "COP_TIKV");
         EcstTransformationConfig projectionGuard = new EcstTransformationConfig(
@@ -285,7 +285,7 @@ public class TiDBECSTOracleCandidateSynthesisTest {
                 EcstTransformationConfig.PartitionLayout.SAME_SIDE,
                 EcstTransformationConfig.Reconstruction.CTE,
                 EcstTransformationConfig.ExpressionContext.INNER_WHERE);
-        assertTrue(TiDBECSTOracle.structurallyApplicableForTest(rootToCop, projectionGuard, "SAME_SIDE",
+        assertTrue(!TiDBECSTOracle.structurallyApplicableForTest(rootToCop, projectionGuard, "SAME_SIDE",
                 TiDBECSTOracle.QueryShape.synthetic()));
         assertTrue(TiDBECSTOracle.structurallyApplicableForTest(rootToCop, innerWhere, "SAME_SIDE",
                 TiDBECSTOracle.QueryShape.synthetic()));

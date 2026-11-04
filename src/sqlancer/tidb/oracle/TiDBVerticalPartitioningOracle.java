@@ -1330,7 +1330,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 || !isEmbeddingCompatible(seed.expressionContext, config.getExpressionContext(), target)) {
             throw new IgnoreMeException();
         }
-        String singleQuery = rootToCopInduction ? addRootToCopInductionGuard(seed) : seed.originalQuery;
+        String singleQuery = rootToCopInduction ? buildRootToCopSeedQuery(seed) : seed.originalQuery;
+        EcstOperation caseOperation = rootToCopInduction ? buildRootToCopOperation(seed) : seed.operation;
         ReconstructionStrategy reconstructionStrategy;
         switch (config.getReconstruction()) {
         case JOIN:
@@ -1362,8 +1363,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             List<String> extraSetup = new ArrayList<>();
             String relation = buildEcstViewReconstructionRelation(vp, reconstructionStrategy, seed,
                     config.getExpressionContext(), extraSetup);
-            String splitQuery = embedTargetOperation(singleQuery, relation, vp, seed,
-                    config.getExpressionContext());
+            String splitQuery = rootToCopInduction ? buildRootToCopTransformedQuery(relation, seed, config)
+                    : embedTargetOperation(singleQuery, relation, vp, seed, config.getExpressionContext());
             VpQueryPair pair = new VpQueryPair(vp, reconstructionStrategy, singleQuery, splitQuery, extraSetup,
                     "ECST config=" + config.stableKey() + ", target=" + seed.targetExpression, false);
             String generationInfo = "rowCount=" + base.rowCount + ",representation=VIEW,relationView="
@@ -1372,8 +1373,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                     + ",filterPredicate=" + seed.getFilterPredicate() + ",dependencyCount="
                     + seed.targetDependencies.size() + ",requestedLayout=" + config.getPartitionLayout()
                     + ",actualLayout=SINGLE_SIDE"
-                    + (rootToCopInduction ? ",inductionTemplate=ROOT_TO_COP_SELECT_GUARD" : "");
-            return new EcstCase(pair, seed.operation, seed.accessPathPreparation, config, DependencyLayout.SINGLE_SIDE,
+                    + (rootToCopInduction ? ",inductionTemplate=ROOT_TO_COP_PREDICATE" : "");
+            return new EcstCase(pair, caseOperation, seed.accessPathPreparation, config, DependencyLayout.SINGLE_SIDE,
                     seed.targetExpression, seed.filterPredicate, base.tableName, seed.targetDependencies,
                     seed.targetDependencies, List.of(), generationInfo);
         }
@@ -1386,7 +1387,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
         List<String> extraSetup = new ArrayList<>();
         String relation = buildEcstReconstructionRelation(vp, reconstructionStrategy, seed,
                 config.getExpressionContext(), extraSetup);
-        String splitQuery = embedTargetOperation(singleQuery, relation, vp, seed, config.getExpressionContext());
+        String splitQuery = rootToCopInduction ? buildRootToCopTransformedQuery(relation, seed, config)
+                : embedTargetOperation(singleQuery, relation, vp, seed, config.getExpressionContext());
         VpQueryPair pair = new VpQueryPair(vp, reconstructionStrategy, singleQuery, splitQuery, extraSetup,
                 "ECST config=" + config.stableKey() + ", target=" + targetExpression, false);
         List<String> dependencyNames = seed.targetDependencies;
@@ -1405,8 +1407,8 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 + columnNames(controlled.splitPlan.leftColumns) + ",rightColumns="
                 + columnNames(controlled.splitPlan.rightColumns) + ",overlapColumns="
                 + columnNames(controlled.splitPlan.overlapColumns)
-                + (rootToCopInduction ? ",inductionTemplate=ROOT_TO_COP_SELECT_GUARD" : "");
-        return new EcstCase(pair, seed.operation, seed.accessPathPreparation, config, actualLayout, targetExpression,
+                + (rootToCopInduction ? ",inductionTemplate=ROOT_TO_COP_PREDICATE" : "");
+        return new EcstCase(pair, caseOperation, seed.accessPathPreparation, config, actualLayout, targetExpression,
                 seed.filterPredicate, base.tableName,
                 dependencyNames, leftDependencies, rightDependencies, generationInfo);
     }
@@ -1420,10 +1422,10 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 && (embeddedContext == EcstTransformationConfig.ExpressionContext.JOIN_ON
                         || embeddedContext == EcstTransformationConfig.ExpressionContext.INNER_WHERE)
                 || seedContext == EcstTransformationConfig.ExpressionContext.SELECT
-                        && (embeddedContext == EcstTransformationConfig.ExpressionContext.INNER_SELECT
-                                || isRootToCopInductionTarget(target)
-                                        && (embeddedContext == EcstTransformationConfig.ExpressionContext.WHERE
-                                                || embeddedContext == EcstTransformationConfig.ExpressionContext.INNER_WHERE));
+                        && (isRootToCopInductionTarget(target)
+                                ? embeddedContext == EcstTransformationConfig.ExpressionContext.WHERE
+                                        || embeddedContext == EcstTransformationConfig.ExpressionContext.INNER_WHERE
+                                : embeddedContext == EcstTransformationConfig.ExpressionContext.INNER_SELECT);
     }
 
     private static boolean isRootToCopInductionTarget(EcstTarget target) {
@@ -1438,13 +1440,28 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                 && "NON_PUSHDOWN".equals(target.getFrom()) && "PUSHDOWN".equals(target.getTo());
     }
 
-    /** Adds the seed predicate only to a Root-to-Cop SELECT candidate, preserving the original seed shape. */
-    private String addRootToCopInductionGuard(EcstSeed seed) {
-        String marker = " FROM " + quote(seed.schema.sourceTable);
-        if (seed.filterPredicate == null || seed.filterPredicate.isEmpty() || !seed.originalQuery.contains(marker)) {
+    private String buildRootToCopSeedQuery(EcstSeed seed) {
+        if (seed.filterPredicate == null || seed.filterPredicate.isEmpty()) {
             throw new IgnoreMeException();
         }
-        return seed.originalQuery.replace(marker, marker + " WHERE " + seed.filterPredicate);
+        return "SELECT " + quote(ROW_ID) + " FROM (SELECT * FROM " + quote(seed.schema.sourceTable)
+                + " LIMIT 18446744073709551615) " + quote(seed.schema.sourceTable) + " WHERE "
+                + seed.filterPredicate;
+    }
+
+    private EcstOperation buildRootToCopOperation(EcstSeed seed) {
+        return new EcstOperation(seed.operation.getOperationId(), seed.filterPredicate,
+                seed.operation.getDependencies(), seed.operation.getShape(), seed.operation.getDependencyLineage(),
+                "SELECTION_PREDICATE");
+    }
+
+    private String buildRootToCopTransformedQuery(String relation, EcstSeed seed,
+            EcstTransformationConfig config) {
+        String query = "SELECT " + quote(ROW_ID) + " FROM " + relation;
+        if (config.getExpressionContext() != EcstTransformationConfig.ExpressionContext.INNER_WHERE) {
+            query += " WHERE " + seed.filterPredicate;
+        }
+        return query;
     }
 
     private VpSchema reconfigureSeedPartitions(VpSchema schema, SplitPlan splitPlan, SplitStrategy strategy,
