@@ -166,7 +166,11 @@ public final class TiDBExecutionContextAnalyzer {
                 || !"PROJECTION_ITEM".equals(operation.getExpectedRole())) {
             return operation;
         }
-        return operation.withExpectedRole("SELECTION_PREDICATE");
+        // Root-to-Cop induction candidates may contain both the original projection
+        // and a duplicated guard predicate. Keep both roles visible so the matcher
+        // reports ambiguity instead of treating a different evaluation instance as
+        // a migrated copy of the projection operation.
+        return operation.withExpectedRole("UNKNOWN");
     }
 
     private static boolean isRootToCopTarget(EcstTarget target) {
