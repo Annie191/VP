@@ -19,17 +19,25 @@ public final class EcstFailureRecord {
     private final String stackTrace;
     private final List<String> setupStatements;
     private final String generationInfo;
+    private final String outcome;
 
     public EcstFailureRecord(EcstPhase phase, String target, String config, String baseTable, String originalQuery,
             String transformedQuery, String targetExpression, String message, String stackTrace,
             List<String> setupStatements, String generationInfo) {
         this(phase, target, config, baseTable, originalQuery, transformedQuery, targetExpression, message, "", 0,
-                stackTrace, setupStatements, generationInfo);
+                stackTrace, setupStatements, generationInfo, "FAILURE");
     }
 
     public EcstFailureRecord(EcstPhase phase, String target, String config, String baseTable, String originalQuery,
             String transformedQuery, String targetExpression, String message, String sqlState, int errorCode,
             String stackTrace, List<String> setupStatements, String generationInfo) {
+        this(phase, target, config, baseTable, originalQuery, transformedQuery, targetExpression, message, sqlState,
+                errorCode, stackTrace, setupStatements, generationInfo, "FAILURE");
+    }
+
+    public EcstFailureRecord(EcstPhase phase, String target, String config, String baseTable, String originalQuery,
+            String transformedQuery, String targetExpression, String message, String sqlState, int errorCode,
+            String stackTrace, List<String> setupStatements, String generationInfo, String outcome) {
         this.phase = phase;
         this.target = value(target);
         this.config = value(config);
@@ -43,6 +51,7 @@ public final class EcstFailureRecord {
         this.stackTrace = value(stackTrace);
         this.setupStatements = Collections.unmodifiableList(new ArrayList<>(setupStatements == null ? List.of() : setupStatements));
         this.generationInfo = value(generationInfo);
+        this.outcome = value(outcome).isEmpty() ? "FAILURE" : value(outcome);
     }
 
     private static String value(String value) {
@@ -62,9 +71,11 @@ public final class EcstFailureRecord {
     public String getStackTrace() { return stackTrace; }
     public List<String> getSetupStatements() { return setupStatements; }
     public String getGenerationInfo() { return generationInfo; }
+    public String getOutcome() { return outcome; }
 
     public String toJsonLine() {
-        return "{\"type\":\"failure\",\"phase\":\"" + json(phase == null ? "UNKNOWN" : phase.name())
+        return "{\"type\":\"failure\",\"outcome\":\"" + json(outcome)
+                + "\",\"phase\":\"" + json(phase == null ? "UNKNOWN" : phase.name())
                 + "\",\"target\":\"" + json(target) + "\",\"config\":\"" + json(config)
                 + "\",\"baseTable\":\"" + json(baseTable) + "\",\"originalQuery\":\""
                 + json(originalQuery) + "\",\"transformedQuery\":\"" + json(transformedQuery)

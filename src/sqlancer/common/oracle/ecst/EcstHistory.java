@@ -141,6 +141,7 @@ public final class EcstHistory {
         private long trials;
         private long coverage;
         private long costNanos;
+        private long costSamples;
 
         private synchronized void observe(EcstShiftStatus status, boolean covered, long cost) {
             switch (status) {
@@ -161,6 +162,7 @@ public final class EcstHistory {
                 coverage++;
             }
             costNanos += Math.max(0, cost);
+            costSamples++;
         }
 
         private synchronized void recordTrial() {
@@ -185,6 +187,7 @@ public final class EcstHistory {
                 coverage++;
             }
             costNanos += Math.max(0, cost);
+            costSamples++;
         }
 
         private synchronized double successRate() {
@@ -203,9 +206,18 @@ public final class EcstHistory {
             return costNanos;
         }
 
+        private synchronized void recordCost(long cost) {
+            costNanos += Math.max(0, cost);
+            costSamples++;
+        }
+
+        private synchronized long costSamples() {
+            return costSamples;
+        }
+
         private synchronized String summary() {
             return "success=" + success + ",failure=" + failure + ",unknown=" + unknown + ",trials=" + trials
-                    + ",coverage=" + coverage + ",costNanos=" + costNanos;
+                    + ",coverage=" + coverage + ",costNanos=" + costNanos + ",costSamples=" + costSamples;
         }
     }
 
@@ -218,6 +230,8 @@ public final class EcstHistory {
     private final ConcurrentMap<ShiftKey, Boolean> observedShifts = new ConcurrentHashMap<>();
     /** N_cov[s]: count of tests in which the concrete migration s was confirmed. */
     private final ConcurrentMap<ShiftKey, Long> shiftCoverage = new ConcurrentHashMap<>();
+    /** Count of confirmed migrations whose compared queries both returned data rows. */
+    private final ConcurrentMap<ShiftKey, Long> nonEmptyShiftCoverage = new ConcurrentHashMap<>();
     private final AtomicLong totalTrials = new AtomicLong();
     private volatile String lastTargetDecision = "<none>";
     private volatile String lastTransformDecision = "<none>";
@@ -308,6 +322,21 @@ public final class EcstHistory {
         shiftCoverage.merge(key, 1L, Long::sum);
     }
 
+    public void recordNonEmptyCoverage(String shift) {
+        nonEmptyShiftCoverage.merge(ShiftKey.parse(shift), 1L, Long::sum);
+    }
+
+    public void recordNonEmptyCoverage(Collection<String> shifts) {
+        if (shifts == null) {
+            return;
+        }
+        for (String shift : new LinkedHashSet<>(shifts)) {
+            if (shift != null && !shift.trim().isEmpty()) {
+                recordNonEmptyCoverage(shift);
+            }
+        }
+    }
+
     private void recordOutcome(String targetKey, String transformKey, EcstShiftStatus status) {
         TargetKey target = TargetKey.parse(targetKey);
         ConfigTargetKey config = new ConfigTargetKey(transformKey, target);
@@ -348,6 +377,21 @@ public final class EcstHistory {
             recordCoverage(shift);
         }
         totalTrials.incrementAndGet();
+    }
+
+    /** Records preparation/materialization cost without creating a migration trial or outcome. */
+    public void recordMaterializationCost(String targetKey, String transformKey, long costNanos,
+            EcstFeature feature) {
+        TargetKey typedTarget = TargetKey.parse(targetKey);
+        String transform = transformKey == null ? "UNKNOWN_TRANSFORM" : transformKey;
+        configStats.computeIfAbsent(new ConfigTargetKey(transform, typedTarget), ignored -> new Stats())
+                .recordCost(costNanos);
+        if (feature != null) {
+            featureTransformStats.computeIfAbsent(featureTransformKey(targetKey, transform, feature), ignored -> new Stats())
+                    .recordCost(costNanos);
+            coarseFeatureTransformStats.computeIfAbsent(coarseFeatureTransformKey(targetKey, transform, feature),
+                    ignored -> new Stats()).recordCost(costNanos);
+        }
     }
 
     public String chooseTransform(String targetKey, Collection<String> candidates) {
@@ -392,7 +436,7 @@ public final class EcstHistory {
             long allTrials = globalConfig == null ? 0 : globalConfig.trials();
             double exploration = Math.sqrt(
                     2.0 * Math.log(2.0 + Math.max(1, targetTrials)) / (1.0 + allTrials));
-            long statsTrials = stats == null ? 0 : stats.trials();
+            long statsTrials = stats == null ? 0 : Math.max(stats.trials(), stats.costSamples());
             double costPenalty = stats == null || statsTrials == 0 ? 0.0
                     : ((double) stats.costNanos() / statsTrials) / 1_000_000_000.0;
             double score = rate + 0.25 * exploration - 0.01 * costPenalty;
@@ -440,7 +484,11 @@ public final class EcstHistory {
                     : evidenceTrials / (evidenceTrials + 8.0);
             double failurePenalty = targetEvidence == null ? 0.0
                     : 0.9 * targetEvidence.failureRate() * failureConfidence;
-            double novelty = (1.0 / Math.sqrt(1.0 + coverage)) * (1.0 - failurePenalty);
+            // Paper §4.5.3 defines Novelty(s) exactly as 1/sqrt(1 + N_s^cov).
+            // Failure penalty, reachability, and feature exploration are explicit
+            // engineering terms added after that base method score.
+            double paperNovelty = 1.0 / Math.sqrt(1.0 + coverage);
+            double novelty = paperNovelty * (1.0 - failurePenalty);
             double reachability = maxReachability(candidate, entry.getValue(), feature);
             double exploration = Math.sqrt(2.0 * Math.log(2.0 + Math.max(1, totalTrials.get())) / (1.0 + trials));
             // An unseen feature bucket gets a bounded fresh probe allowance. This lets a new
@@ -519,6 +567,10 @@ public final class EcstHistory {
         return shiftCoverage.getOrDefault(ShiftKey.parse(shift), 0L);
     }
 
+    public long getNonEmptyShiftCoverage(String shift) {
+        return nonEmptyShiftCoverage.getOrDefault(ShiftKey.parse(shift), 0L);
+    }
+
     /** Returns N_cov for the migration dimension represented by a target key. */
     public long getTargetCoverage(String targetKey) {
         return targetCoverage(targetKey);
@@ -547,6 +599,8 @@ public final class EcstHistory {
                     .append(System.lineSeparator());
         }
         sb.append("coverageByShift=").append(new LinkedHashMap<>(shiftCoverage)).append(System.lineSeparator());
+        sb.append("nonEmptyCoverageByShift=").append(new LinkedHashMap<>(nonEmptyShiftCoverage))
+                .append(System.lineSeparator());
         sb.append("lastTargetDecision=").append(lastTargetDecision).append(System.lineSeparator());
         sb.append("lastTransformDecision=").append(lastTransformDecision).append(System.lineSeparator());
         return sb.toString();

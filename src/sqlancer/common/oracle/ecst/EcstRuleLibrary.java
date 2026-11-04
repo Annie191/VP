@@ -22,10 +22,12 @@ public final class EcstRuleLibrary {
                         relationalReconstructions, EnumSet.allOf(EcstTransformationConfig.ExpressionContext.class)),
                 new EcstRule("Predicate pushdown boundary", "TIDB_PUSHDOWN_SHIFT", relationRepresentations,
                         relationalReconstructions, EnumSet.of(EcstTransformationConfig.ExpressionContext.WHERE,
+                                EcstTransformationConfig.ExpressionContext.SELECT,
                                 EcstTransformationConfig.ExpressionContext.HAVING,
                                 EcstTransformationConfig.ExpressionContext.ON,
                                 EcstTransformationConfig.ExpressionContext.JOIN_ON,
-                                EcstTransformationConfig.ExpressionContext.INNER_WHERE)),
+                                EcstTransformationConfig.ExpressionContext.INNER_WHERE,
+                                EcstTransformationConfig.ExpressionContext.INNER_SELECT)),
                 new EcstRule("Access path shift", "TIDB_ACCESS_PATH_SHIFT", relationRepresentations,
                         relationalReconstructions, EnumSet.of(EcstTransformationConfig.ExpressionContext.WHERE,
                                 EcstTransformationConfig.ExpressionContext.SELECT,
@@ -38,4 +40,5 @@ public final class EcstRuleLibrary {
                                 EcstTransformationConfig.ExpressionContext.JOIN_ON,
                                 EcstTransformationConfig.ExpressionContext.INNER_WHERE)));
     }
+
 }

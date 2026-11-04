@@ -42,6 +42,19 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
+    void normalizesTidbBinaryCharacterCastSpelling() {
+        String plan = "Projection_5 1 root char_length(cast(from_binary(test.t.a), var_string(262140)))->Column#1\n"
+                + "└─TableReader_3 1 root data:TableFullScan_2\n"
+                + "  └─TableFullScan_2 1 cop[tikv] table:t\n";
+
+        EcstContext context = TiDBExecutionContextAnalyzer.parse(plan,
+                "CHAR_LENGTH(CAST(`a` AS CHAR))");
+
+        assertEquals("ROOT", context.getLocation());
+        assertEquals("PROJECTION", context.getOperator());
+    }
+
+    @Test
     void returnsUnknownWhenTargetCannotBeMatched() {
         String plan = "Projection_5 1 root test.t.a\n"
                 + "└─Selection_4 1 root gt(cast(test.t.a, signed), 0)\n"
@@ -439,11 +452,12 @@ public class TiDBExecutionContextAnalyzerTest {
     }
 
     @Test
-    void doesNotEraseFromBinaryCastMapping() {
+    void normalizesFromBinaryCharacterCastMapping() {
         String plan = "Projection | 1 root | | char_length(cast(from_binary(test.t.c0), var_string(19)))->Column#1\n";
         TiDBExecutionContextAnalyzer.ParsedContext parsed = TiDBExecutionContextAnalyzer.parseWithEvidence(plan,
                 "CHAR_LENGTH(CAST(`c0` AS CHAR))", "UNKNOWN");
-        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.NOT_FOUND, parsed.status());
+        assertEquals(TiDBExecutionContextAnalyzer.MatchStatus.UNIQUE, parsed.status());
+        assertEquals("PROJECTION", parsed.context().getOperator());
     }
 
     @Test

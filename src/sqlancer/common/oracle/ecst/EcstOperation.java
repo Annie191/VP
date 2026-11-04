@@ -47,4 +47,9 @@ public final class EcstOperation {
     public EcstExpressionShape getShape() { return shape; }
     public Map<String, String> getDependencyLineage() { return dependencyLineage; }
     public String getExpectedRole() { return expectedRole; }
+
+    /** Returns the same logical operation with a role expected at another execution stage. */
+    public EcstOperation withExpectedRole(String role) {
+        return new EcstOperation(operationId, normalizedExpression, dependencies, shape, dependencyLineage, role);
+    }
 }

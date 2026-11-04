@@ -115,7 +115,7 @@ public final class TiDBExecutionContextAnalyzer {
         }
         try {
             ParsedContext original = parsePlan(originalPlan, operation, evaluation);
-            ParsedContext transformed = parsePlan(transformedPlan, operation, evaluation);
+            ParsedContext transformed = parsePlan(transformedPlan, transformedOperationFor(target, operation), evaluation);
             if (target != null && target.getDimension() == sqlancer.common.oracle.ecst.EcstContextDimension.ACCESS_PATH) {
                 if (original.extractionStatus() == ExtractionStatus.EXPRESSION_NOT_FOUND) {
                     original = relationAccessContext(originalPlan, evaluation, operation);
@@ -159,6 +159,26 @@ public final class TiDBExecutionContextAnalyzer {
             return observation(original, transformed, EcstShiftStatus.UNKNOWN, Set.of(),
                     "plan parsing failed: " + e.getMessage(), UnknownReason.UNKNOWN_BECAUSE_PLAN);
         }
+    }
+
+    private static EcstOperation transformedOperationFor(EcstTarget target, EcstOperation operation) {
+        if (operation == null || target == null || !isRootToCopTarget(target)
+                || !"PROJECTION_ITEM".equals(operation.getExpectedRole())) {
+            return operation;
+        }
+        return operation.withExpectedRole("SELECTION_PREDICATE");
+    }
+
+    private static boolean isRootToCopTarget(EcstTarget target) {
+        if (target == null) {
+            return false;
+        }
+        if (target.getDimension() == sqlancer.common.oracle.ecst.EcstContextDimension.LOCATION) {
+            return "ROOT".equals(target.getFrom()) && "COP_TIKV".equals(target.getTo())
+                    || "ROOT".equals(target.getFrom()) && "COP_TIFLASH".equals(target.getTo());
+        }
+        return target.getDimension() == sqlancer.common.oracle.ecst.EcstContextDimension.BOUNDARY
+                && "NON_PUSHDOWN".equals(target.getFrom()) && "PUSHDOWN".equals(target.getTo());
     }
 
     public String explain(String query) throws SQLException {
@@ -814,7 +834,16 @@ public final class TiDBExecutionContextAnalyzer {
         // Restricted, lossless spelling correspondence for a single-column signed cast.
         // Unsupported expressions/optimizer rewrites remain UNKNOWN instead of matching columns alone.
         normalized = normalized.replaceAll("cast\\(([a-z_][a-z0-9_$]*)assigned\\)", "cast($1,signed)");
-        return normalized.replaceAll("cast\\(([a-z_][a-z0-9_$]*),bigintbinary\\)", "cast($1,signed)");
+        normalized = normalized.replaceAll("cast\\(([a-z_][a-z0-9_$]*),bigintbinary\\)", "cast($1,signed)");
+        // TiDB's brief EXPLAIN may expose CAST(... AS CHAR) as
+        // CAST(FROM_BINARY(column), VAR_STRING(length)). This spelling is
+        // equivalent only for the character cast; keep the rewrite narrow so
+        // FROM_BINARY elsewhere is never erased from a fingerprint.
+        normalized = normalized.replaceAll(
+                "cast\\(from_binary\\(([a-z_][a-z0-9_$]*)\\),var_string(?:\\([0-9]+\\))?\\)",
+                "cast($1,sql_char)");
+        return normalized.replaceAll("cast\\(([a-z_][a-z0-9_$]*),var_string(?:\\([0-9]+\\))?\\)",
+                "cast($1,sql_char)");
     }
 
     private static String expressionFingerprint(String expression) {
