@@ -138,6 +138,27 @@ public class TiDBECSTOracleCandidateSynthesisTest {
     }
 
     @Test
+    void sourceReplayDropsQuotedSourceHistoryAndKeepsPartitionDependenciesOrdered() {
+        List<String> replay = TiDBVerticalPartitioningOracle.assembleSourceDataReplayForTest(
+                "vp_source", "vp_l", "vp_r", "vp_v", "vp_joined",
+                List.of("CREATE TABLE `vp_source` (vp_rowid BIGINT PRIMARY KEY, c0 INT)"),
+                List.of("INSERT INTO `vp_source` (vp_rowid, c0) VALUES (1, 1)"),
+                List.of("CREATE TABLE `vp_source` (vp_rowid BIGINT PRIMARY KEY, c0 INT)",
+                        "INSERT INTO `vp_source` (vp_rowid, c0) SELECT vp_rowid, c0 FROM `base_table`",
+                        "ALTER TABLE `vp_source` ADD INDEX `source_idx` (`c0`)",
+                        "CREATE TABLE `vp_l` (vp_rowid BIGINT PRIMARY KEY, c0 INT)",
+                        "INSERT INTO `vp_l` SELECT vp_rowid, c0 FROM `vp_source`",
+                        "CREATE TABLE `vp_r` (vp_rowid BIGINT PRIMARY KEY)",
+                        "CREATE VIEW `vp_v` AS SELECT vp_rowid, c0 FROM `vp_l`"));
+        assertTrue(replay.get(0).startsWith("CREATE TABLE `vp_source`"));
+        assertTrue(replay.get(1).startsWith("INSERT INTO `vp_source`"));
+        assertTrue(replay.stream().noneMatch(sql -> sql.toLowerCase().contains("base_table")));
+        assertTrue(replay.stream().noneMatch(sql -> sql.toLowerCase().contains("alter table `vp_source`")));
+        assertTrue(replay.indexOf("CREATE TABLE `vp_l` (vp_rowid BIGINT PRIMARY KEY, c0 INT)")
+                < replay.indexOf("INSERT INTO `vp_l` SELECT vp_rowid, c0 FROM `vp_source`"));
+    }
+
+    @Test
     void ecstKeepsOnlyABoundedEmptyTableSamplingBudget() {
         assertEquals(0.05, TiDBVerticalPartitioningOracle.ecstEmptyBaseTableProbabilityForTest(), 0.000001);
     }

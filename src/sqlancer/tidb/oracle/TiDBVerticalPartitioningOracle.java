@@ -1753,14 +1753,18 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             return List.of();
         }
         VpSchema schema = ecstCase.pair.schema;
-        List<String> replay = new ArrayList<>();
         String source = quote(schema.sourceTable);
+        String sourceDdl = null;
         try (Statement statement = state.getConnection().createStatement();
                 ResultSet ddl = statement.executeQuery("SHOW CREATE TABLE " + source)) {
             if (ddl.next()) {
-                replay.add(ddl.getString(2));
+                sourceDdl = ddl.getString(2);
             }
         }
+        if (sourceDdl == null || sourceDdl.isEmpty()) {
+            return List.of("-- source DDL unavailable for " + schema.sourceTable);
+        }
+        List<String> sourceSnapshotInserts = new ArrayList<>();
         List<String> columns = new ArrayList<>();
         columns.add(quote(ROW_ID));
         columns.addAll(schema.columns.stream().map(column -> quote(column.name)).collect(Collectors.toList()));
@@ -1772,7 +1776,7 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
                         + quote(ROW_ID))) {
             while (data.next()) {
                 if (rows > 0 && rows % 128 == 0) {
-                    replay.add("INSERT INTO " + source + " (" + selectColumns + ") VALUES " + values);
+                    sourceSnapshotInserts.add("INSERT INTO " + source + " (" + selectColumns + ") VALUES " + values);
                     values.setLength(0);
                 }
                 if (values.length() > 0) {
@@ -1790,18 +1794,120 @@ public class TiDBVerticalPartitioningOracle implements TestOracle<TiDBGlobalStat
             }
         }
         if (values.length() > 0) {
-            replay.add("INSERT INTO " + source + " (" + selectColumns + ") VALUES " + values);
+            sourceSnapshotInserts.add("INSERT INTO " + source + " (" + selectColumns + ") VALUES " + values);
         }
-        for (String setup : schema.setupStatements) {
-            String normalized = setup.trim().toLowerCase(Locale.ROOT);
-            if (normalized.startsWith("create table " + schema.sourceTable.toLowerCase(Locale.ROOT))
-                    || normalized.startsWith("insert into " + schema.sourceTable.toLowerCase(Locale.ROOT))
-                    || normalized.startsWith("ecst_reconfigure_split=")) {
+        return assembleSourceDataReplay(schema.sourceTable, schema.leftTable, schema.rightTable, schema.viewName,
+                schema.tempTable, List.of(sourceDdl), sourceSnapshotInserts, schema.setupStatements);
+    }
+
+    /**
+     * Assembles a replay in dependency order. The source DDL and literal snapshot are authoritative;
+     * historical statements that create or mutate the source are deliberately excluded.
+     */
+    private static List<String> assembleSourceDataReplay(String sourceTable, String leftTable, String rightTable,
+            String viewName, String tempTable, List<String> sourceDdl, List<String> sourceSnapshotInserts,
+            List<String> setupStatements) {
+        List<String> replay = new ArrayList<>();
+        replay.addAll(sourceDdl);
+        replay.addAll(sourceSnapshotInserts);
+        List<String> partitionDdl = new ArrayList<>();
+        List<String> partitionPopulation = new ArrayList<>();
+        List<String> viewDdl = new ArrayList<>();
+        List<String> indexDdl = new ArrayList<>();
+        List<String> sessionSettings = new ArrayList<>();
+        List<String> remaining = new ArrayList<>();
+        for (String setup : setupStatements) {
+            if (setup == null || setup.trim().isEmpty()) {
                 continue;
             }
-            replay.add(setup);
+            String normalized = normalizeReplaySql(setup);
+            if (normalized.startsWith("--") || normalized.startsWith("ecst_reconfigure_split=")) {
+                continue;
+            }
+            if (isSourceOwnedReplayStatement(normalized, sourceTable)) {
+                continue;
+            }
+            if (isCreateTableReplayStatement(normalized)) {
+                partitionDdl.add(setup);
+            } else if (isInsertReplayStatement(normalized)) {
+                partitionPopulation.add(setup);
+            } else if (isViewReplayStatement(normalized, viewName)) {
+                viewDdl.add(setup);
+            } else if (isIndexReplayStatement(normalized, leftTable, rightTable, viewName, tempTable)) {
+                indexDdl.add(setup);
+            } else if (normalized.startsWith("set ")) {
+                sessionSettings.add(setup);
+            } else {
+                remaining.add(setup);
+            }
         }
+        replay.addAll(partitionDdl);
+        replay.addAll(partitionPopulation);
+        replay.addAll(viewDdl);
+        replay.addAll(indexDdl);
+        replay.addAll(sessionSettings);
+        replay.addAll(remaining);
         return replay;
+    }
+
+    /** Package-visible fixture hook for validating replay assembly without constructing a live ECST case. */
+    static List<String> assembleSourceDataReplayForTest(String sourceTable, String leftTable, String rightTable,
+            String viewName, String tempTable, List<String> sourceDdl, List<String> sourceSnapshotInserts,
+            List<String> setupStatements) {
+        return assembleSourceDataReplay(sourceTable, leftTable, rightTable, viewName, tempTable, sourceDdl,
+                sourceSnapshotInserts, setupStatements);
+    }
+
+    private static String normalizeReplaySql(String sql) {
+        return sql.trim().toLowerCase(Locale.ROOT).replace("`", "").replaceAll("\\s+", " ");
+    }
+
+    private static boolean isSourceOwnedReplayStatement(String normalized, String sourceTable) {
+        return tableStatement(normalized, "create table", sourceTable)
+                || tableStatement(normalized, "create temporary table", sourceTable)
+                || tableStatement(normalized, "insert into", sourceTable)
+                || tableStatement(normalized, "update", sourceTable)
+                || tableStatement(normalized, "delete from", sourceTable)
+                || tableStatement(normalized, "truncate table", sourceTable)
+                || tableStatement(normalized, "truncate", sourceTable)
+                || tableStatement(normalized, "drop table", sourceTable)
+                || tableStatement(normalized, "alter table", sourceTable)
+                || tableStatement(normalized, "rename table", sourceTable)
+                || indexOnTable(normalized, sourceTable);
+    }
+
+    private static boolean isCreateTableReplayStatement(String normalized) {
+        return normalized.startsWith("create table ") || normalized.startsWith("create temporary table ");
+    }
+
+    private static boolean isInsertReplayStatement(String normalized) {
+        return normalized.startsWith("insert into ");
+    }
+
+    private static boolean isViewReplayStatement(String normalized, String viewName) {
+        return tableStatement(normalized, "create view", viewName)
+                || tableStatement(normalized, "drop view", viewName)
+                || tableStatement(normalized, "alter view", viewName);
+    }
+
+    private static boolean isIndexReplayStatement(String normalized, String leftTable, String rightTable,
+            String viewName, String tempTable) {
+        return normalized.startsWith("create index ") || normalized.startsWith("create unique index ")
+                || normalized.startsWith("alter table ") || indexOnTable(normalized, leftTable)
+                || indexOnTable(normalized, rightTable) || indexOnTable(normalized, viewName)
+                || indexOnTable(normalized, tempTable);
+    }
+
+    private static boolean tableStatement(String normalized, String command, String table) {
+        String pattern = "^" + Pattern.quote(command) + "\\s+(?:if\\s+(?:not\\s+)?exists\\s+)?(?:[a-z0-9_]+\\.)?"
+                + Pattern.quote(table.toLowerCase(Locale.ROOT)) + "(?:\\s|\\(|;|$)";
+        return Pattern.compile(pattern).matcher(normalized).find();
+    }
+
+    private static boolean indexOnTable(String normalized, String table) {
+        String pattern = "\\bon\\s+(?:[a-z0-9_]+\\.)?" + Pattern.quote(table.toLowerCase(Locale.ROOT))
+                + "(?:\\s|\\(|;|$)";
+        return Pattern.compile(pattern).matcher(normalized).find();
     }
 
     private static String sqlLiteral(Object value) {
