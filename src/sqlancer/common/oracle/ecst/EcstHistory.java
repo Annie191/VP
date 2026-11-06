@@ -670,10 +670,24 @@ public final class EcstHistory {
         return null;
     }
 
-    /** Resolves the concrete migration represented by the directional TiDB target keys. */
+    /**
+     * Resolves canonical typed transitions and legacy directional TiDB target keys.
+     *
+     * @param targetKey the canonical or legacy target identity
+     * @return the concrete transition, or null for a legacy aggregate target
+     */
     private static String targetConcreteShift(String targetKey) {
         if (targetKey == null) {
             return null;
+        }
+        // Canonical keys carry the typed transition; no DBMS naming convention is required.
+        int colon = targetKey.indexOf(':');
+        if (colon > 0 && targetKey.indexOf("->", colon) > colon) {
+            for (EcstContextDimension dimension : EcstContextDimension.values()) {
+                if (dimension.name().equals(targetKey.substring(0, colon))) {
+                    return targetKey;
+                }
+            }
         }
         if (targetKey.startsWith("TIDB_LOCATION_")) {
             String direction = targetKey.substring("TIDB_LOCATION_".length());

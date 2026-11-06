@@ -171,6 +171,16 @@ public class EcstHistoryTest {
     }
 
     @Test
+    public void nonEmptyCoverageIsTrackedSeparatelyFromPlanCoverage() {
+        EcstHistory history = new EcstHistory();
+        history.recordCoverage("LOCATION:COP_TIKV->ROOT");
+        history.recordNonEmptyCoverage(List.of("LOCATION:COP_TIKV->ROOT"));
+
+        assertEquals(1, history.getShiftCoverage("LOCATION:COP_TIKV->ROOT"));
+        assertEquals(1, history.getNonEmptyShiftCoverage("LOCATION:COP_TIKV->ROOT"));
+    }
+
+    @Test
     public void explorationUsesGlobalTrialsWhenFeatureBucketChanges() {
         EcstFeature observed = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "SINGLE_DEPENDENCY");
         EcstFeature query = new EcstFeature("TiDB", "CAST_ARITHMETIC", "WHERE", "MULTI_DEPENDENCY");
@@ -306,4 +316,16 @@ public class EcstHistoryTest {
         assertEquals("global-good", globalHistory.chooseTransformDecision("target",
                 Map.of("global-good", sparseExact, "coarse-bad", sparseExact)).getKey());
     }
+    @Test
+    public void canonicalTargetsKeepCoverageDirectionalWithoutDbmsNameParsing() {
+        EcstHistory history = new EcstHistory();
+        String forward = "ACCESS_PATH:TABLE_SCAN->INDEX_RANGE";
+        String reverse = "ACCESS_PATH:INDEX_RANGE->TABLE_SCAN";
+        history.observe(forward, "config", EcstShiftStatus.SUCCESS,
+                Set.of(forward), 1);
+        assertEquals(1, history.getTargetCoverage(forward));
+        assertEquals(0, history.getTargetCoverage(reverse));
+        assertTrue(history.formatSummary().contains("trials=1,coverage=1"));
+    }
+
 }
