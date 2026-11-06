@@ -63,3 +63,21 @@ ECST 与 VP 一样依赖完整 SQLancer 工程中的 TiDB Provider、Options、S
 在完整配套 SQLancer 工程中使用 `mysql --oracle ECST --ecst-query-pairs 4`。具体实现范围、启动参数和验证命令见 [MySQL ECST 说明](docs/mysql_ecst.md)。本仓库仍保留源码导出结构，README 上述完整工程依赖说明同样适用。
 
 完整工作区中已有 112 项针对性测试通过；MySQL 9.7.1 命令行验证完成 12 对等价查询，其中 4 次目标迁移成功、8 次未命中，均执行了结果比较。此次导出未加入构建产物、运行日志或数据库文件。
+
+## OceanBase ECST
+
+已加入 OceanBase MySQL 模式的 ECST，复用 OceanBase VP 的受控接口，实现目标与配置选择、语义和数据前提校验、结果比较、反馈、重试及独立回放。
+
+- [OceanBaseECSTOracle.java](src/sqlancer/oceanbase/oracle/OceanBaseECSTOracle.java)：独立 ECST 入口及测试协调。
+- [OceanBaseExecutionContextAnalyzer.java](src/sqlancer/oceanbase/oracle/OceanBaseExecutionContextAnalyzer.java)：解析原生 `EXPLAIN EXTENDED_NOADDR` 的算子树及 `Outputs & filters`，识别谓词位置、算子角色、查询块边界和访问路径。
+- [OceanBaseEcstCapabilities.java](src/sqlancer/oceanbase/oracle/OceanBaseEcstCapabilities.java)：方向性目标及合法配置。
+- OceanBase VP 受控接口、Provider、Options、OracleFactory、输入表选择，以及单元测试、实库验收测试和原生计划样本。
+- [EcstExpressionMatcher.java](src/sqlancer/common/oracle/ecst/EcstExpressionMatcher.java)：MySQL 与 OceanBase 共用的表达式结构匹配。
+
+OceanBase 的 `SUBPLAN SCAN` 表示保留查询块边界；实现将其记为 `RETAINED_VIEW`，仅凭该算子不会宣称发生临时表物化。ECST 保持当前聚合下推设置。
+
+同一种子下相同布局和索引要求的分区表可以复用，仍逐配置校验元数据、数据和查询结果；前提校验拒绝后会重建分区。
+
+在完整配套 SQLancer 工程中使用 `oceanbase --oracle ECST --ecst-query-pairs 4`。运行参数、适配范围和验收命令见 [OceanBase ECST 说明](docs/oceanbase_ecst.md)。当前仓库仍是依赖完整配套工程的源码导出。
+
+完整工作区中 49 项针对性测试通过，包含 OceanBase CE 4.4.2.1 上全部 63 种合法配置及双方向边界迁移验收。打包后的命令行完成 2 对非空且相等的查询，两个迁移目标均未命中，仍执行了结果比较并清理了辅助对象。

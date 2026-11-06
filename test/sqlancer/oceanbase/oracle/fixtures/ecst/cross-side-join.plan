@@ -1,0 +1,71 @@
+===================================================
+|ID|OPERATOR         |NAME  |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------
+|0 |MERGE JOIN       |      |4       |5           |
+|1 |├─TABLE FULL SCAN|ecst_l|4       |3           |
+|2 |└─TABLE FULL SCAN|ecst_r|4       |3           |
+===================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([ecst_l.vp_rowid]), filter(nil), rowset=16
+      equal_conds([ecst_l.vp_rowid = ecst_r.vp_rowid]), other_conds([ecst_l.c0 + ecst_r.c1 > 0])
+      merge_directions([ASC])
+  1 - output([ecst_l.vp_rowid], [ecst_l.c0]), filter(nil), rowset=16
+      access([ecst_l.vp_rowid], [ecst_l.c0]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([ecst_l.vp_rowid]), range(MIN ; MAX)always true
+  2 - output([ecst_r.vp_rowid], [ecst_r.c1]), filter(nil), rowset=16
+      access([ecst_r.vp_rowid], [ecst_r.c1]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([ecst_r.vp_rowid]), range(MIN ; MAX)always true
+Used Hint:
+-------------------------------------
+  /*+
+
+  */
+Qb name trace:
+-------------------------------------
+  stmt_id:0, stmt_type:T_EXPLAIN
+  stmt_id:1, SEL$1 > SEL$C6D21C0F
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      LEADING(@"SEL$C6D21C0F" ("ecst_l"@"SEL$1" "ecst_r"@"SEL$1"))
+      USE_MERGE(@"SEL$C6D21C0F" "ecst_r"@"SEL$1")
+      FULL(@"SEL$C6D21C0F" "ecst_l"@"SEL$1")
+      FULL(@"SEL$C6D21C0F" "ecst_r"@"SEL$1")
+      OUTER_TO_INNER(@"SEL$1")
+      OPTIMIZER_FEATURES_ENABLE('4.4.2.1')
+      END_OUTLINE_DATA
+  */
+Optimization Info:
+-------------------------------------
+  ecst_l:
+      table_rows:4
+      physical_range_rows:4
+      logical_range_rows:4
+      output_rows:4
+      table_dop:1
+      dop_method:Table DOP
+      avaiable_index_name:[pl]
+      stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
+      dynamic sampling level:1
+      estimation method:[STORAGE, DYNAMIC SAMPLING FULL]
+  ecst_r:
+      table_rows:4
+      physical_range_rows:4
+      logical_range_rows:4
+      output_rows:4
+      table_dop:1
+      dop_method:Table DOP
+      avaiable_index_name:[pr]
+      stats info:[version=1970-01-01 08:00:00.000000, is_locked=0, is_expired=0]
+      dynamic sampling level:1
+      estimation method:[STORAGE, DYNAMIC SAMPLING FULL]
+  Plan Type:
+      LOCAL
+  Parameters:
+      :0 => 0
+  Note:
+      Degree of Parallelisim is 1 because of table property

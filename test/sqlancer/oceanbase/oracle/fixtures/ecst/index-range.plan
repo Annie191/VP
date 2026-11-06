@@ -1,0 +1,50 @@
+===============================================================
+|ID|OPERATOR        |NAME               |EST.ROWS|EST.TIME(us)|
+---------------------------------------------------------------
+|0 |TABLE RANGE SCAN|src(ecst_probe_idx)|2       |3           |
+===============================================================
+Outputs & filters:
+-------------------------------------
+  0 - output([src.vp_rowid]), filter(nil), rowset=16
+      access([src.vp_rowid]), partitions(p0)
+      is_index_back=false, is_global_index=false,
+      range_key([src.c0], [src.vp_rowid]), range(0,MAX ; MAX,MAX),
+      range_cond([src.c0 > 0])
+Used Hint:
+-------------------------------------
+  /*+
+
+      INDEX("src" "ecst_probe_idx")
+  */
+Qb name trace:
+-------------------------------------
+  stmt_id:0, stmt_type:T_EXPLAIN
+  stmt_id:1, SEL$1
+Outline Data:
+-------------------------------------
+  /*+
+      BEGIN_OUTLINE_DATA
+      INDEX(@"SEL$1" "ecst_ob_probe_1793970980965426759"."src"@"SEL$1" "ecst_probe_idx")
+      OPTIMIZER_FEATURES_ENABLE('4.4.2.1')
+      END_OUTLINE_DATA
+  */
+Optimization Info:
+-------------------------------------
+  src:
+      table_rows:4
+      physical_range_rows:2
+      logical_range_rows:2
+      output_rows:2
+      table_dop:1
+      dop_method:Table DOP
+      avaiable_index_name:[ecst_probe_idx, src]
+      pruned_index_name:[src]
+      stats info:[version=2026-11-06 21:24:34.981296, is_locked=0, is_expired=0]
+      dynamic sampling level:0
+      estimation method:[OPTIMIZER STATISTICS, STORAGE]
+  Plan Type:
+      LOCAL
+  Parameters:
+      :0 => 0
+  Note:
+      Degree of Parallelisim is 1 because of table property
