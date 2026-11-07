@@ -1,0 +1,167 @@
+[
+  {
+    "Plan": {
+      "Node Type": "Expression",
+      "Node Id": "Expression_5",
+      "Description": "(Project names + (Projection + Change column names to column identifiers))",
+      "Expression": {
+        "Inputs": [
+          {
+            "Name": "vp_rowid",
+            "Type": "UInt64"
+          },
+          {
+            "Name": "c0",
+            "Type": "Nullable(Int64)"
+          },
+          {
+            "Name": "c1",
+            "Type": "Nullable(Int64)"
+          }
+        ],
+        "Actions": [
+          {
+            "Node Type": "INPUT",
+            "Result Type": "UInt64",
+            "Result Name": "vp_rowid",
+            "Arguments": [
+              0
+            ],
+            "Removed Arguments": [],
+            "Result": 0
+          },
+          {
+            "Node Type": "INPUT",
+            "Result Type": "Nullable(Int64)",
+            "Result Name": "c0",
+            "Arguments": [
+              1
+            ],
+            "Removed Arguments": [],
+            "Result": 1
+          },
+          {
+            "Node Type": "INPUT",
+            "Result Type": "Nullable(Int64)",
+            "Result Name": "c1",
+            "Arguments": [
+              2
+            ],
+            "Removed Arguments": [],
+            "Result": 2
+          },
+          {
+            "Node Type": "ALIAS",
+            "Result Type": "UInt64",
+            "Result Name": "__table1.vp_rowid",
+            "Arguments": [
+              0
+            ],
+            "Removed Arguments": [
+              0
+            ],
+            "Result": 3
+          },
+          {
+            "Node Type": "ALIAS",
+            "Result Type": "Nullable(Int64)",
+            "Result Name": "__table1.c0",
+            "Arguments": [
+              1
+            ],
+            "Removed Arguments": [
+              1
+            ],
+            "Result": 0
+          },
+          {
+            "Node Type": "ALIAS",
+            "Result Type": "Nullable(Int64)",
+            "Result Name": "__table1.c1",
+            "Arguments": [
+              2
+            ],
+            "Removed Arguments": [
+              2
+            ],
+            "Result": 1
+          },
+          {
+            "Node Type": "ALIAS",
+            "Result Type": "UInt64",
+            "Result Name": "vp_rowid",
+            "Arguments": [
+              3
+            ],
+            "Removed Arguments": [
+              3
+            ],
+            "Result": 2
+          },
+          {
+            "Node Type": "FUNCTION",
+            "Result Type": "Nullable(Int64)",
+            "Result Name": "plus(__table1.c0, __table1.c1)",
+            "Function": "plus",
+            "Compiled": false,
+            "Arguments": [
+              0,
+              1
+            ],
+            "Removed Arguments": [
+              0,
+              1
+            ],
+            "Result": 3
+          },
+          {
+            "Node Type": "ALIAS",
+            "Result Type": "Nullable(Int64)",
+            "Result Name": "ecst_value",
+            "Arguments": [
+              3
+            ],
+            "Removed Arguments": [
+              3
+            ],
+            "Result": 1
+          }
+        ],
+        "Outputs": [
+          {
+            "Name": "vp_rowid",
+            "Type": "UInt64"
+          },
+          {
+            "Name": "ecst_value",
+            "Type": "Nullable(Int64)"
+          }
+        ],
+        "Positions": [
+          2,
+          1
+        ]
+      },
+      "Plans": [
+        {
+          "Node Type": "ReadFromMergeTree",
+          "Node Id": "ReadFromMergeTree_0",
+          "Description": "ecst_probe_ch_20261108.src",
+          "Read Type": "Default",
+          "Parts": 1,
+          "Granules": 64,
+          "Indexes": [
+            {
+              "Type": "PrimaryKey",
+              "Condition": "true",
+              "Initial Parts": 1,
+              "Selected Parts": 1,
+              "Initial Granules": 64,
+              "Selected Granules": 64
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

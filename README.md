@@ -93,3 +93,19 @@ OceanBase 的 `SUBPLAN SCAN` 表示保留查询块边界；实现将其记为 `R
 在完整配套 SQLancer 工程中使用 `cockroachdb --oracle ECST --ecst-query-pairs 4`；不传 VP 分布式参数。参数、证据规则和验收命令见 [CockroachDB ECST 说明](docs/cockroachdb_ecst.md)。当前仓库仍是依赖完整配套工程的源码导出。
 
 CockroachDB v26.2.3 隔离单节点上 46 项针对性测试通过，无失败或跳过，覆盖全部 63 种配置及独立回放。最终命令行完成 3 对非空且相等的查询，1 次迁移成功、2 次未命中；输入准备和回放均无拆 range/SCATTER，1,074 项集群设置保持一致，辅助对象已清理。
+
+## ClickHouse ECST（单节点）
+
+已加入 ClickHouse 单节点 ECST，复用 VP 受控接口完成固定种子快照、目标/配置选择、关系变换、语义和数据校验、结果比较、双层反馈及独立回放。
+
+- 使用本地 MergeTree 辅助表和一个连接，无 Distributed 表、ON CLUSTER DDL 或远程入口轮换。
+- 解析原生 JSON 物理计划及表达式动作，识别 JOIN 前后位置、实际 CTE 物化，以及稀疏主键的真实 granule 裁剪。
+- 非等值 JOIN ON 在实测计划中仍由 Join 后的 Filter 执行，不误报 JOIN_CONDITION；匿名 CTE 内存读取缺少来源信息时，表达式位置保留 UNKNOWN。
+- 支持全部 63 种合法变换配置，校验 rowid 唯一性和原生类型/数据；空结果仍比较类型，String/FixedString 以服务端 hex 编码保持字节精度。
+- 最终布局回放保留原生二进制、数组、Map、Tuple、Decimal、DateTime64 等数据，不依赖原始输入表或过期重试对象。
+
+在完整配套 SQLancer 工程中使用 `clickhouse --oracle ECST --ecst-query-pairs 3`。启动参数、适配边界和验收命令见 [ClickHouse ECST 说明](docs/clickhouse_ecst.md)。当前仓库仍是依赖完整配套工程的源码导出。
+
+准备发布的源码在配套完整工程中通过 41 项测试，无失败或跳过，包含 ClickHouse 26.7.1.1315 隔离单节点上的 9 项实库验收及全部 63 种配置。
+
+同一构建产物的命令行完成 3 对结果相等的查询（2 对非空、1 对为空）：两个迁移观察为 UNKNOWN，一个未命中，均执行了比较。437 项服务器设置保持一致，测试对象及隔离服务已清理。

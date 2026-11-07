@@ -1,0 +1,585 @@
+[
+  {
+    "Plan": {
+      "Node Type": "MaterializingCTEs",
+      "Node Id": "MaterializingCTEs_30",
+      "Description": "Materialize CTEs before main query execution",
+      "Plans": [
+        {
+          "Node Type": "Expression",
+          "Node Id": "Expression_26",
+          "Expression": {
+            "Inputs": [
+              {
+                "Name": "__table1.vp_rowid",
+                "Type": "UInt64"
+              }
+            ],
+            "Actions": [
+              {
+                "Node Type": "INPUT",
+                "Result Type": "UInt64",
+                "Result Name": "__table1.vp_rowid",
+                "Arguments": [
+                  0
+                ],
+                "Removed Arguments": [],
+                "Result": 0
+              },
+              {
+                "Node Type": "ALIAS",
+                "Result Type": "UInt64",
+                "Result Name": "vp_rowid",
+                "Arguments": [
+                  0
+                ],
+                "Removed Arguments": [
+                  0
+                ],
+                "Result": 1
+              }
+            ],
+            "Outputs": [
+              {
+                "Name": "vp_rowid",
+                "Type": "UInt64"
+              }
+            ],
+            "Positions": [
+              1
+            ]
+          },
+          "Plans": [
+            {
+              "Node Type": "Join",
+              "Node Id": "Join_24",
+              "Description": "JOIN FillRightFirst",
+              "Type": "INNER",
+              "Strictness": "ALL",
+              "Algorithm": "SpillingHashJoin(HashJoin)",
+              "Clauses": "[(__table1.vp_rowid) = (__table4.vp_rowid)]",
+              "Plans": [
+                {
+                  "Node Type": "Expression",
+                  "Node Id": "Expression_22",
+                  "Description": "Left Pre Join Actions",
+                  "Expression": {
+                    "Inputs": [
+                      {
+                        "Name": "__table1.vp_rowid",
+                        "Type": "UInt64"
+                      }
+                    ],
+                    "Actions": [
+                      {
+                        "Node Type": "INPUT",
+                        "Result Type": "UInt64",
+                        "Result Name": "__table1.vp_rowid",
+                        "Arguments": [
+                          0
+                        ],
+                        "Removed Arguments": [
+                          0
+                        ],
+                        "Result": 0
+                      }
+                    ],
+                    "Outputs": [
+                      {
+                        "Name": "__table1.vp_rowid",
+                        "Type": "UInt64"
+                      }
+                    ],
+                    "Positions": [
+                      0
+                    ]
+                  },
+                  "Plans": [
+                    {
+                      "Node Type": "Filter",
+                      "Node Id": "Filter_27",
+                      "AND column": "greater(plus(__table1.c0, __table1.c1), 0_UInt8)",
+                      "Expression": {
+                        "Inputs": [
+                          {
+                            "Name": "vp_rowid",
+                            "Type": "UInt64"
+                          },
+                          {
+                            "Name": "c0",
+                            "Type": "Nullable(Int64)"
+                          },
+                          {
+                            "Name": "c1",
+                            "Type": "Nullable(Int64)"
+                          }
+                        ],
+                        "Actions": [
+                          {
+                            "Node Type": "INPUT",
+                            "Result Type": "UInt64",
+                            "Result Name": "vp_rowid",
+                            "Arguments": [
+                              0
+                            ],
+                            "Removed Arguments": [],
+                            "Result": 0
+                          },
+                          {
+                            "Node Type": "INPUT",
+                            "Result Type": "Nullable(Int64)",
+                            "Result Name": "c0",
+                            "Arguments": [
+                              1
+                            ],
+                            "Removed Arguments": [],
+                            "Result": 1
+                          },
+                          {
+                            "Node Type": "INPUT",
+                            "Result Type": "Nullable(Int64)",
+                            "Result Name": "c1",
+                            "Arguments": [
+                              2
+                            ],
+                            "Removed Arguments": [],
+                            "Result": 2
+                          },
+                          {
+                            "Node Type": "COLUMN",
+                            "Result Type": "UInt8",
+                            "Result Name": "0_UInt8",
+                            "Column": "Const(UInt8)",
+                            "Arguments": [],
+                            "Removed Arguments": [],
+                            "Result": 3
+                          },
+                          {
+                            "Node Type": "COLUMN",
+                            "Result Type": "String",
+                            "Result Name": "_runtime_filter_3556686001441755902",
+                            "Column": "Const(String)",
+                            "Arguments": [],
+                            "Removed Arguments": [],
+                            "Result": 4
+                          },
+                          {
+                            "Node Type": "ALIAS",
+                            "Result Type": "UInt64",
+                            "Result Name": "__table1.vp_rowid",
+                            "Arguments": [
+                              0
+                            ],
+                            "Removed Arguments": [],
+                            "Result": 5
+                          },
+                          {
+                            "Node Type": "FUNCTION",
+                            "Result Type": "Nullable(Int64)",
+                            "Result Name": "plus(__table1.c0, __table1.c1)",
+                            "Function": "plus",
+                            "Compiled": false,
+                            "Arguments": [
+                              1,
+                              2
+                            ],
+                            "Removed Arguments": [
+                              1,
+                              2
+                            ],
+                            "Result": 6
+                          },
+                          {
+                            "Node Type": "FUNCTION",
+                            "Result Type": "UInt8",
+                            "Result Name": "__applyFilter(_runtime_filter_3556686001441755902, __table1.vp_rowid)",
+                            "Function": "__applyFilter",
+                            "Compiled": false,
+                            "Arguments": [
+                              4,
+                              0
+                            ],
+                            "Removed Arguments": [
+                              4,
+                              0
+                            ],
+                            "Result": 2
+                          },
+                          {
+                            "Node Type": "FUNCTION",
+                            "Result Type": "Nullable(UInt8)",
+                            "Result Name": "greater(plus(__table1.c0, __table1.c1), 0_UInt8)",
+                            "Function": "greater",
+                            "Compiled": false,
+                            "Arguments": [
+                              6,
+                              3
+                            ],
+                            "Removed Arguments": [
+                              6,
+                              3
+                            ],
+                            "Result": 0
+                          },
+                          {
+                            "Node Type": "FUNCTION",
+                            "Result Type": "Nullable(UInt8)",
+                            "Result Name": "and(greater(plus(__table1.c0, __table1.c1), 0_UInt8), __applyFilter(_runtime_filter_3556686001441755902, __table1.vp_rowid))",
+                            "Function": "and",
+                            "Compiled": false,
+                            "Arguments": [
+                              0,
+                              2
+                            ],
+                            "Removed Arguments": [
+                              0,
+                              2
+                            ],
+                            "Result": 3
+                          }
+                        ],
+                        "Outputs": [
+                          {
+                            "Name": "and(greater(plus(__table1.c0, __table1.c1), 0_UInt8), __applyFilter(_runtime_filter_3556686001441755902, __table1.vp_rowid))",
+                            "Type": "Nullable(UInt8)"
+                          },
+                          {
+                            "Name": "__table1.vp_rowid",
+                            "Type": "UInt64"
+                          }
+                        ],
+                        "Positions": [
+                          3,
+                          5
+                        ]
+                      },
+                      "Filter Column": "and(greater(plus(__table1.c0, __table1.c1), 0_UInt8), __applyFilter(_runtime_filter_3556686001441755902, __table1.vp_rowid))",
+                      "Removes Filter": true,
+                      "Plans": [
+                        {
+                          "Node Type": "ReadFromMemoryStorage",
+                          "Node Id": "ReadFromMemoryStorage_0"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "Node Type": "Expression",
+                  "Node Id": "Expression_23",
+                  "Description": "Right Pre Join Actions",
+                  "Expression": {
+                    "Inputs": [
+                      {
+                        "Name": "__table4.vp_rowid",
+                        "Type": "UInt64"
+                      }
+                    ],
+                    "Actions": [
+                      {
+                        "Node Type": "INPUT",
+                        "Result Type": "UInt64",
+                        "Result Name": "__table4.vp_rowid",
+                        "Arguments": [
+                          0
+                        ],
+                        "Removed Arguments": [
+                          0
+                        ],
+                        "Result": 0
+                      }
+                    ],
+                    "Outputs": [
+                      {
+                        "Name": "__table4.vp_rowid",
+                        "Type": "UInt64"
+                      }
+                    ],
+                    "Positions": [
+                      0
+                    ]
+                  },
+                  "Plans": [
+                    {
+                      "Node Type": "BuildRuntimeFilter",
+                      "Node Id": "BuildRuntimeFilter_20",
+                      "Description": "Build runtime join filter on __table4.vp_rowid",
+                      "Plans": [
+                        {
+                          "Node Type": "Expression",
+                          "Node Id": "Expression_3",
+                          "Description": "Change column names to column identifiers",
+                          "Expression": {
+                            "Inputs": [
+                              {
+                                "Name": "vp_rowid",
+                                "Type": "UInt64"
+                              }
+                            ],
+                            "Actions": [
+                              {
+                                "Node Type": "INPUT",
+                                "Result Type": "UInt64",
+                                "Result Name": "vp_rowid",
+                                "Arguments": [
+                                  0
+                                ],
+                                "Removed Arguments": [],
+                                "Result": 0
+                              },
+                              {
+                                "Node Type": "ALIAS",
+                                "Result Type": "UInt64",
+                                "Result Name": "__table4.vp_rowid",
+                                "Arguments": [
+                                  0
+                                ],
+                                "Removed Arguments": [
+                                  0
+                                ],
+                                "Result": 1
+                              }
+                            ],
+                            "Outputs": [
+                              {
+                                "Name": "__table4.vp_rowid",
+                                "Type": "UInt64"
+                              }
+                            ],
+                            "Positions": [
+                              1
+                            ]
+                          },
+                          "Plans": [
+                            {
+                              "Node Type": "ReadFromMemoryStorage",
+                              "Node Id": "ReadFromMemoryStorage_2"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "Node Type": "MaterializingCTE",
+          "Node Id": "MaterializingCTE_12",
+          "Description": "Materializing CTE: z",
+          "Plans": [
+            {
+              "Node Type": "Expression",
+              "Node Id": "Expression_29",
+              "Description": "(Project names + (Projection + Change column names to column identifiers))",
+              "Expression": {
+                "Inputs": [
+                  {
+                    "Name": "vp_rowid",
+                    "Type": "UInt64"
+                  },
+                  {
+                    "Name": "c0",
+                    "Type": "Nullable(Int64)"
+                  },
+                  {
+                    "Name": "c1",
+                    "Type": "Nullable(Int64)"
+                  },
+                  {
+                    "Name": "c2",
+                    "Type": "String"
+                  }
+                ],
+                "Actions": [
+                  {
+                    "Node Type": "INPUT",
+                    "Result Type": "UInt64",
+                    "Result Name": "vp_rowid",
+                    "Arguments": [
+                      0
+                    ],
+                    "Removed Arguments": [],
+                    "Result": 0
+                  },
+                  {
+                    "Node Type": "INPUT",
+                    "Result Type": "Nullable(Int64)",
+                    "Result Name": "c0",
+                    "Arguments": [
+                      1
+                    ],
+                    "Removed Arguments": [],
+                    "Result": 1
+                  },
+                  {
+                    "Node Type": "INPUT",
+                    "Result Type": "Nullable(Int64)",
+                    "Result Name": "c1",
+                    "Arguments": [
+                      2
+                    ],
+                    "Removed Arguments": [],
+                    "Result": 2
+                  },
+                  {
+                    "Node Type": "INPUT",
+                    "Result Type": "String",
+                    "Result Name": "c2",
+                    "Arguments": [
+                      3
+                    ],
+                    "Removed Arguments": [],
+                    "Result": 3
+                  },
+                  {
+                    "Node Type": "ALIAS",
+                    "Result Type": "UInt64",
+                    "Result Name": "__table6.vp_rowid",
+                    "Arguments": [
+                      0
+                    ],
+                    "Removed Arguments": [
+                      0
+                    ],
+                    "Result": 4
+                  },
+                  {
+                    "Node Type": "ALIAS",
+                    "Result Type": "Nullable(Int64)",
+                    "Result Name": "__table6.c0",
+                    "Arguments": [
+                      1
+                    ],
+                    "Removed Arguments": [
+                      1
+                    ],
+                    "Result": 0
+                  },
+                  {
+                    "Node Type": "ALIAS",
+                    "Result Type": "Nullable(Int64)",
+                    "Result Name": "__table6.c1",
+                    "Arguments": [
+                      2
+                    ],
+                    "Removed Arguments": [
+                      2
+                    ],
+                    "Result": 1
+                  },
+                  {
+                    "Node Type": "ALIAS",
+                    "Result Type": "String",
+                    "Result Name": "__table6.c2",
+                    "Arguments": [
+                      3
+                    ],
+                    "Removed Arguments": [
+                      3
+                    ],
+                    "Result": 2
+                  },
+                  {
+                    "Node Type": "ALIAS",
+                    "Result Type": "UInt64",
+                    "Result Name": "vp_rowid",
+                    "Arguments": [
+                      4
+                    ],
+                    "Removed Arguments": [
+                      4
+                    ],
+                    "Result": 3
+                  },
+                  {
+                    "Node Type": "ALIAS",
+                    "Result Type": "Nullable(Int64)",
+                    "Result Name": "c0",
+                    "Arguments": [
+                      0
+                    ],
+                    "Removed Arguments": [
+                      0
+                    ],
+                    "Result": 4
+                  },
+                  {
+                    "Node Type": "ALIAS",
+                    "Result Type": "Nullable(Int64)",
+                    "Result Name": "c1",
+                    "Arguments": [
+                      1
+                    ],
+                    "Removed Arguments": [
+                      1
+                    ],
+                    "Result": 0
+                  },
+                  {
+                    "Node Type": "ALIAS",
+                    "Result Type": "String",
+                    "Result Name": "c2",
+                    "Arguments": [
+                      2
+                    ],
+                    "Removed Arguments": [
+                      2
+                    ],
+                    "Result": 1
+                  }
+                ],
+                "Outputs": [
+                  {
+                    "Name": "vp_rowid",
+                    "Type": "UInt64"
+                  },
+                  {
+                    "Name": "c0",
+                    "Type": "Nullable(Int64)"
+                  },
+                  {
+                    "Name": "c1",
+                    "Type": "Nullable(Int64)"
+                  },
+                  {
+                    "Name": "c2",
+                    "Type": "String"
+                  }
+                ],
+                "Positions": [
+                  3,
+                  4,
+                  0,
+                  1
+                ]
+              },
+              "Plans": [
+                {
+                  "Node Type": "ReadFromMergeTree",
+                  "Node Id": "ReadFromMergeTree_8",
+                  "Description": "ecst_probe_ch_20261108.src",
+                  "Read Type": "Default",
+                  "Parts": 1,
+                  "Granules": 64,
+                  "Indexes": [
+                    {
+                      "Type": "PrimaryKey",
+                      "Condition": "true",
+                      "Initial Parts": 1,
+                      "Selected Parts": 1,
+                      "Initial Granules": 64,
+                      "Selected Granules": 64
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]
