@@ -35,6 +35,12 @@ import sqlancer.ExecutionTimer;
 import sqlancer.Main;
 import sqlancer.Randomly;
 import sqlancer.common.oracle.TestOracle;
+import sqlancer.common.oracle.ecst.EcstContextDimension;
+import sqlancer.common.oracle.ecst.EcstFeature;
+import sqlancer.common.oracle.ecst.EcstOperation;
+import sqlancer.common.oracle.ecst.EcstTarget;
+import sqlancer.common.oracle.ecst.EcstTransformationConfig;
+
 import sqlancer.common.query.ExpectedErrors;
 import sqlancer.common.query.SQLQueryAdapter;
 import sqlancer.common.query.SQLancerResultSet;
@@ -369,13 +375,16 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
     }
 
     private static final class QueryResultMultiset {
+        private final List<String> outputSchema;
         private final Map<String, Integer> rows;
         private final Map<String, List<ApproximateKind>> approximateColumns;
         private final List<String> orderedRows;
         private final List<List<ApproximateKind>> orderedApproximateColumns;
 
-        private QueryResultMultiset(Map<String, Integer> rows, Map<String, List<ApproximateKind>> approximateColumns,
-                List<String> orderedRows, List<List<ApproximateKind>> orderedApproximateColumns) {
+        private QueryResultMultiset(List<String> outputSchema, Map<String, Integer> rows,
+                Map<String, List<ApproximateKind>> approximateColumns, List<String> orderedRows,
+                List<List<ApproximateKind>> orderedApproximateColumns) {
+            this.outputSchema = List.copyOf(outputSchema);
             this.rows = rows;
             this.approximateColumns = approximateColumns;
             this.orderedRows = orderedRows;
@@ -429,8 +438,14 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
     }
 
     public CockroachDBVerticalPartitioningOracle(CockroachDBGlobalState state) {
+        this(state, true);
+    }
+
+    CockroachDBVerticalPartitioningOracle(CockroachDBGlobalState state, boolean registerStatistics) {
         this.state = state;
-        registerVpStatsShutdownHook();
+        if (registerStatistics) {
+            registerVpStatsShutdownHook();
+        }
         CockroachDBErrors.addExpressionErrors(errors);
         CockroachDBErrors.addTransactionErrors(errors);
         errors.add("unsupported comparison operator");
@@ -5200,6 +5215,9 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
     }
 
     private boolean resultMultisetsMatch(QueryResultMultiset left, QueryResultMultiset right) {
+        if (!left.outputSchema.equals(right.outputSchema)) {
+            return false;
+        }
         if (left.rows.equals(right.rows)) {
             return true;
         }
@@ -5333,6 +5351,11 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
     }
 
     private QueryResultMultiset getResultMultiset(String stage, String query, int transientAttempt) throws Exception {
+        return getResultMultiset(stage, query, transientAttempt, false);
+    }
+
+    private QueryResultMultiset getResultMultiset(String stage, String query, int transientAttempt, boolean ecstStrict)
+            throws Exception {
         if (state.getOptions().logEachSelect()) {
             state.getLogger().writeCurrent(query);
         }
@@ -5340,13 +5363,19 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
         Map<String, List<ApproximateKind>> approximateColumns = new LinkedHashMap<>();
         List<String> orderedRows = new ArrayList<>();
         List<List<ApproximateKind>> orderedApproximateColumns = new ArrayList<>();
+        List<String> outputSchema = new ArrayList<>();
         boolean completed = false;
         Main.nrQueries.addAndGet(1);
         try (Statement s = state.getConnection().createStatement();
                 SQLancerResultSet rs = new SQLancerResultSet(s.executeQuery(query))) {
             int columnCount = rs.getColumnCount();
+            if (ecstStrict) {
+                for (int i = 1; i <= columnCount; i++) {
+                    outputSchema.add(rs.getColumnLabel(i) + ":" + rs.getJdbcType(i) + ":" + rs.getType(i));
+                }
+            }
             while (rs.next()) {
-                String row = canonicalizeRow(rs, columnCount);
+                String row = ecstStrict ? canonicalizeEcstRow(rs, columnCount) : canonicalizeRow(rs, columnCount);
                 List<ApproximateKind> rowApproximateColumns = getApproximateColumns(rs, columnCount);
                 orderedRows.add(row);
                 orderedApproximateColumns.add(rowApproximateColumns);
@@ -5357,11 +5386,14 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
         } catch (SQLException e) {
             if (isTransientClusterAvailabilityError(e) && transientAttempt + 1 < TRANSIENT_CLUSTER_RETRIES) {
                 waitForTransientClusterRecovery(transientAttempt);
-                return getResultMultiset(stage, query, transientAttempt + 1);
+                return getResultMultiset(stage, query, transientAttempt + 1, ecstStrict);
             }
             if (isTransientClusterAvailabilityError(e)) {
                 recordSkippedError("cluster-transient-" + stage, query, getErrorText(e));
                 throw new IgnoreMeException();
+            }
+            if (ecstStrict && e.getSQLState() != null && e.getSQLState().startsWith("XX")) {
+                throw e;
             }
             if (isExpectedQueryError(e)) {
                 recordSkippedError(stage, query, getErrorText(e));
@@ -5381,7 +5413,7 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
                 Main.nrUnsuccessfulActions.addAndGet(1);
             }
         }
-        return new QueryResultMultiset(rows, approximateColumns, orderedRows, orderedApproximateColumns);
+        return new QueryResultMultiset(outputSchema, rows, approximateColumns, orderedRows, orderedApproximateColumns);
     }
 
     private List<ApproximateKind> getApproximateColumns(SQLancerResultSet rs, int columnCount) throws SQLException {
@@ -6108,4 +6140,922 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
     private String sanitizeIdentifier(String identifier) {
         return identifier.replaceAll("[^A-Za-z0-9_]", "_");
     }
+
+    private String canonicalizeEcstRow(SQLancerResultSet rs, int columns) throws SQLException {
+        StringBuilder out = new StringBuilder();
+        for (int i = 1; i <= columns; i++) {
+            String type = rs.getType(i);
+            boolean binary = type.equalsIgnoreCase("bytea") || type.equalsIgnoreCase("bytes");
+            String value;
+            if (binary) {
+                byte[] bytes = rs.getBytes(i);
+                value = bytes == null ? null : ecstHex(bytes);
+            } else {
+                value = rs.getString(i);
+            }
+            if (value == null) {
+                out.append("N:").append(type.length()).append(":").append(type).append(";");
+            } else {
+                String v = canonicalizeTypedValue(value, type);
+                out.append("S:").append(type.length()).append(":").append(type).append(";").append("S:")
+                        .append(v.length()).append(":").append(v).append(";");
+            }
+        }
+        return out.toString();
+    }
+
+    static String canonicalizeTypedValue(String value, String type) {
+        String upper = type == null ? "" : type.toUpperCase(Locale.ROOT);
+        if (value == null || !(upper.contains("INT") || upper.contains("DECIMAL") || upper.contains("NUMERIC"))) {
+            return value;
+        }
+        try {
+            return new BigDecimal(value).stripTrailingZeros().toPlainString();
+        } catch (NumberFormatException ignored) {
+            return value;
+        }
+    }
+
+    /** An immutable query and operation over a source snapshot, selected before any ECST target. */
+    public static final class EcstSeed {
+        final VpSchema schema;
+        final String originalQuery;
+        final String valueExpression;
+        final String predicate;
+        final List<String> dependencies;
+        final EcstTransformationConfig.ExpressionContext context;
+        final EcstOperation operation;
+        final boolean sourceIndexed;
+        final boolean retainedInput;
+        final long sourceRows;
+        private String preparedPartitionKey;
+
+        private EcstSeed(VpSchema schema, String expression, List<String> dependencies,
+                EcstTransformationConfig.ExpressionContext context, boolean indexed, boolean retainBoundary,
+                long sourceRows) {
+            this.schema = schema;
+            this.valueExpression = expression;
+            this.predicate = expression + " > 0";
+            this.dependencies = List.copyOf(dependencies);
+            this.context = context;
+            this.sourceIndexed = indexed;
+            this.retainedInput = retainBoundary;
+            this.sourceRows = sourceRows;
+            // Both seeds have a wrapper, so the native plan can distinguish merged and retained query blocks.
+            String relation = retainBoundary
+                    ? "(WITH ecst_input AS MATERIALIZED (SELECT * FROM " + ecstQuote(schema.sourceTable)
+                            + ") SELECT * FROM ecst_input) ecst_outer"
+                    : "(SELECT * FROM " + ecstQuote(schema.sourceTable) + ") ecst_outer";
+            this.originalQuery = ecstQuery(this, relation, context);
+            String target = context == EcstTransformationConfig.ExpressionContext.SELECT ? expression : predicate;
+            Map<String, String> lineage = new LinkedHashMap<>();
+            for (String dependency : dependencies) {
+                lineage.put(schema.sourceTable + "." + dependency, dependency);
+                lineage.put("ecst_l." + dependency, dependency);
+                lineage.put("ecst_r." + dependency, dependency);
+            }
+            this.operation = new EcstOperation("COCKROACHDB_ECST:" + schema.sourceTable, target,
+                    new java.util.LinkedHashSet<>(dependencies),
+                    new sqlancer.common.oracle.ecst.EcstExpressionShape(0, "UNKNOWN", java.util.Set.of(),
+                            new java.util.LinkedHashSet<>(dependencies)),
+                    lineage, context == EcstTransformationConfig.ExpressionContext.SELECT ? "PROJECTION_ITEM"
+                            : "SELECTION_PREDICATE");
+        }
+
+        public String getOriginalQuery() {
+            return originalQuery;
+        }
+
+        public EcstOperation getOperation() {
+            return operation;
+        }
+
+        public List<String> getDependencies() {
+            return dependencies;
+        }
+
+        public EcstTransformationConfig.ExpressionContext getExpressionContext() {
+            return context;
+        }
+
+        public String getSourceTable() {
+            return schema.sourceTable;
+        }
+
+        public long getSourceRowCount() {
+            return sourceRows;
+        }
+
+        boolean isIndexable() {
+            return ecstIndexable(schema.columns, dependencies);
+        }
+
+        public EcstFeature features() {
+            return new EcstFeature("CockroachDB", valueExpression.contains("CHAR_LENGTH") ? "STRING_LENGTH" : "NUMERIC",
+                    context.name(), dependencies.size() > 1 ? "MULTI_DEPENDENCY" : "SINGLE_DEPENDENCY",
+                    "RETAINED_INPUT=" + retainedInput, "SOURCE_INDEX=" + sourceIndexed,
+                    sourceRows == 0 ? "EMPTY" : sourceRows < 32 ? "SMALL" : "LARGE", "UNKNOWN");
+        }
+    }
+
+    /** Owns only transformed artifacts; the source and the original SQL remain unchanged on retries. */
+    public static final class EcstCase {
+        final EcstSeed seed;
+        final VpSchema schema;
+        final EcstTransformationConfig config;
+        final String transformedQuery;
+        boolean prepared;
+        final List<String> deferredSetup;
+
+        private EcstCase(EcstSeed seed, VpSchema schema, EcstTransformationConfig config, String transformed,
+                List<String> setup) {
+            this.seed = seed;
+            this.schema = schema;
+            this.config = config;
+            this.transformedQuery = transformed;
+            this.deferredSetup = List.copyOf(setup);
+        }
+
+        public String getOriginalQuery() {
+            return seed.originalQuery;
+        }
+
+        public String getTransformedQuery() {
+            return transformedQuery;
+        }
+
+        public EcstOperation getOperation() {
+            return seed.operation;
+        }
+
+        public EcstTransformationConfig getAppliedConfig() {
+            return config;
+        }
+
+        public String getLeftTable() {
+            return schema.leftTable;
+        }
+
+        public String getRightTable() {
+            return schema.rightTable;
+        }
+
+        public java.util.Set<String> getAccessRelations() {
+            if (config.getRepresentation() == EcstTransformationConfig.Representation.VIEW) {
+                return java.util.Set.of(seed.schema.sourceTable);
+            }
+            java.util.Set<String> result = new java.util.LinkedHashSet<>();
+            if (seed.dependencies.stream().allMatch(d -> schema.leftColumns.stream().anyMatch(c -> c.name.equals(d)))) {
+                result.add("ecst_l");
+                result.add(schema.leftTable);
+            }
+            if (seed.dependencies.stream()
+                    .allMatch(d -> schema.rightColumns.stream().anyMatch(c -> c.name.equals(d)))) {
+                result.add("ecst_r");
+                result.add(schema.rightTable);
+            }
+            if (result.isEmpty()) {
+                result.add(schema.leftTable);
+                result.add(schema.rightTable);
+            }
+            return result;
+        }
+    }
+
+    public static final class EcstSemanticPreconditionResult {
+        public enum Status {
+            STATIC_LEGAL, DATA_VALID, INVALID, UNKNOWN
+        }
+
+        private final Status status;
+        private final List<String> violations;
+
+        private EcstSemanticPreconditionResult(Status status, List<String> violations) {
+            this.status = status;
+            this.violations = List.copyOf(violations);
+        }
+
+        public Status getStatus() {
+            return status;
+        }
+
+        public List<String> getViolations() {
+            return violations;
+        }
+
+        public boolean isValid() {
+            return status == Status.STATIC_LEGAL || status == Status.DATA_VALID;
+        }
+
+        @Override
+        public String toString() {
+            return status + ":" + violations;
+        }
+    }
+
+    public static final class EcstComparison {
+        private final boolean comparable;
+        private final boolean equal;
+        private final String reason;
+        private final long originalRows;
+        private final long transformedRows;
+
+        private EcstComparison(boolean comparable, boolean equal, String reason, long original, long transformed) {
+            this.comparable = comparable;
+            this.equal = equal;
+            this.reason = reason;
+            this.originalRows = original;
+            this.transformedRows = transformed;
+        }
+
+        public boolean isComparable() {
+            return comparable;
+        }
+
+        public boolean isEqual() {
+            return equal;
+        }
+
+        public String getReason() {
+            return reason;
+        }
+
+        public long getOriginalResultCount() {
+            return originalRows;
+        }
+
+        public long getTransformedResultCount() {
+            return transformedRows;
+        }
+    }
+
+    public void refreshEcstBaseRelations() throws Exception {
+        state.updateSchema();
+        List<CockroachDBTable> baseTables = state.getSchema().getDatabaseTables().stream()
+                .filter(t -> !t.isView() && !t.getName().startsWith("vp_")).collect(Collectors.toList());
+        if (baseTables.size() < 8) {
+            CockroachDBProvider.ensureVerticalPartitioningBaseTables(state, baseTables.size() + 1);
+        } else {
+            CockroachDBProvider.replaceVerticalPartitioningTableAfterSuccessfulCheck(state,
+                    Randomly.fromList(baseTables).getName());
+        }
+    }
+
+    public EcstSeed createEcstSeed() throws Exception {
+        CockroachDBProvider.ensureVerticalPartitioningBaseTables(state, 2);
+        state.updateSchema();
+        List<CockroachDBTable> eligible = state.getSchema().getDatabaseTables().stream()
+                .filter(table -> !table.isView() && !table.getName().startsWith("vp_"))
+                .filter(table -> table.getColumns().stream().allMatch(c -> ecstReplayType(c.getType())))
+                .filter(table -> table.getColumns().stream().anyMatch(c -> ecstDependency(c.getType())))
+                .collect(Collectors.toList());
+        if (eligible.isEmpty()) {
+            throw new IgnoreMeException();
+        }
+        BaseTableInfo base = createBaseTableInfo(Randomly.fromList(eligible));
+        if (base.columns.stream().anyMatch(c -> c.computedExpression != null)) {
+            throw new IgnoreMeException();
+        }
+        List<VpColumn> dependencies = base.columns.stream().filter(c -> ecstDependency(c.type))
+                .collect(Collectors.toList());
+        List<VpColumn> chosen = new ArrayList<>();
+        chosen.add(Randomly.fromList(dependencies));
+        if (dependencies.size() > 1 && Randomly.getBoolean()) {
+            List<VpColumn> remaining = dependencies.stream().filter(c -> c != chosen.get(0))
+                    .collect(Collectors.toList());
+            chosen.add(Randomly.fromList(remaining));
+        }
+        String expression;
+        if (chosen.size() == 1 && ecstNumeric(chosen.get(0).type) && Randomly.getBoolean()) {
+            expression = quote(chosen.get(0).name);
+        } else {
+            expression = chosen.stream()
+                    .map(c -> ecstNumeric(c.type) ? "COALESCE(CAST(" + quote(c.name) + " AS DECIMAL), 0)"
+                            : "COALESCE(CHAR_LENGTH(" + quote(c.name) + "), 0)")
+                    .collect(Collectors.joining(" + "));
+        }
+        if (Randomly.getBooleanWithSmallProbability()) {
+            expression = "CASE WHEN " + quote(chosen.get(0).name) + " IS NULL THEN 0 ELSE (" + expression + ") END";
+        }
+        return createEcstSeed(base, expression, chosen.stream().map(c -> c.name).collect(Collectors.toList()),
+                Randomly.fromOptions(EcstTransformationConfig.ExpressionContext.WHERE,
+                        EcstTransformationConfig.ExpressionContext.SELECT,
+                        EcstTransformationConfig.ExpressionContext.HAVING),
+                Randomly.getBoolean(), Randomly.getBoolean());
+    }
+
+    /**
+     * Deterministic seam also used by integration tests; normal generation selects these inputs randomly.
+     *
+     * @param baseTable
+     *            source data table
+     * @param expression
+     *            deterministic value expression over the dependencies
+     * @param dependencies
+     *            distinct source column names
+     * @param context
+     *            original logical expression context
+     * @param indexed
+     *            whether to prepare a source index when its types allow one
+     * @param retainBoundary
+     *            whether the seed wrapper retains a query-block boundary
+     *
+     * @return a seed whose source snapshot and original operation remain fixed
+     */
+    EcstSeed createEcstSeed(String baseTable, String expression, List<String> dependencies,
+            EcstTransformationConfig.ExpressionContext context, boolean indexed, boolean retainBoundary)
+            throws Exception {
+        state.updateSchema();
+        CockroachDBTable table = state.getSchema().getDatabaseTables().stream()
+                .filter(t -> t.getName().equals(baseTable)).findFirst().orElseThrow(IllegalArgumentException::new);
+        return createEcstSeed(createBaseTableInfo(table), expression, dependencies, context, indexed, retainBoundary);
+    }
+
+    private EcstSeed createEcstSeed(BaseTableInfo base, String expression, List<String> dependencies,
+            EcstTransformationConfig.ExpressionContext context, boolean indexed, boolean retainBoundary)
+            throws Exception {
+        if (base.columns.stream().anyMatch(c -> c.computedExpression != null || !ecstReplayType(c.type))) {
+            throw new IgnoreMeException();
+        }
+        if (dependencies.isEmpty()
+                || !base.columns.stream().map(c -> c.name).collect(Collectors.toList()).containsAll(dependencies)) {
+            throw new IllegalArgumentException("ECST dependencies must be source columns");
+        }
+        ecstExecute("SET TIME ZONE 'UTC'");
+        ecstExecute("SET distsql = 'always'");
+        ecstExecute("SET bytea_output = 'hex'");
+        ecstExecute("SET tracing = off");
+        String prefix = "vp_ecst_crdb_" + ORACLE_RUN_ID.incrementAndGet() + "_";
+        VpSchema schema = new VpSchema(prefix, base.tableName, prefix + "source", prefix + "l", prefix + "r",
+                prefix + "v", prefix + "joined", base.columns, List.of(), List.of(), List.of(), base.shape,
+                SplitStrategy.EVEN_SPLIT, false, base.stableOrderStrategy, base.rowCount, base.engine,
+                OptimizerProfile.DEFAULT, KeyMode.VP_ROWID, List.of());
+        try {
+            for (VpColumn column : schema.columns) {
+                schema.columnCollationClauses.put(column.name, "");
+            }
+            ecstExecute(createEcstTableSQL(schema.sourceTable, ecstColumnDefs(schema, schema.columns)));
+            ecstExecute(populateSourceSQL(schema, base.stableOrderStrategy));
+            if (indexed && ecstIndexable(schema.columns, dependencies)) {
+                ecstExecute("CREATE INDEX ecst_source_idx ON " + quote(schema.sourceTable) + "("
+                        + dependencies.stream().map(this::quote).collect(Collectors.joining(", ")) + ")");
+            } else {
+                indexed = false;
+            }
+            long rows = ecstRowCount(schema.sourceTable);
+            ecstPrepareRanges(schema.sourceTable, rows);
+            return new EcstSeed(schema, expression, dependencies, context, indexed, retainBoundary, rows);
+        } catch (Exception | AssertionError failure) {
+            try {
+                cleanupEcstSchema(schema);
+            } catch (Exception cleanup) {
+                failure.addSuppressed(cleanup);
+            }
+            throw failure;
+        }
+    }
+
+    public EcstCase applyEcstTransformation(EcstSeed seed, EcstTransformationConfig config, EcstTarget target)
+            throws Exception {
+        if (!CockroachDBEcstCapabilities.isLegal(seed, config)) {
+            throw new IllegalArgumentException("unsupported ECST configuration " + config);
+        }
+        // Source data, indexes and SQL are immutable. Only the derived representation is reconfigured.
+        boolean vertical = config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED;
+        boolean indexed = target != null && target.getDimension() == EcstContextDimension.ACCESS_PATH
+                && !"TABLE_SCAN".equals(target.getTo());
+        String partitionKey = config.getPartitionLayout().name() + ":" + indexed;
+        boolean reusePartitions = vertical && partitionKey.equals(seed.preparedPartitionKey);
+        ecstExecute("DROP VIEW IF EXISTS " + quote(seed.schema.viewName));
+        if (!reusePartitions) {
+            seed.preparedPartitionKey = null;
+            ecstExecute("DROP TABLE IF EXISTS " + quote(seed.schema.rightTable));
+            ecstExecute("DROP TABLE IF EXISTS " + quote(seed.schema.leftTable));
+        }
+        List<VpColumn> left = new ArrayList<>();
+        List<VpColumn> right = new ArrayList<>();
+        for (VpColumn column : seed.schema.columns) {
+            boolean rightDependency = config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE
+                    && seed.dependencies.indexOf(column.name) > 0;
+            if (rightDependency || !seed.dependencies.contains(column.name) && left.size() > right.size()) {
+                right.add(column);
+            } else {
+                left.add(column);
+            }
+        }
+        VpSchema schema = new VpSchema(seed.schema.prefix, seed.schema.baseTable, seed.schema.sourceTable,
+                seed.schema.leftTable, seed.schema.rightTable, seed.schema.viewName, seed.schema.tempTable,
+                seed.schema.columns, left, right, List.of(), seed.schema.baseShape, SplitStrategy.EVEN_SPLIT, false,
+                seed.schema.stableOrderStrategy, seed.sourceRows, seed.schema.baseEngine, OptimizerProfile.DEFAULT,
+                KeyMode.VP_ROWID, List.of());
+        schema.columnCollationClauses.putAll(seed.schema.columnCollationClauses);
+        List<String> setup = new ArrayList<>();
+        if (vertical && !reusePartitions) {
+            // The ECST boundary must distinguish rejected setup from successfully created objects.
+            ecstExecute(createEcstTableSQL(schema.leftTable, ecstColumnDefs(schema, left)));
+            ecstExecute(createEcstTableSQL(schema.rightTable, ecstColumnDefs(schema, right)));
+            ecstExecute(populatePartitionSQL(schema.leftTable, left, schema.sourceTable));
+            ecstExecute(populatePartitionSQL(schema.rightTable, right, schema.sourceTable));
+            if (indexed) {
+                for (boolean leftSide : List.of(true, false)) {
+                    List<VpColumn> columns = leftSide ? left : right;
+                    if (columns.stream().map(c -> c.name).collect(Collectors.toList()).containsAll(seed.dependencies)
+                            && ecstIndexable(columns, seed.dependencies)) {
+                        String table = leftSide ? schema.leftTable : schema.rightTable;
+                        ecstExecute("CREATE INDEX ecst_access_idx ON " + quote(table) + "("
+                                + seed.dependencies.stream().map(this::quote).collect(Collectors.joining(", ")) + ")");
+                    }
+                }
+            }
+            ecstPrepareRanges(schema.leftTable, seed.sourceRows);
+            ecstPrepareRanges(schema.rightTable, seed.sourceRows);
+            seed.preparedPartitionKey = partitionKey;
+        } else if (!vertical && config.getReconstruction() != EcstTransformationConfig.Reconstruction.VIEW) {
+            setup.add("CREATE VIEW " + quote(schema.viewName) + " AS SELECT * FROM " + quote(schema.sourceTable));
+        }
+        String innerExpression = seed.valueExpression;
+        String innerPredicate = seed.predicate;
+        if (vertical) {
+            for (VpColumn column : schema.columns) {
+                String owner = containsColumn(left, column.name) ? "ecst_l." : "ecst_r.";
+                innerExpression = innerExpression.replace(quote(column.name), owner + quote(column.name));
+                innerPredicate = innerPredicate.replace(quote(column.name), owner + quote(column.name));
+            }
+        }
+        String projection = vertical ? joinProjection(schema, "ecst_l", "ecst_r", false) : "*";
+        if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_SELECT) {
+            projection += ", " + innerExpression + " AS ecst_value";
+        }
+        String from = vertical
+                ? quote(schema.leftTable) + " ecst_l JOIN " + quote(schema.rightTable) + " ecst_r ON ecst_l."
+                        + quote(ROW_ID) + "=ecst_r." + quote(ROW_ID)
+                : quote(config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW ? schema.sourceTable
+                        : schema.viewName);
+        if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.JOIN_ON) {
+            from += " AND (" + innerPredicate + ")";
+        }
+        String innerQuery = "SELECT " + projection + " FROM " + from;
+        if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_WHERE) {
+            innerQuery += " WHERE " + innerPredicate;
+        }
+        String relation;
+        switch (config.getReconstruction()) {
+        case JOIN:
+            relation = "(" + innerQuery + ") ecst_rel";
+            break;
+        case DERIVED_TABLE:
+            relation = "(WITH ecst_derived AS MATERIALIZED (" + innerQuery + ") SELECT * FROM ecst_derived) ecst_rel";
+            break;
+        case CTE:
+            relation = "(WITH ecst_cte AS MATERIALIZED (" + innerQuery + ") SELECT * FROM ecst_cte) ecst_rel";
+            break;
+        case VIEW:
+            setup.add("CREATE VIEW " + quote(schema.viewName) + " AS WITH ecst_view AS MATERIALIZED (" + innerQuery
+                    + ") SELECT * FROM ecst_view");
+            relation = quote(schema.viewName) + " ecst_rel";
+            break;
+        default:
+            throw new IllegalArgumentException("unsupported reconstruction");
+        }
+        return new EcstCase(seed, schema, config, ecstQuery(seed, relation, config.getExpressionContext()), setup);
+    }
+
+    private static String ecstQuery(EcstSeed seed, String relation,
+            EcstTransformationConfig.ExpressionContext embedded) {
+        String rowId = ecstQuote(ROW_ID);
+        switch (seed.context) {
+        case SELECT:
+            return "SELECT " + rowId + ", "
+                    + (embedded == EcstTransformationConfig.ExpressionContext.INNER_SELECT ? "ecst_value"
+                            : seed.valueExpression)
+                    + " AS ecst_value, " + ecstQuote(seed.dependencies.get(0)) + " AS ecst_input FROM " + relation;
+        case HAVING:
+            return "SELECT MIN(" + rowId + ") AS " + rowId + ", " + seed.valueExpression
+                    + " AS ecst_value, COUNT(*) AS ecst_count FROM " + relation + " GROUP BY "
+                    + (seed.isIndexable() ? "" : rowId + ", ") + seed.dependencies.stream()
+                            .map(CockroachDBVerticalPartitioningOracle::ecstQuote).collect(Collectors.joining(", "))
+                    + " HAVING " + seed.predicate;
+        case WHERE:
+            return "SELECT " + rowId + " FROM " + relation
+                    + (embedded == EcstTransformationConfig.ExpressionContext.INNER_WHERE
+                            || embedded == EcstTransformationConfig.ExpressionContext.JOIN_ON ? ""
+                                    : " WHERE " + seed.predicate);
+        default:
+            throw new IllegalArgumentException("unsupported seed context " + seed.context);
+        }
+    }
+
+    public void prepareEcstCase(EcstCase testCase) throws SQLException {
+        if (!testCase.prepared) {
+            for (String sql : testCase.deferredSetup) {
+                ecstExecute(sql);
+            }
+            testCase.prepared = true;
+        }
+    }
+
+    public EcstSemanticPreconditionResult checkSemanticPreconditions(EcstCase testCase) {
+        List<String> violations = new ArrayList<>();
+        if (!CockroachDBEcstCapabilities.isLegal(testCase.seed, testCase.config)) {
+            violations.add("configuration is not legal for this seed");
+        }
+        try {
+            Map<String, String> source = ecstColumnMetadata(testCase.schema.sourceTable);
+            if (testCase.config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED) {
+                for (String table : List.of(testCase.schema.leftTable, testCase.schema.rightTable)) {
+                    Map<String, String> partition = ecstColumnMetadata(table);
+                    List<String> expected = new ArrayList<>();
+                    expected.add(ROW_ID);
+                    (table.equals(testCase.schema.leftTable) ? testCase.schema.leftColumns
+                            : testCase.schema.rightColumns).forEach(column -> expected.add(column.name));
+                    if (!partition.keySet().equals(new java.util.LinkedHashSet<>(expected))) {
+                        violations.add("partition column set changed: " + table);
+                    }
+                    for (String column : expected) {
+                        if (!Objects.equals(partition.get(column), source.get(column))) {
+                            violations.add("column type or collation changed: " + table + "." + column);
+                        }
+                    }
+                    if (!ecstHasRowIdentityKey(table)) {
+                        violations.add("row identity primary key missing: " + table);
+                    }
+                }
+            } else {
+                Map<String, String> view = ecstColumnMetadata(testCase.schema.viewName);
+                source.forEach((column, metadata) -> {
+                    if (!metadata.equals(view.get(column))) {
+                        violations.add("view column type or collation changed: " + column);
+                    }
+                });
+            }
+            if (!violations.isEmpty()) {
+                testCase.seed.preparedPartitionKey = null;
+            }
+            return new EcstSemanticPreconditionResult(
+                    violations.isEmpty() ? EcstSemanticPreconditionResult.Status.STATIC_LEGAL
+                            : EcstSemanticPreconditionResult.Status.INVALID,
+                    violations);
+        } catch (SQLException failure) {
+            testCase.seed.preparedPartitionKey = null;
+            return new EcstSemanticPreconditionResult(EcstSemanticPreconditionResult.Status.UNKNOWN,
+                    List.of(failure.getMessage()));
+        }
+    }
+
+    public EcstSemanticPreconditionResult validateDataPreconditions(EcstCase testCase) {
+        List<String> violations = new ArrayList<>();
+        try {
+            if (testCase.config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED) {
+                VpSchema schema = testCase.schema;
+                for (String table : List.of(schema.leftTable, schema.rightTable)) {
+                    if (ecstRowCount(table) != ecstRowCount(schema.sourceTable)) {
+                        violations.add("row count changed: " + table);
+                    }
+                    if (ecstScalar("SELECT COUNT(*) FROM " + quote(schema.sourceTable) + " s LEFT JOIN " + quote(table)
+                            + " p ON s." + quote(ROW_ID) + "=p." + quote(ROW_ID) + " WHERE p." + quote(ROW_ID)
+                            + " IS NULL") != 0) {
+                        violations.add("source row ids missing: " + table);
+                    }
+                    for (VpColumn column : table.equals(schema.leftTable) ? schema.leftColumns : schema.rightColumns) {
+                        String sourceValue = "s." + quote(column.name);
+                        String partitionValue = "p." + quote(column.name);
+                        if (column.type.getPrimitiveDataType() == CockroachDBDataType.STRING) {
+                            sourceValue += "::BYTES";
+                            partitionValue += "::BYTES";
+                        }
+                        if (ecstScalar("SELECT COUNT(*) FROM " + quote(schema.sourceTable) + " s JOIN " + quote(table)
+                                + " p ON s." + quote(ROW_ID) + "=p." + quote(ROW_ID) + " WHERE " + sourceValue
+                                + " IS DISTINCT FROM " + partitionValue) != 0) {
+                            violations.add("column values changed: " + table + "." + column.name);
+                        }
+                    }
+                }
+            } else {
+                VpSchema schema = testCase.schema;
+                long sourceCount = ecstRowCount(schema.sourceTable);
+                long viewCount = ecstRowCount(schema.viewName);
+                boolean filteredView = testCase.config
+                        .getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW
+                        && testCase.config
+                                .getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_WHERE;
+                if ((!filteredView && sourceCount != viewCount) || viewCount != ecstScalar(
+                        "SELECT COUNT(DISTINCT " + quote(ROW_ID) + ") FROM " + quote(schema.viewName))) {
+                    violations.add("view row identity or multiplicity changed");
+                }
+                // A filtered view is allowed to remove rows. Its predicate semantics belong to the result oracle.
+                if (!filteredView && ecstScalar("SELECT COUNT(*) FROM " + quote(schema.sourceTable) + " s LEFT JOIN "
+                        + quote(schema.viewName) + " v ON s." + quote(ROW_ID) + "=v." + quote(ROW_ID) + " WHERE v."
+                        + quote(ROW_ID) + " IS NULL") != 0) {
+                    violations.add("view lost source row ids");
+                }
+                if (ecstScalar("SELECT COUNT(*) FROM " + quote(schema.viewName) + " v LEFT JOIN "
+                        + quote(schema.sourceTable) + " s ON s." + quote(ROW_ID) + "=v." + quote(ROW_ID) + " WHERE s."
+                        + quote(ROW_ID) + " IS NULL") != 0) {
+                    violations.add("view has row ids absent from source");
+                }
+                for (VpColumn column : schema.columns) {
+                    String sourceValue = "s." + quote(column.name);
+                    String viewValue = "v." + quote(column.name);
+                    if (column.type.getPrimitiveDataType() == CockroachDBDataType.STRING) {
+                        sourceValue += "::BYTES";
+                        viewValue += "::BYTES";
+                    }
+                    if (ecstScalar("SELECT COUNT(*) FROM " + quote(schema.sourceTable) + " s JOIN "
+                            + quote(schema.viewName) + " v ON s." + quote(ROW_ID) + "=v." + quote(ROW_ID) + " WHERE "
+                            + sourceValue + " IS DISTINCT FROM " + viewValue) != 0) {
+                        violations.add("view column values changed: " + column.name);
+                    }
+                }
+            }
+            if (!violations.isEmpty()) {
+                testCase.seed.preparedPartitionKey = null;
+            }
+            return new EcstSemanticPreconditionResult(violations.isEmpty()
+                    ? EcstSemanticPreconditionResult.Status.DATA_VALID : EcstSemanticPreconditionResult.Status.INVALID,
+                    violations);
+        } catch (SQLException failure) {
+            testCase.seed.preparedPartitionKey = null;
+            return new EcstSemanticPreconditionResult(EcstSemanticPreconditionResult.Status.UNKNOWN,
+                    List.of(failure.getMessage()));
+        }
+    }
+
+    public EcstComparison compareEcstCase(EcstCase testCase) throws Exception {
+        try {
+            prepareEcstCase(testCase);
+            QueryResultMultiset original = getResultMultiset("ecst-original", testCase.getOriginalQuery(), 0, true);
+            QueryResultMultiset transformed = getResultMultiset("ecst-transformed", testCase.getTransformedQuery(), 0,
+                    true);
+            return new EcstComparison(true, resultMultisetsMatch(original, transformed),
+                    "original=" + sample(original.rows) + "; transformed=" + sample(transformed.rows)
+                            + "; originalSchema=" + original.outputSchema + "; transformedSchema="
+                            + transformed.outputSchema,
+                    original.rows.values().stream().mapToLong(Integer::longValue).sum(),
+                    transformed.rows.values().stream().mapToLong(Integer::longValue).sum());
+        } catch (IgnoreMeException ignored) {
+            return new EcstComparison(false, false, "expected query error", -1, -1);
+        }
+    }
+
+    public boolean validateBugCandidate(EcstCase testCase) throws Exception {
+        EcstComparison repeated = compareEcstCase(testCase);
+        return repeated.isComparable() && !repeated.isEqual();
+    }
+
+    /** Captures only the final layout, literal snapshot and reproducible session/range setup. */
+    public List<String> getSourceDataReplay(EcstCase testCase) throws SQLException {
+        List<String> replay = new ArrayList<>();
+        for (String variable : CockroachDBEcstCluster.SESSION_VARIABLES) {
+            replay.add(CockroachDBEcstCluster.sessionSetStatement(variable, ecstString("SHOW " + variable)));
+        }
+        VpSchema schema = testCase.schema;
+        replay.add(ecstReplayDDL(getCreateTable(schema.sourceTable)));
+        List<String> names = new ArrayList<>();
+        names.add(ROW_ID);
+        schema.columns.forEach(c -> names.add(c.name));
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet rows = statement
+                        .executeQuery("SELECT " + names.stream().map(this::quote).collect(Collectors.joining(", "))
+                                + " FROM " + quote(schema.sourceTable) + " ORDER BY " + quote(ROW_ID))) {
+            while (rows.next()) {
+                List<String> values = new ArrayList<>();
+                for (int i = 1; i <= names.size(); i++) {
+                    String value = rows.getString(i);
+                    CockroachDBCompositeDataType type = i == 1 ? CockroachDBCompositeDataType.getInt(8)
+                            : schema.columns.get(i - 2).type;
+                    if (value == null) {
+                        values.add("NULL");
+                    } else if (type.getPrimitiveDataType() == CockroachDBDataType.BYTES) {
+                        values.add(ecstLiteral(rows.getBytes(i)));
+                    } else {
+                        String sqlType = type.getPrimitiveDataType() == CockroachDBDataType.SERIAL
+                                ? "INT" + type.getSize() : toSQLType(type);
+                        // Text plus an explicit native type also preserves NUMERIC NaN, arrays and temporal precision.
+                        values.add(ecstLiteral(value) + "::" + sqlType);
+                    }
+                }
+                replay.add("INSERT INTO " + quote(schema.sourceTable) + " ("
+                        + names.stream().map(this::quote).collect(Collectors.joining(", ")) + ") VALUES ("
+                        + String.join(", ", values) + ")");
+            }
+        }
+        replay.addAll(ecstRangeStatements(schema.sourceTable, testCase.seed.sourceRows));
+        if (testCase.config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED) {
+            replay.add(ecstReplayDDL(getCreateTable(schema.leftTable)));
+            replay.add(ecstReplayDDL(getCreateTable(schema.rightTable)));
+            replay.add(populatePartitionSQL(schema.leftTable, schema.leftColumns, schema.sourceTable));
+            replay.add(populatePartitionSQL(schema.rightTable, schema.rightColumns, schema.sourceTable));
+            replay.addAll(ecstRangeStatements(schema.leftTable, testCase.seed.sourceRows));
+            replay.addAll(ecstRangeStatements(schema.rightTable, testCase.seed.sourceRows));
+        }
+        if (testCase.config.getRepresentation() == EcstTransformationConfig.Representation.VIEW
+                || testCase.config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW) {
+            try (Statement statement = state.getConnection().createStatement();
+                    ResultSet rows = statement.executeQuery("SHOW CREATE VIEW " + quote(schema.viewName))) {
+                if (!rows.next()) {
+                    throw new SQLException("missing ECST view DDL");
+                }
+                replay.add(ecstReplayDDL(rows.getString(2)));
+            }
+        }
+        return replay;
+    }
+
+    private String ecstReplayDDL(String sql) {
+        // Catalog-generated references may qualify objects with the source database. Never rewrite string literals.
+        String prefix = state.getDatabaseName();
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < sql.length();) {
+            if (sql.charAt(i) == '\'') {
+                int start = i++;
+                while (i < sql.length()) {
+                    if (sql.charAt(i++) == '\'') {
+                        if (i < sql.length() && sql.charAt(i) == '\'') {
+                            i++;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                out.append(sql, start, i);
+            } else if (sql.startsWith(quote(prefix) + ".", i)) {
+                i += quote(prefix).length() + 1;
+            } else if (sql.startsWith(prefix + ".", i)
+                    && (i == 0 || !Character.isJavaIdentifierPart(sql.charAt(i - 1)))) {
+                i += prefix.length() + 1;
+            } else {
+                out.append(sql.charAt(i++));
+            }
+        }
+        return out.toString();
+    }
+
+    public void cleanupEcstSeed(EcstSeed seed) throws Exception {
+        if (seed != null) {
+            seed.preparedPartitionKey = null;
+            cleanupEcstSchema(seed.schema);
+        }
+    }
+
+    private void cleanupEcstSchema(VpSchema schema) throws SQLException {
+        ecstExecute("DROP VIEW IF EXISTS " + quote(schema.viewName));
+        ecstExecute("DROP TABLE IF EXISTS " + quote(schema.rightTable));
+        ecstExecute("DROP TABLE IF EXISTS " + quote(schema.leftTable));
+        ecstExecute("DROP TABLE IF EXISTS " + quote(schema.sourceTable));
+    }
+
+    private boolean ecstHasRowIdentityKey(String table) throws SQLException {
+        String query = "SELECT COUNT(*), MIN(k.column_name) FROM information_schema.table_constraints t JOIN information_schema.key_column_usage k ON t.constraint_catalog=k.constraint_catalog AND t.constraint_schema=k.constraint_schema AND t.constraint_name=k.constraint_name AND t.table_name=k.table_name WHERE t.table_catalog=current_database() AND t.table_schema=current_schema() AND t.table_name="
+                + ecstLiteral(table) + " AND t.constraint_type='PRIMARY KEY'";
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet rows = statement.executeQuery(query)) {
+            return rows.next() && rows.getLong(1) == 1 && ROW_ID.equals(rows.getString(2));
+        }
+    }
+
+    private Map<String, String> ecstColumnMetadata(String table) throws SQLException {
+        Map<String, String> result = new LinkedHashMap<>();
+        String query = "SELECT column_name,udt_name,character_maximum_length,numeric_precision,numeric_scale,collation_name FROM information_schema.columns WHERE table_catalog=current_database() AND table_schema=current_schema() AND table_name="
+                + ecstLiteral(table) + " ORDER BY ordinal_position";
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet rows = statement.executeQuery(query)) {
+            while (rows.next()) {
+                List<String> metadata = new ArrayList<>();
+                for (int i = 2; i <= 6; i++) {
+                    metadata.add(rows.getString(i));
+                }
+                result.put(rows.getString(1), metadata.toString());
+            }
+        }
+        return result;
+    }
+
+    private long ecstScalar(String query) throws SQLException {
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet rows = statement.executeQuery(query)) {
+            if (!rows.next()) {
+                throw new SQLException("scalar query returned no row: " + query);
+            }
+            return rows.getLong(1);
+        }
+    }
+
+    private void ecstExecute(String sql) throws SQLException {
+        state.getState().logStatement(sql);
+        if (state.getOptions().logEachSelect()) { state.getLogger().writeCurrent(sql); }
+        try {
+            CockroachDBProvider.acquireVerticalPartitioningSchemaChangePermit(state, sql);
+        } catch (SQLException failure) { throw failure; }
+        catch (Exception unavailable) { throw new SQLException("ECST schema backpressure unavailable", "57014", unavailable); }
+        try (Statement statement = state.getConnection().createStatement()) { statement.execute(sql); }
+        finally { CockroachDBProvider.releaseVerticalPartitioningSchemaChangePermit(sql); }
+    }
+
+    private static boolean ecstIndexable(List<VpColumn> columns, List<String> dependencies) {
+        return columns.stream().filter(c -> dependencies.contains(c.name)).allMatch(c -> ecstNumeric(c.type));
+    }
+
+    private static String ecstQuote(String identifier) {
+        return "\"" + identifier.replace("\"", "\"\"") + "\"";
+    }
+
+    static String ecstLiteral(Object value) {
+        if (value == null) {
+            return "NULL";
+        }
+        if (value instanceof Boolean) {
+            return (Boolean) value ? "TRUE" : "FALSE";
+        }
+        if (value instanceof BigDecimal) {
+            return ((BigDecimal) value).toPlainString();
+        }
+        if (value instanceof Double && !Double.isFinite((Double) value)
+                || value instanceof Float && !Float.isFinite((Float) value)) {
+            return "'" + value + "'::FLOAT8";
+        }
+        if (value instanceof Number) {
+            return value.toString();
+        }
+        if (value instanceof byte[]) {
+            return "decode('" + ecstHex((byte[]) value) + "','hex')";
+        }
+        return "E'" + value.toString().replace("\\", "\\\\").replace("'", "''") + "'";
+    }
+
+    private static String ecstHex(byte[] bytes) {
+        StringBuilder hex = new StringBuilder();
+        for (byte b : bytes) {
+            hex.append(String.format(Locale.ROOT, "%02x", b & 255));
+        }
+        return hex.toString();
+    }
+
+    private static boolean ecstNumeric(CockroachDBCompositeDataType type) {
+        switch (type.getPrimitiveDataType()) {
+        case INT:
+        case SERIAL:
+        case DECIMAL:
+        case FLOAT:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    private static boolean ecstDependency(CockroachDBCompositeDataType type) {
+        return ecstNumeric(type) || type.getPrimitiveDataType() == CockroachDBDataType.STRING;
+    }
+
+    private static boolean ecstReplayType(CockroachDBCompositeDataType type) {
+        return type.getPrimitiveDataType() != CockroachDBDataType.ENUM
+                && (type.getPrimitiveDataType() != CockroachDBDataType.ARRAY || ecstReplayType(type.getElementType()));
+    }
+
+    private List<String> ecstColumnDefs(VpSchema schema, List<VpColumn> columns) {
+        List<String> result = new ArrayList<>();
+        result.add(quote(ROW_ID) + " INT8 NOT NULL PRIMARY KEY");
+        columns.forEach(c -> result.add(columnDef(schema, c)));
+        return result;
+    }
+
+    private List<String> ecstRangeStatements(String table, long rows) {
+        if (rows < 3) {
+            return List.of();
+        }
+        Set<Long> points = new LinkedHashSet<>();
+        points.add(Math.max(2L, rows / 4));
+        points.add(Math.max(2L, rows / 2));
+        points.add(Math.max(2L, rows * 3 / 4));
+        points.removeIf(v -> v >= rows);
+        return List.of(
+                "ALTER TABLE " + quote(table) + " SPLIT AT VALUES "
+                        + points.stream().map(v -> "(" + v + ")").collect(Collectors.joining(", ")),
+                "ALTER TABLE " + quote(table) + " SCATTER");
+    }
+
+    private void ecstPrepareRanges(String table, long rows) throws SQLException {
+        for (String sql : ecstRangeStatements(table, rows)) {
+            ecstExecute(sql);
+        }
+    }
+
+    private String createEcstTableSQL(String table, List<String> columns) {
+        // Physical storage profiles and cluster-wide freeze operations belong to the random VP oracle.
+        return "CREATE TABLE " + quote(table) + " (" + String.join(", ", columns) + ")";
+    }
+
+    private long ecstRowCount(String table) throws SQLException {
+        return ecstScalar("SELECT COUNT(*) FROM " + quote(table));
+    }
+
+    private String ecstString(String query) throws SQLException {
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet rows = statement.executeQuery(query)) {
+            if (!rows.next()) {
+                throw new SQLException("query returned no row: " + query);
+            }
+            return rows.getString(1);
+        }
+    }
+
 }

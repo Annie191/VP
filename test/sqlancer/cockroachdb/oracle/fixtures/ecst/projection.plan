@@ -1,0 +1,13 @@
+distribution: full
+vectorized: true
+
+• render
+│ columns: (vp_rowid, ecst_value)
+│ render ecst_value: c0 + c1
+│ render vp_rowid: vp_rowid
+│
+└── • scan
+      columns: (vp_rowid, c0, c1)
+      estimated row count: 1,000 (missing stats)
+      table: src@src_pkey
+      spans: FULL SCAN

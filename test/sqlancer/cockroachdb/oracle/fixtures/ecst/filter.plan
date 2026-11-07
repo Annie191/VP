@@ -1,0 +1,16 @@
+distribution: full
+vectorized: true
+
+• project
+│ columns: (vp_rowid)
+│
+└── • filter
+    │ columns: (vp_rowid, c0, c1)
+    │ estimated row count: 333 (missing stats)
+    │ filter: (c0 + c1) > 0
+    │
+    └── • scan
+          columns: (vp_rowid, c0, c1)
+          estimated row count: 1,000 (missing stats)
+          table: src@src_pkey
+          spans: FULL SCAN

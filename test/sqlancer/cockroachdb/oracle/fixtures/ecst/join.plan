@@ -1,0 +1,28 @@
+distribution: full
+vectorized: true
+
+• project
+│ columns: (vp_rowid)
+│
+└── • merge join (inner)
+    │ columns: (vp_rowid, c0, vp_rowid, c1)
+    │ estimated row count: 333 (missing stats)
+    │ equality: (vp_rowid) = (vp_rowid)
+    │ left cols are key
+    │ right cols are key
+    │ pred: (c0 + c1) > 0
+    │ merge ordering: +"(vp_rowid=vp_rowid)"
+    │
+    ├── • scan
+    │     columns: (vp_rowid, c0)
+    │     ordering: +vp_rowid
+    │     estimated row count: 1,000 (missing stats)
+    │     table: pl@pl_pkey
+    │     spans: FULL SCAN
+    │
+    └── • scan
+          columns: (vp_rowid, c1)
+          ordering: +vp_rowid
+          estimated row count: 1,000 (missing stats)
+          table: pr@pr_pkey
+          spans: FULL SCAN

@@ -1,0 +1,11 @@
+distribution: full
+vectorized: true
+
+• project
+│ columns: (vp_rowid)
+│
+└── • scan
+      columns: (vp_rowid, c0)
+      estimated row count: 333 (missing stats)
+      table: src@ecst_idx
+      spans: /1-

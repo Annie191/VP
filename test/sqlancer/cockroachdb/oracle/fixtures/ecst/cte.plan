@@ -1,0 +1,36 @@
+distribution: local
+vectorized: true
+
+• root
+│ columns: (vp_rowid)
+│
+├── • project
+│   │ columns: (vp_rowid)
+│   │
+│   └── • filter
+│       │ columns: (vp_rowid, c0, c1)
+│       │ estimated row count: 333 (missing stats)
+│       │ filter: (c0 + c1) > 0
+│       │
+│       └── • project
+│           │ columns: (vp_rowid, c0, c1)
+│           │
+│           └── • scan buffer
+│                 columns: (vp_rowid, c0, c1, c2)
+│                 estimated row count: 1,000 (missing stats)
+│                 label: buffer 1 (ecst_cte)
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: SELECT * FROM src
+    │ exec mode: discard all rows
+    │
+    └── • buffer
+        │ columns: (vp_rowid, c0, c1, c2)
+        │ label: buffer 1 (ecst_cte)
+        │
+        └── • scan
+              columns: (vp_rowid, c0, c1, c2)
+              estimated row count: 1,000 (missing stats)
+              table: src@src_pkey
+              spans: FULL SCAN
