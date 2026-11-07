@@ -130,11 +130,10 @@ public final class CockroachDBExecutionContextAnalyzer {
                 : target.getFrom().equals(from) && target.getTo().equals(to) ? EcstShiftStatus.SUCCESS
                         : EcstShiftStatus.FAILURE;
         return new EcstObservation(before.context, after.context, status, shifts,
-                "CockroachDB physical-plan evidence; SQL/KV execution nodes are recorded separately", before.plan,
-                after.plan, before.operationMatched ? before.evidence : "",
-                after.operationMatched ? after.evidence : "", before.evidence, after.evidence,
-                status == EcstShiftStatus.UNKNOWN ? UnknownReason.UNKNOWN_BECAUSE_OPERATION_MAPPING
-                        : UnknownReason.NONE);
+                "CockroachDB native physical-plan evidence for single-node ECST", before.plan, after.plan,
+                before.operationMatched ? before.evidence : "", after.operationMatched ? after.evidence : "",
+                before.evidence, after.evidence, status == EcstShiftStatus.UNKNOWN
+                        ? UnknownReason.UNKNOWN_BECAUSE_OPERATION_MAPPING : UnknownReason.NONE);
     }
 
     static ParsedContext parse(String plan, EcstOperation operation, Set<String> relations) {

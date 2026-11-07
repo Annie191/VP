@@ -2,7 +2,7 @@ package sqlancer.cockroachdb.oracle;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
@@ -10,7 +10,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -41,7 +40,7 @@ import sqlancer.common.oracle.ecst.EcstTransformationConfig.PartitionLayout;
 import sqlancer.common.oracle.ecst.EcstTransformationConfig.Reconstruction;
 import sqlancer.common.oracle.ecst.EcstTransformationConfig.Representation;
 
-/** Opt-in acceptance on a real three-node cluster. Configured connection/SQL errors must fail. */
+/** Opt-in acceptance on a real single-node instance. Configured connection/SQL errors must fail. */
 class CockroachDBEcstIntegrationTest {
     private Connection connection;
     private String database;
@@ -74,7 +73,7 @@ class CockroachDBEcstIntegrationTest {
 
     @BeforeEach
     void connect() throws Exception {
-        Assumptions.assumeTrue(url() != null, "set cockroachdb.ecst.test.url to run three-node acceptance");
+        Assumptions.assumeTrue(url() != null, "set cockroachdb.ecst.test.url to run single-node acceptance");
         database = "ecst_crdb_test_" + Long.toUnsignedString(System.nanoTime(), 36);
         try (Connection admin = admin(); Statement statement = admin.createStatement()) {
             statement.execute("CREATE DATABASE \"" + database + "\"");
@@ -94,13 +93,11 @@ class CockroachDBEcstIntegrationTest {
         CockroachDBOptions options = new CockroachDBOptions();
         options.oracle = CockroachDBOracleFactory.ECST;
         options.ecstQueryPairs = 2;
-        options.verticalPartitioningDistributedGateways = System.getProperty("cockroachdb.ecst.test.gateways", "");
         state.setDbmsSpecificOptions(options);
         state.setRandomly(new Randomly(37));
         state.setDatabaseName(database);
         state.setConnection(new SQLConnection(connection));
         state.setState(new StateToReproduce(database, new CockroachDBProvider()));
-        new CockroachDBEcstCluster(state).validate();
         state.updateSchema();
         vp = new CockroachDBVerticalPartitioningOracle(state, false);
     }
@@ -336,12 +333,9 @@ class CockroachDBEcstIntegrationTest {
     }
 
     @Test
-    void threeGatewaysExecuteOneFixedSnapshotWithActualRemoteSqlAndKvNodes() throws Exception {
-        execute("DELETE FROM base");
-        execute("INSERT INTO base SELECT i%11-5,i%13,CASE WHEN i%5=0 THEN '001' ELSE 'x' END FROM generate_series(1,256) AS g(i)");
-        CockroachDBEcstCluster cluster = new CockroachDBEcstCluster(state);
-        cluster.validate();
-        assertEquals(3, cluster.getLiveNodes().size());
+    void singleConnectionExecutesLocallyAndReplayHasNoDistributedSetup() throws Exception {
+        SQLConnection original = state.getConnection();
+        execute("SET vectorize='off'");
         EcstSeed seed = vp.createEcstSeed("base", "\"c0\"+\"c1\"", List.of("c0", "c1"), ExpressionContext.WHERE, false,
                 false);
         try {
@@ -350,68 +344,36 @@ class CockroachDBEcstIntegrationTest {
                             Reconstruction.JOIN, ExpressionContext.WHERE),
                     null);
             vp.prepareEcstCase(testCase);
-            Set<String> gateways = new LinkedHashSet<>();
-            Set<String> sqlNodes = new LinkedHashSet<>();
-            Set<String> kvNodes = new LinkedHashSet<>();
-            boolean remoteSql = false;
-            for (int i = 0; i < 3; i++) {
-                cluster.prepareSeed(i);
-                gateways.add(cluster.getGatewayNode());
-                assertTrue(vp.checkSemanticPreconditions(testCase).isValid());
-                assertTrue(vp.validateDataPreconditions(testCase).isValid());
-                assertTrue(vp.compareEcstCase(testCase).isEqual());
-                CockroachDBEcstCluster.ExecutionEvidence execution = cluster
-                        .captureExecution(testCase.getTransformedQuery());
-                assertTrue(execution.isAvailable(), execution.getPlan());
-                sqlNodes.addAll(execution.getSqlNodes());
-                kvNodes.addAll(execution.getKvNodes());
-                remoteSql |= execution.getSqlNodes().size() > 1;
+            assertSame(original, state.getConnection());
+            assertTrue(vp.checkSemanticPreconditions(testCase).isValid());
+            assertTrue(vp.validateDataPreconditions(testCase).isValid());
+            assertTrue(vp.compareEcstCase(testCase).isEqual());
+            try (Statement statement = state.getConnection().createStatement();
+                    ResultSet setting = statement.executeQuery("SHOW distsql")) {
+                assertTrue(setting.next());
+                assertEquals("off", setting.getString(1));
             }
-            execute("SET vectorize='off'");
-            cluster.prepareSeed(0);
             try (Statement statement = state.getConnection().createStatement();
                     ResultSet setting = statement.executeQuery("SHOW vectorize")) {
                 assertTrue(setting.next());
-                assertEquals("off", setting.getString(1),
-                        "gateway switching must preserve the session execution profile");
+                assertEquals("off", setting.getString(1));
             }
-            assertEquals(3, gateways.size(), "configure three distinct same-cluster gateways");
-            assertTrue(remoteSql, "at least one query must execute SQL processors on multiple nodes");
-            assertTrue(kvNodes.size() >= 2);
-            String placement = cluster.placement(seed.getSourceTable());
-            assertFalse(placement.contains("\"error\""), placement);
-            java.util.regex.Matcher ranges = java.util.regex.Pattern.compile("\"rangeCount\":([0-9]+)")
-                    .matcher(placement);
-            assertTrue(ranges.find());
-            assertTrue(Integer.parseInt(ranges.group(1)) >= 4, placement);
-            System.out.println("ECST three-node coverage: gateways=" + gateways + ", sqlNodes=" + sqlNodes
-                    + ", kvNodes=" + kvNodes + ", " + placement);
+            List<String> replay = vp.getSourceDataReplay(testCase);
+            assertTrue(replay.contains("SET distsql = E'off'"));
+            assertFalse(replay.stream().anyMatch(sql -> sql.contains("SPLIT AT") || sql.contains("SCATTER")
+                    || sql.contains("CLUSTER SETTING") || sql.contains("allow_unsafe_internals")));
+            StringBuilder runtime = new StringBuilder();
+            try (Statement statement = state.getConnection().createStatement(); ResultSet rows = statement
+                    .executeQuery("EXPLAIN ANALYZE (VERBOSE) " + testCase.getTransformedQuery())) {
+                while (rows.next()) {
+                    runtime.append(rows.getString(1)).append('\n');
+                }
+            }
+            assertTrue(runtime.toString().contains("distribution: local"), runtime.toString());
+            System.out.println(
+                    "ECST single-node execution verified: same connection, local SQL, no split/scatter replay");
         } finally {
             vp.cleanupEcstSeed(seed);
-        }
-        assertEquals(0, helperCount());
-    }
-
-    @Test
-    void rejectsForeignGatewayAndSingleNodeBeforeSeedGeneration() throws Exception {
-        String foreign = System.getProperty("cockroachdb.ecst.test.foreign.url");
-        Assumptions.assumeTrue(foreign != null,
-                "set cockroachdb.ecst.test.foreign.url to exercise foreign/single-node rejection");
-        java.net.URI endpoint = java.net.URI.create(foreign.substring("jdbc:".length()));
-        state.getDbmsSpecificOptions().verticalPartitioningDistributedGateways = endpoint.getHost() + ":"
-                + endpoint.getPort();
-        SQLException mismatch = assertThrows(SQLException.class, () -> new CockroachDBEcstCluster(state).validate());
-        assertEquals(CockroachDBProvider.VP_GATEWAY_CLUSTER_MISMATCH_SQL_STATE, mismatch.getSQLState());
-        try (Connection other = DriverManager.getConnection(foreign, user(), password())) {
-            CockroachDBGlobalState single = new CockroachDBGlobalState();
-            single.setConnection(new SQLConnection(other));
-            single.setMainOptions(state.getOptions());
-            CockroachDBOptions options = new CockroachDBOptions();
-            options.oracle = CockroachDBOracleFactory.ECST;
-            single.setDbmsSpecificOptions(options);
-            SQLException insufficient = assertThrows(SQLException.class,
-                    () -> new CockroachDBEcstCluster(single).validate());
-            assertEquals("EC003", insufficient.getSQLState());
         }
         assertEquals(0, helperCount());
     }

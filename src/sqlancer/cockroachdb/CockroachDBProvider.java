@@ -545,8 +545,10 @@ public class CockroachDBProvider extends SQLProviderAdapter<CockroachDBGlobalSta
         case INSERT:
             return globalState.getRandomly().getInteger(0, options.getMaxNumberInserts());
         case UPDATE:
-        case SPLIT:
             return globalState.getRandomly().getInteger(0, 3);
+        case SPLIT:
+            return globalState.getDbmsSpecificOptions().oracle == CockroachDBOracleFactory.ECST ? 0
+                    : globalState.getRandomly().getInteger(0, 3);
         case EXPLAIN:
             return globalState.getRandomly().getInteger(0, 10);
         case SHOW:
@@ -889,7 +891,9 @@ public class CockroachDBProvider extends SQLProviderAdapter<CockroachDBGlobalSta
         actions.add(t -> createCandidateUpdate(globalState, t));
         actions.add(t -> createCandidateIndex(globalState, t));
         actions.add(t -> createCandidateStatistics(globalState, t));
-        actions.add(t -> createCandidateSplit(globalState, t));
+        if (globalState.getDbmsSpecificOptions().oracle != CockroachDBOracleFactory.ECST) {
+            actions.add(t -> createCandidateSplit(globalState, t));
+        }
         actions.add(t -> createCandidateShow(t));
         actions.add(t -> createCandidateExplain(globalState, t));
         actions.add(t -> createCandidateView(globalState, t));

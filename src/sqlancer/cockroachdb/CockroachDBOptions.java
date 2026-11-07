@@ -17,7 +17,7 @@ public class CockroachDBOptions implements DBMSSpecificOptions<CockroachDBOracle
     @Parameter(names = "--oracle")
     public CockroachDBOracleFactory oracle = CockroachDBOracleFactory.NOREC;
 
-    @Parameter(names = "--ecst-query-pairs", description = "Number of comparable ECST pairs per invocation; requires a three-node cluster")
+    @Parameter(names = "--ecst-query-pairs", description = "Number of comparable ECST pairs per invocation on a single CockroachDB node")
     public int ecstQueryPairs = 4;
 
     @Parameter(names = {

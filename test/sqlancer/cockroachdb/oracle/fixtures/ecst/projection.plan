@@ -1,4 +1,4 @@
-distribution: full
+distribution: local
 vectorized: true
 
 • render

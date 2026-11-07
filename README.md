@@ -82,17 +82,14 @@ OceanBase 的 `SUBPLAN SCAN` 表示保留查询块边界；实现将其记为 `R
 
 完整工作区中 49 项针对性测试通过，包含 OceanBase CE 4.4.2.1 上全部 63 种合法配置及双方向边界迁移验收。打包后的命令行完成 2 对非空且相等的查询，两个迁移目标均未命中，仍执行了结果比较并清理了辅助对象。
 
-## CockroachDB ECST（三节点）
+## CockroachDB ECST（单节点）
 
-已加入 CockroachDB 的 ECST，复用 VP 受控接口，实现固定种子快照、方向性目标与配置选择、变换、语义和数据前提校验、结果比较、双层反馈及独立回放。
+已将 CockroachDB ECST 调整为单节点实现，复用 VP 受控接口，实现固定种子快照、方向性目标与配置选择、变换、语义和数据前提校验、结果比较、双层反馈及独立回放。
 
-- 检查至少三个活跃节点及入口的集群身份，按种子轮换同一集群的 SQL 入口，保留会话参数及类型。
+- 使用 `--host`/`--port` 指定的一个连接，关闭分布式 SQL 执行，无三节点最低要求、入口轮换、range 拆分或 SCATTER。
 - 解析原生 `EXPLAIN (VERBOSE)`，支持 filter/join pred/render、物化 CTE 的 buffer/scan buffer 关联及索引访问证据。
-- 分别记录 `EXPLAIN ANALYZE (VERBOSE)` 实际 SQL 执行节点、KV 读取节点及 range 副本和 leaseholder；分布式执行覆盖与表达式迁移证据分别记录。
-- 63 种合法配置、严格类型感知的多重集比较、失败复验、最终状态富类型数据回放及辅助对象清理；不修改集群设置和数据库 GC 配置。
+- 保留 63 种合法配置、类型感知的多重集比较、失败复验和最终状态富类型数据回放；不修改集群设置和数据库 GC 配置。
 
-在完整配套 SQLancer 工程中使用 `cockroachdb --oracle ECST --ecst-query-pairs 4`，通过 `--vp-distributed-gateways` 指定三个同集群入口。参数、证据规则和验收命令见 [CockroachDB ECST 说明](docs/cockroachdb_ecst.md)。当前仓库仍是依赖完整配套工程的源码导出。
+在完整配套 SQLancer 工程中使用 `cockroachdb --oracle ECST --ecst-query-pairs 4`；不传 VP 分布式参数。参数、证据规则和验收命令见 [CockroachDB ECST 说明](docs/cockroachdb_ecst.md)。当前仓库仍是依赖完整配套工程的源码导出。
 
-完整工作区中 47 项针对性测试通过，无失败或跳过，包含 CockroachDB v26.2.3 隔离三节点集群上的 10 项实库验收，覆盖全部 63 种合法配置、双方向物化边界、独立回放、三入口固定快照比较和外部单节点集群拒绝。
-
-打包后的命令行通过三个入口完成 3 对非空且相等的查询；三个目标迁移均未命中，结果比较仍执行。实际记录区分了多节点 SQL 执行与远程 KV 读取；运行前后 1,074 项集群设置一致，辅助对象已清理。
+CockroachDB v26.2.3 隔离单节点上 46 项针对性测试通过，无失败或跳过，覆盖全部 63 种配置及独立回放。最终命令行完成 3 对非空且相等的查询，1 次迁移成功、2 次未命中；输入准备和回放均无拆 range/SCATTER，1,074 项集群设置保持一致，辅助对象已清理。

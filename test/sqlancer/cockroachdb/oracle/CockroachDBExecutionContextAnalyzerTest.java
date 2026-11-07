@@ -33,12 +33,26 @@ class CockroachDBExecutionContextAnalyzerTest {
     @Test
     void sessionReplayPreservesIntegerTypesAndQuotesStringValues() throws Exception {
         assertEquals("SET opt_split_scan_limit = 2048",
-                CockroachDBEcstCluster.sessionSetStatement("opt_split_scan_limit", "2048"));
+                CockroachDBEcstSession.sessionSetStatement("opt_split_scan_limit", "2048"));
         assertEquals("SET extra_float_digits = -1",
-                CockroachDBEcstCluster.sessionSetStatement("extra_float_digits", "-1"));
-        assertTrue(CockroachDBEcstCluster.sessionSetStatement("timezone", "UTC").contains("'UTC'"));
+                CockroachDBEcstSession.sessionSetStatement("extra_float_digits", "-1"));
+        assertTrue(CockroachDBEcstSession.sessionSetStatement("timezone", "UTC").contains("'UTC'"));
         assertThrows(java.sql.SQLException.class,
-                () -> CockroachDBEcstCluster.sessionSetStatement("opt_split_scan_limit", "1; SELECT 1"));
+                () -> CockroachDBEcstSession.sessionSetStatement("opt_split_scan_limit", "1; SELECT 1"));
+    }
+
+    @Test
+    void singleNodeOptionsRejectDistributedVpProfiles() {
+        sqlancer.cockroachdb.CockroachDBOptions options = new sqlancer.cockroachdb.CockroachDBOptions();
+        CockroachDBEcstSession.validateOptions(options);
+        options.verticalPartitioningDistributedGateways = "unreachable.invalid:1";
+        assertThrows(IllegalArgumentException.class, () -> CockroachDBEcstSession.validateOptions(options));
+        options.verticalPartitioningDistributedGateways = "";
+        options.verticalPartitioningDistributedProfile = true;
+        assertThrows(IllegalArgumentException.class, () -> CockroachDBEcstSession.validateOptions(options));
+        options.verticalPartitioningDistributedProfile = false;
+        options.verticalPartitioningRowRangePressureProfile = true;
+        assertThrows(IllegalArgumentException.class, () -> CockroachDBEcstSession.validateOptions(options));
     }
 
     @Test
@@ -132,19 +146,6 @@ class CockroachDBExecutionContextAnalyzerTest {
                 .parse(duplicated, operation("c0+c1>0"), Set.of("src")).context().getLocation());
         assertEquals("UNKNOWN", CockroachDBExecutionContextAnalyzer.parse("no plan", operation("c0>0"), Set.of("src"))
                 .context().getBoundary());
-    }
-
-    @Test
-    void runtimeSeparatesSqlProcessorsFromKvReplicas() throws Exception {
-        CockroachDBEcstCluster.ExecutionEvidence runtime = CockroachDBEcstCluster
-                .parseExecution(fixture("distributed-execution"));
-        assertTrue(runtime.isAvailable());
-        assertEquals(Set.of("1", "3"), runtime.getSqlNodes());
-        assertEquals(Set.of("1", "2", "3"), runtime.getKvNodes());
-        CockroachDBEcstCluster.ExecutionEvidence kvOnly = CockroachDBEcstCluster
-                .parseExecution("distribution: full\n• scan\n  kv nodes: n1, n2, n3\n  table: src@src_pkey\n");
-        assertEquals(Set.of(), kvOnly.getSqlNodes());
-        assertEquals(Set.of("1", "2", "3"), kvOnly.getKvNodes());
     }
 
     @Test

@@ -40,7 +40,6 @@ public final class CockroachDBECSTOracle implements TestOracle<CockroachDBGlobal
     private final CockroachDBGlobalState state;
     private final CockroachDBVerticalPartitioningOracle vp;
     private final CockroachDBExecutionContextAnalyzer analyzer;
-    private final CockroachDBEcstCluster cluster;
     private final EcstHistory history = new EcstHistory();
     private final List<EcstTarget> targets = CockroachDBEcstCapabilities.targets();
     private long issuedSeeds;
@@ -53,10 +52,10 @@ public final class CockroachDBECSTOracle implements TestOracle<CockroachDBGlobal
     private long nonReproducedMismatches;
 
     public CockroachDBECSTOracle(CockroachDBGlobalState state) {
+        CockroachDBEcstSession.validateOptions(state.getDbmsSpecificOptions());
         this.state = state;
         this.vp = new CockroachDBVerticalPartitioningOracle(state, false);
         this.analyzer = new CockroachDBExecutionContextAnalyzer(state);
-        this.cluster = new CockroachDBEcstCluster(state);
     }
 
     public int getCompletedCases() {
@@ -86,7 +85,6 @@ public final class CockroachDBECSTOracle implements TestOracle<CockroachDBGlobal
         equalCases = 0;
         incomparableCases = 0;
         nonReproducedMismatches = 0;
-        cluster.validate();
         try {
             for (int attempt = 0; completedCases < budget && attempt < budget * 8; attempt++) {
                 attemptedSeeds++;
@@ -101,7 +99,6 @@ public final class CockroachDBECSTOracle implements TestOracle<CockroachDBGlobal
                     if (issuedSeeds > 0 && issuedSeeds % 8 == 0) {
                         vp.refreshEcstBaseRelations();
                     }
-                    cluster.prepareSeed(issuedSeeds);
                     issuedSeeds++;
                     seed = vp.createEcstSeed();
                     ParsedContext seedPlan = analyzer.extractContext(seed.getOriginalQuery(), seed.getOperation(),
@@ -292,7 +289,6 @@ public final class CockroachDBECSTOracle implements TestOracle<CockroachDBGlobal
 
     private void writeCase(EcstCase testCase, EcstTarget target, EcstObservation observation, EcstComparison comparison,
             boolean reproduced, List<String> replay) throws Exception {
-        String distribution = cluster.capturePair(testCase);
         writeJson("{\"type\":\"case\",\"database\":" + json(state.getDatabaseName()) + ",\"target\":"
                 + json(target.getKey()) + ",\"config\":" + json(testCase.getAppliedConfig().stableKey())
                 + ",\"originalQuery\":" + json(testCase.getOriginalQuery()) + ",\"transformedQuery\":"
@@ -306,7 +302,7 @@ public final class CockroachDBECSTOracle implements TestOracle<CockroachDBGlobal
                 + ",\"comparable\":" + comparison.isComparable() + ",\"equal\":" + comparison.isEqual()
                 + ",\"originalRows\":" + comparison.getOriginalResultCount() + ",\"transformedRows\":"
                 + comparison.getTransformedResultCount() + ",\"result\":" + json(comparison.getReason())
-                + ",\"clusterCoverage\":" + distribution + ",\"reproduced\":" + reproduced
+                + ",\"executionMode\":\"SINGLE_NODE\",\"reproduced\":" + reproduced
                 + ",\"evidenceLevel\":\"PLAN_ONLY\",\"sourceDataReplay\":" + EcstFailureRecord.jsonArray(replay) + "}");
     }
 

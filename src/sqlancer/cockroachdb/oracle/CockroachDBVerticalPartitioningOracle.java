@@ -6481,10 +6481,7 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
                 || !base.columns.stream().map(c -> c.name).collect(Collectors.toList()).containsAll(dependencies)) {
             throw new IllegalArgumentException("ECST dependencies must be source columns");
         }
-        ecstExecute("SET TIME ZONE 'UTC'");
-        ecstExecute("SET distsql = 'always'");
-        ecstExecute("SET bytea_output = 'hex'");
-        ecstExecute("SET tracing = off");
+        CockroachDBEcstSession.prepare(state.getConnection().getJdbcConnection());
         String prefix = "vp_ecst_crdb_" + ORACLE_RUN_ID.incrementAndGet() + "_";
         VpSchema schema = new VpSchema(prefix, base.tableName, prefix + "source", prefix + "l", prefix + "r",
                 prefix + "v", prefix + "joined", base.columns, List.of(), List.of(), List.of(), base.shape,
@@ -6503,7 +6500,6 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
                 indexed = false;
             }
             long rows = ecstRowCount(schema.sourceTable);
-            ecstPrepareRanges(schema.sourceTable, rows);
             return new EcstSeed(schema, expression, dependencies, context, indexed, retainBoundary, rows);
         } catch (Exception | AssertionError failure) {
             try {
@@ -6567,8 +6563,6 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
                     }
                 }
             }
-            ecstPrepareRanges(schema.leftTable, seed.sourceRows);
-            ecstPrepareRanges(schema.rightTable, seed.sourceRows);
             seed.preparedPartitionKey = partitionKey;
         } else if (!vertical && config.getReconstruction() != EcstTransformationConfig.Reconstruction.VIEW) {
             setup.add("CREATE VIEW " + quote(schema.viewName) + " AS SELECT * FROM " + quote(schema.sourceTable));
@@ -6802,11 +6796,11 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
         return repeated.isComparable() && !repeated.isEqual();
     }
 
-    /** Captures only the final layout, literal snapshot and reproducible session/range setup. */
+    /** Captures only the final layout, literal snapshot and reproducible session settings. */
     public List<String> getSourceDataReplay(EcstCase testCase) throws SQLException {
         List<String> replay = new ArrayList<>();
-        for (String variable : CockroachDBEcstCluster.SESSION_VARIABLES) {
-            replay.add(CockroachDBEcstCluster.sessionSetStatement(variable, ecstString("SHOW " + variable)));
+        for (String variable : CockroachDBEcstSession.SESSION_VARIABLES) {
+            replay.add(CockroachDBEcstSession.sessionSetStatement(variable, ecstString("SHOW " + variable)));
         }
         VpSchema schema = testCase.schema;
         replay.add(ecstReplayDDL(getCreateTable(schema.sourceTable)));
@@ -6839,14 +6833,11 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
                         + String.join(", ", values) + ")");
             }
         }
-        replay.addAll(ecstRangeStatements(schema.sourceTable, testCase.seed.sourceRows));
         if (testCase.config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED) {
             replay.add(ecstReplayDDL(getCreateTable(schema.leftTable)));
             replay.add(ecstReplayDDL(getCreateTable(schema.rightTable)));
             replay.add(populatePartitionSQL(schema.leftTable, schema.leftColumns, schema.sourceTable));
             replay.add(populatePartitionSQL(schema.rightTable, schema.rightColumns, schema.sourceTable));
-            replay.addAll(ecstRangeStatements(schema.leftTable, testCase.seed.sourceRows));
-            replay.addAll(ecstRangeStatements(schema.rightTable, testCase.seed.sourceRows));
         }
         if (testCase.config.getRepresentation() == EcstTransformationConfig.Representation.VIEW
                 || testCase.config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW) {
@@ -7016,27 +7007,6 @@ public class CockroachDBVerticalPartitioningOracle implements TestOracle<Cockroa
         result.add(quote(ROW_ID) + " INT8 NOT NULL PRIMARY KEY");
         columns.forEach(c -> result.add(columnDef(schema, c)));
         return result;
-    }
-
-    private List<String> ecstRangeStatements(String table, long rows) {
-        if (rows < 3) {
-            return List.of();
-        }
-        Set<Long> points = new LinkedHashSet<>();
-        points.add(Math.max(2L, rows / 4));
-        points.add(Math.max(2L, rows / 2));
-        points.add(Math.max(2L, rows * 3 / 4));
-        points.removeIf(v -> v >= rows);
-        return List.of(
-                "ALTER TABLE " + quote(table) + " SPLIT AT VALUES "
-                        + points.stream().map(v -> "(" + v + ")").collect(Collectors.joining(", ")),
-                "ALTER TABLE " + quote(table) + " SCATTER");
-    }
-
-    private void ecstPrepareRanges(String table, long rows) throws SQLException {
-        for (String sql : ecstRangeStatements(table, rows)) {
-            ecstExecute(sql);
-        }
     }
 
     private String createEcstTableSQL(String table, List<String> columns) {
