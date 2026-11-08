@@ -1,0 +1,71 @@
+{
+  "operator_name": "",
+  "extra_info": {},
+  "children": [
+    {
+      "operator_name": "EXPLAIN_ANALYZE",
+      "extra_info": {},
+      "children": [
+        {
+          "operator_name": "CTE",
+          "extra_info": {
+            "CTE Name": "ecst_cte",
+            "Table Index": "0",
+            "Estimated Cardinality": "4096"
+          },
+          "children": [
+            {
+              "operator_name": "FILTER",
+              "extra_info": {
+                "Expression": "((c0 + c1) > 0)",
+                "Estimated Cardinality": "4096"
+              },
+              "children": [
+                {
+                  "operator_name": "SEQ_SCAN",
+                  "extra_info": {
+                    "Table": "memory.main.src",
+                    "Type": "Sequential Scan",
+                    "Projections": [
+                      "vp_rowid",
+                      "c0",
+                      "c1"
+                    ],
+                    "Estimated Cardinality": "4096"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "operator_name": "PROJECTION",
+              "extra_info": {
+                "Projections": "#0",
+                "Estimated Cardinality": "4096"
+              },
+              "children": [
+                {
+                  "operator_name": "FILTER",
+                  "extra_info": {
+                    "Expression": "((c0 + c1) > 0)",
+                    "Estimated Cardinality": "4096"
+                  },
+                  "children": [
+                    {
+                      "operator_name": "CTE_SCAN",
+                      "extra_info": {
+                        "CTE Index": "0",
+                        "Estimated Cardinality": "4096"
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

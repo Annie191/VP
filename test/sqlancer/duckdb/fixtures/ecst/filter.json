@@ -1,0 +1,44 @@
+{
+  "operator_name": "",
+  "extra_info": {},
+  "children": [
+    {
+      "operator_name": "EXPLAIN_ANALYZE",
+      "extra_info": {},
+      "children": [
+        {
+          "operator_name": "PROJECTION",
+          "extra_info": {
+            "Projections": "#2",
+            "Estimated Cardinality": "819"
+          },
+          "children": [
+            {
+              "operator_name": "FILTER",
+              "extra_info": {
+                "Expression": "((c0 + c1) > 0)",
+                "Estimated Cardinality": "819"
+              },
+              "children": [
+                {
+                  "operator_name": "SEQ_SCAN",
+                  "extra_info": {
+                    "Table": "memory.main.src",
+                    "Type": "Sequential Scan",
+                    "Projections": [
+                      "c0",
+                      "c1",
+                      "vp_rowid"
+                    ],
+                    "Estimated Cardinality": "4096"
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

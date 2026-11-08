@@ -1,0 +1,65 @@
+{
+  "operator_name": "",
+  "extra_info": {},
+  "children": [
+    {
+      "operator_name": "EXPLAIN_ANALYZE",
+      "extra_info": {},
+      "children": [
+        {
+          "operator_name": "PROJECTION",
+          "extra_info": {
+            "Projections": "vp_rowid",
+            "Estimated Cardinality": "2048"
+          },
+          "children": [
+            {
+              "operator_name": "HASH_JOIN",
+              "extra_info": {
+                "Join Type": "INNER",
+                "Conditions": [
+                  "vp_rowid = vp_rowid",
+                  "c0 > c1"
+                ],
+                "Estimated Cardinality": "2048"
+              },
+              "children": [
+                {
+                  "operator_name": "SEQ_SCAN",
+                  "extra_info": {
+                    "Table": "memory.main.pl",
+                    "Type": "Sequential Scan",
+                    "Projections": [
+                      "vp_rowid",
+                      "c0"
+                    ],
+                    "Filters": "c0>=0",
+                    "Estimated Cardinality": "4096",
+                    "Dynamic Filters": [
+                      "optional: vp_rowid>=1 AND optional: vp_rowid<=4096",
+                      "optional: c0>=0"
+                    ]
+                  },
+                  "children": []
+                },
+                {
+                  "operator_name": "SEQ_SCAN",
+                  "extra_info": {
+                    "Table": "memory.main.pr",
+                    "Type": "Sequential Scan",
+                    "Projections": [
+                      "vp_rowid",
+                      "c1"
+                    ],
+                    "Estimated Cardinality": "4096"
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

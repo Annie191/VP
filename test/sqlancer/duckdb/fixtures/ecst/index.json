@@ -1,0 +1,23 @@
+{
+  "operator_name": "",
+  "extra_info": {},
+  "children": [
+    {
+      "operator_name": "EXPLAIN_ANALYZE",
+      "extra_info": {},
+      "children": [
+        {
+          "operator_name": "SEQ_SCAN",
+          "extra_info": {
+            "Table": "memory.main.src",
+            "Type": "Index Scan",
+            "Projections": "vp_rowid",
+            "Filters": "c0=17",
+            "Estimated Cardinality": "2"
+          },
+          "children": []
+        }
+      ]
+    }
+  ]
+}
