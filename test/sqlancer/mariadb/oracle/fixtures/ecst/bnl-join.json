@@ -1,0 +1,34 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost": 0.02474292,
+    "nested_loop": [
+      {
+        "table": {
+          "table_name": "l",
+          "access_type": "ALL",
+          "loops": 1,
+          "rows": 4,
+          "cost": 0.0115068,
+          "filtered": 100
+        }
+      },
+      {
+        "block-nl-join": {
+          "table": {
+            "table_name": "r",
+            "access_type": "ALL",
+            "loops": 4,
+            "rows": 4,
+            "cost": 0.01323612,
+            "filtered": 100
+          },
+          "buffer_type": "flat",
+          "buffer_size": "207",
+          "join_type": "BNL",
+          "attached_condition": "r.vp_rowid = l.vp_rowid and l.c0 + r.c1 > 0"
+        }
+      }
+    ]
+  }
+}

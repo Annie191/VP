@@ -1,0 +1,37 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost": 0.010178738,
+    "nested_loop": [
+      {
+        "table": {
+          "table_name": "<derived2>",
+          "access_type": "ALL",
+          "loops": 1,
+          "rows": 4,
+          "cost": 0.010178738,
+          "filtered": 100,
+          "attached_condition": "z.c0 + z.c1 > 0",
+          "materialized": {
+            "query_block": {
+              "select_id": 2,
+              "cost": 0.0115068,
+              "nested_loop": [
+                {
+                  "table": {
+                    "table_name": "src",
+                    "access_type": "ALL",
+                    "loops": 1,
+                    "rows": 4,
+                    "cost": 0.0115068,
+                    "filtered": 100
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}
