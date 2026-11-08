@@ -1,0 +1,11 @@
+TableScan
+├── table: default.ecst_databend_probe_20261108.ecst_input
+├── scan id: 0
+├── output columns: [vp_rowid (#0)]
+├── read rows: 5
+├── read size: < 1 KiB
+├── partitions total: 1
+├── partitions scanned: 1
+├── pruning stats: [segments: <read cost: 13 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 1 to 1 cost: 1 ms>]
+├── push downs: [filters: [is_true(ecst_input.c0 (#1) + ecst_input.c1 (#2) > 0)], limit: NONE]
+└── estimated rows: 1.00

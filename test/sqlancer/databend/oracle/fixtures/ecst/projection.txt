@@ -1,0 +1,15 @@
+EvalScalar
+├── output columns: [src.vp_rowid (#0), ecst_value (#4)]
+├── expressions: [src.c0 (#1) + src.c1 (#2)]
+├── estimated rows: 5.00
+└── TableScan
+    ├── table: default.ecst_databend_probe_20261108.src
+    ├── scan id: 0
+    ├── output columns: [vp_rowid (#0), c0 (#1), c1 (#2)]
+    ├── read rows: 5
+    ├── read size: < 1 KiB
+    ├── partitions total: 1
+    ├── partitions scanned: 1
+    ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 1 to 1 cost: 1 ms>]
+    ├── push downs: [filters: [], limit: NONE]
+    └── estimated rows: 5.00

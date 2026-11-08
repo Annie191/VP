@@ -1,0 +1,1 @@
+Native Databend 1.2.950 EXPLAIN plans from a five-row FUSE source (NULLs and distinct strings). All fields, including pruning counts and timings, are preserved. `cte.txt` deliberately shows an opaque materialized-CTE scan: its displayed temporary table name does not establish source lineage.

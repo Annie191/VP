@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -31,6 +32,11 @@ import sqlancer.IgnoreMeException;
 import sqlancer.Main;
 import sqlancer.Randomly;
 import sqlancer.common.oracle.TestOracle;
+import sqlancer.common.oracle.ecst.EcstContextDimension;
+import sqlancer.common.oracle.ecst.EcstFeature;
+import sqlancer.common.oracle.ecst.EcstOperation;
+import sqlancer.common.oracle.ecst.EcstTarget;
+import sqlancer.common.oracle.ecst.EcstTransformationConfig;
 import sqlancer.common.query.ExpectedErrors;
 import sqlancer.common.query.SQLQueryAdapter;
 import sqlancer.common.query.SQLancerResultSet;
@@ -534,6 +540,10 @@ public class DatabendVerticalPartitioningOracle implements TestOracle<DatabendGl
     }
 
     public DatabendVerticalPartitioningOracle(DatabendGlobalState state) {
+        this(state, true);
+    }
+
+    DatabendVerticalPartitioningOracle(DatabendGlobalState state, boolean statistics) {
         this.state = state;
         String detectedVersion;
         try {
@@ -545,7 +555,9 @@ public class DatabendVerticalPartitioningOracle implements TestOracle<DatabendGl
         String build950 = "8.0.90-v1.2.950-nightly-7d6d8c143a";
         this.databend950Build = detectedVersion != null
                 && (detectedVersion.equals(build950) || detectedVersion.startsWith(build950 + "("));
-        registerVpStatsShutdownHook();
+        if (statistics) {
+            registerVpStatsShutdownHook();
+        }
         DatabendErrors.addExpressionErrors(errors);
         errors.add("This version of Databend doesn't yet support 'LIMIT & IN/ALL/ANY/SOME subquery'");
         errors.add("You have an error in your SQL syntax");
@@ -7263,5 +7275,971 @@ public class DatabendVerticalPartitioningOracle implements TestOracle<DatabendGl
 
     private String sanitizeIdentifier(String identifier) {
         return identifier.replaceAll("[^A-Za-z0-9_]", "_");
+    }
+
+    /** An immutable query and operation over a source snapshot, selected before any ECST target. */
+    public static final class EcstSeed {
+        final VpSchema schema;
+        final String originalQuery;
+        final String valueExpression;
+        final String predicate;
+        final List<String> dependencies;
+        final EcstTransformationConfig.ExpressionContext context;
+        final EcstOperation operation;
+        final boolean sourceIndexed;
+        final boolean retainedInput;
+        final long sourceRows;
+        private String preparedPartitionKey;
+        private final Map<String, String> definitions = new LinkedHashMap<>();
+
+        private EcstSeed(VpSchema schema, String expression, List<String> dependencies,
+                EcstTransformationConfig.ExpressionContext context, boolean indexed, boolean retainBoundary,
+                long sourceRows, String predicateOverride) {
+            this.schema = schema;
+            this.valueExpression = expression;
+            this.predicate = predicateOverride == null ? expression + " > 0" : predicateOverride;
+            this.dependencies = List.copyOf(dependencies);
+            this.context = context;
+            this.sourceIndexed = indexed;
+            this.retainedInput = retainBoundary;
+            this.sourceRows = sourceRows;
+            // Both seeds have a wrapper, so the native plan can distinguish merged and retained query blocks.
+            String relation = retainBoundary
+                    ? "(WITH ecst_input AS MATERIALIZED (SELECT * FROM " + ecstQuote(schema.sourceTable)
+                            + ") SELECT * FROM ecst_input) ecst_outer"
+                    : "(SELECT * FROM " + ecstQuote(schema.sourceTable) + ") ecst_outer";
+            this.originalQuery = ecstQuery(this, relation, context);
+            String target = context == EcstTransformationConfig.ExpressionContext.SELECT ? expression : predicate;
+            Map<String, String> lineage = new LinkedHashMap<>();
+            for (String dependency : dependencies) {
+                lineage.put(schema.sourceTable + "." + dependency, dependency);
+                lineage.put("ecst_l." + dependency, dependency);
+                lineage.put("ecst_r." + dependency, dependency);
+            }
+            this.operation = new EcstOperation("DATABEND_ECST:" + schema.sourceTable, target,
+                    new java.util.LinkedHashSet<>(dependencies),
+                    new sqlancer.common.oracle.ecst.EcstExpressionShape(0, "UNKNOWN", java.util.Set.of(),
+                            new java.util.LinkedHashSet<>(dependencies)),
+                    lineage, context == EcstTransformationConfig.ExpressionContext.SELECT ? "PROJECTION_ITEM"
+                            : "SELECTION_PREDICATE");
+        }
+
+        public String getOriginalQuery() {
+            return originalQuery;
+        }
+
+        public EcstOperation getOperation() {
+            return operation;
+        }
+
+        public List<String> getDependencies() {
+            return dependencies;
+        }
+
+        public EcstTransformationConfig.ExpressionContext getExpressionContext() {
+            return context;
+        }
+
+        public String getSourceTable() {
+            return schema.sourceTable;
+        }
+
+        public long getSourceRowCount() {
+            return sourceRows;
+        }
+
+        boolean isIndexable() {
+            return ecstIndexable(schema.columns, dependencies);
+        }
+
+        public EcstFeature features() {
+            return new EcstFeature("Databend", valueExpression.contains("CHAR_LENGTH") ? "STRING_LENGTH" : "NUMERIC",
+                    context.name(), dependencies.size() > 1 ? "MULTI_DEPENDENCY" : "SINGLE_DEPENDENCY",
+                    "RETAINED_INPUT=" + retainedInput, "SOURCE_INDEX=" + sourceIndexed,
+                    sourceRows == 0 ? "EMPTY" : sourceRows < 32 ? "SMALL" : "LARGE", "UNKNOWN");
+        }
+    }
+
+    /** Owns only transformed artifacts; the source and the original SQL remain unchanged on retries. */
+    public static final class EcstCase {
+        final EcstSeed seed;
+        final VpSchema schema;
+        final EcstTransformationConfig config;
+        final String transformedQuery;
+        boolean prepared;
+        private String viewDefinition;
+        final List<String> deferredSetup;
+
+        private EcstCase(EcstSeed seed, VpSchema schema, EcstTransformationConfig config, String transformed,
+                List<String> setup) {
+            this.seed = seed;
+            this.schema = schema;
+            this.config = config;
+            this.transformedQuery = transformed;
+            this.deferredSetup = List.copyOf(setup);
+        }
+
+        public String getOriginalQuery() {
+            return seed.originalQuery;
+        }
+
+        public String getTransformedQuery() {
+            return transformedQuery;
+        }
+
+        public EcstOperation getOperation() {
+            return seed.operation;
+        }
+
+        public EcstTransformationConfig getAppliedConfig() {
+            return config;
+        }
+
+        public String getLeftTable() {
+            return schema.leftTable;
+        }
+
+        public String getRightTable() {
+            return schema.rightTable;
+        }
+
+        public java.util.Set<String> getAccessRelations() {
+            if (config.getRepresentation() == EcstTransformationConfig.Representation.VIEW) {
+                return java.util.Set.of(seed.schema.sourceTable);
+            }
+            java.util.Set<String> result = new java.util.LinkedHashSet<>();
+            if (seed.dependencies.stream().allMatch(d -> schema.leftColumns.stream().anyMatch(c -> c.name.equals(d)))) {
+                result.add(schema.leftTable);
+            }
+            if (seed.dependencies.stream()
+                    .allMatch(d -> schema.rightColumns.stream().anyMatch(c -> c.name.equals(d)))) {
+                result.add(schema.rightTable);
+            }
+            if (result.isEmpty()) {
+                result.add(schema.leftTable);
+                result.add(schema.rightTable);
+            }
+            return result;
+        }
+    }
+
+    public static final class EcstSemanticPreconditionResult {
+        public enum Status {
+            STATIC_LEGAL, DATA_VALID, INVALID, UNKNOWN
+        }
+
+        private final Status status;
+        private final List<String> violations;
+
+        private EcstSemanticPreconditionResult(Status status, List<String> violations) {
+            this.status = status;
+            this.violations = List.copyOf(violations);
+        }
+
+        public Status getStatus() {
+            return status;
+        }
+
+        public List<String> getViolations() {
+            return violations;
+        }
+
+        public boolean isValid() {
+            return status == Status.STATIC_LEGAL || status == Status.DATA_VALID;
+        }
+
+        @Override
+        public String toString() {
+            return status + ":" + violations;
+        }
+    }
+
+    public static final class EcstComparison {
+        private final boolean comparable;
+        private final boolean equal;
+        private final String reason;
+        private final long originalRows;
+        private final long transformedRows;
+
+        private EcstComparison(boolean comparable, boolean equal, String reason, long original, long transformed) {
+            this.comparable = comparable;
+            this.equal = equal;
+            this.reason = reason;
+            this.originalRows = original;
+            this.transformedRows = transformed;
+        }
+
+        public boolean isComparable() {
+            return comparable;
+        }
+
+        public boolean isEqual() {
+            return equal;
+        }
+
+        public String getReason() {
+            return reason;
+        }
+
+        public long getOriginalResultCount() {
+            return originalRows;
+        }
+
+        public long getTransformedResultCount() {
+            return transformedRows;
+        }
+    }
+
+    public void refreshEcstBaseRelations() throws Exception {
+        state.updateSchema();
+        List<DatabendTable> baseTables = state.getSchema().getDatabaseTables().stream()
+                .filter(t -> !t.isView() && !t.getName().startsWith("vp_")).collect(Collectors.toList());
+        if (baseTables.size() < 8) {
+            DatabendProvider.ensureVerticalPartitioningBaseTables(state, baseTables.size() + 1);
+        } else {
+            DatabendProvider.replaceVerticalPartitioningTableAfterSuccessfulCheck(state,
+                    Randomly.fromList(baseTables).getName());
+        }
+    }
+
+    public EcstSeed createEcstSeed() throws Exception {
+        DatabendProvider.ensureVerticalPartitioningBaseTables(state, 2);
+        state.updateSchema();
+        List<DatabendTable> eligible = state.getSchema().getDatabaseTables().stream()
+                .filter(table -> !table.isView() && !table.getName().startsWith("vp_"))
+                .filter(table -> table.getColumns().stream().allMatch(c -> ecstReplayType(c.getType())))
+                .filter(table -> table.getColumns().stream().anyMatch(c -> ecstDependency(c.getType())))
+                .collect(Collectors.toList());
+        if (eligible.isEmpty()) {
+            throw new IgnoreMeException();
+        }
+        BaseTableInfo base = createBaseTableInfo(Randomly.fromList(eligible));
+        List<VpColumn> dependencies = base.columns.stream().filter(c -> ecstDependency(c.compositeType))
+                .collect(Collectors.toList());
+        List<VpColumn> chosen = new ArrayList<>();
+        chosen.add(Randomly.fromList(dependencies));
+        if (dependencies.size() > 1 && Randomly.getBoolean()) {
+            List<VpColumn> remaining = dependencies.stream().filter(c -> c != chosen.get(0))
+                    .collect(Collectors.toList());
+            chosen.add(Randomly.fromList(remaining));
+        }
+        String expression;
+        if (chosen.size() == 1 && ecstNumeric(chosen.get(0).compositeType) && Randomly.getBoolean()) {
+            expression = ecstQuote(chosen.get(0).name);
+        } else {
+            expression = chosen.stream()
+                    .map(c -> ecstNumeric(c.compositeType) ? "COALESCE(CAST(" + ecstQuote(c.name) + " AS DOUBLE), 0)"
+                            : "COALESCE(CHAR_LENGTH(" + ecstQuote(c.name) + "), 0)")
+                    .collect(Collectors.joining(" + "));
+        }
+        if (Randomly.getBooleanWithSmallProbability()) {
+            expression = "CASE WHEN " + ecstQuote(chosen.get(0).name) + " IS NULL THEN 0 ELSE (" + expression + ") END";
+        }
+        EcstTransformationConfig.ExpressionContext context = Randomly.fromOptions(
+                EcstTransformationConfig.ExpressionContext.WHERE, EcstTransformationConfig.ExpressionContext.SELECT,
+                EcstTransformationConfig.ExpressionContext.HAVING);
+        String predicate = context != EcstTransformationConfig.ExpressionContext.SELECT && chosen.size() == 2
+                && chosen.stream().allMatch(c -> ecstNumeric(c.compositeType)) && Randomly.getBoolean()
+                        ? ecstQuote(chosen.get(0).name) + " > " + ecstQuote(chosen.get(1).name) : null;
+        return createEcstSeed(base, expression, chosen.stream().map(c -> c.name).collect(Collectors.toList()), context,
+                Randomly.getBoolean(), Randomly.getBoolean(), predicate);
+    }
+
+    /**
+     * Deterministic seam also used by integration tests; normal generation selects these inputs randomly.
+     *
+     * @param baseTable
+     *            source data table
+     * @param expression
+     *            deterministic value expression over the dependencies
+     * @param dependencies
+     *            distinct source column names
+     * @param context
+     *            original logical expression context
+     * @param indexed
+     *            whether to prepare a source index when its types allow one
+     * @param retainBoundary
+     *            whether the seed wrapper retains a query-block boundary
+     *
+     * @return a seed whose source snapshot and original operation remain fixed
+     */
+    EcstSeed createEcstSeed(String baseTable, String expression, List<String> dependencies,
+            EcstTransformationConfig.ExpressionContext context, boolean indexed, boolean retainBoundary)
+            throws Exception {
+        return createEcstSeed(baseTable, expression, dependencies, context, indexed, retainBoundary, null);
+    }
+
+    EcstSeed createEcstSeed(String baseTable, String expression, List<String> dependencies,
+            EcstTransformationConfig.ExpressionContext context, boolean indexed, boolean retainBoundary,
+            String predicateOverride) throws Exception {
+        state.updateSchema();
+        DatabendTable table = state.getSchema().getDatabaseTables().stream().filter(t -> t.getName().equals(baseTable))
+                .findFirst().orElseThrow(IllegalArgumentException::new);
+        return createEcstSeed(createBaseTableInfo(table), expression, dependencies, context, indexed, retainBoundary,
+                predicateOverride);
+    }
+
+    private EcstSeed createEcstSeed(BaseTableInfo base, String expression, List<String> dependencies,
+            EcstTransformationConfig.ExpressionContext context, boolean indexed, boolean retainBoundary,
+            String predicateOverride) throws Exception {
+        if (dependencies.isEmpty()
+                || !base.columns.stream().map(c -> c.name).collect(Collectors.toList()).containsAll(dependencies)) {
+            throw new IllegalArgumentException("ECST dependencies must be source columns");
+        }
+        DatabendEcstSession.prepare(state.getConnection().getJdbcConnection());
+        String prefix = "vp_ecst_bend_" + ORACLE_RUN_ID.incrementAndGet() + "_";
+        VpSchema schema = new VpSchema(prefix, base.tableName, prefix + "source", prefix + "l", prefix + "r",
+                prefix + "v", prefix + "joined", base.columns, List.of(), List.of(), List.of(), base.shape,
+                SplitStrategy.EVEN_SPLIT, false, null, base.rowCount, "FUSE", false, false,
+                SchemaProfile.PROJECTION_ONLY, List.of());
+        try {
+            indexed = indexed && ecstIndexable(schema.columns, dependencies);
+            String sort = indexed ? ecstQuote(dependencies.get(0)) : null;
+            ecstExecute(createEcstTableSQL(schema.sourceTable, ecstColumnDefs(schema, schema.columns), sort));
+            ecstExecute(populateSourceSQL(schema, sort));
+            long rows = ecstRowCount(schema.sourceTable);
+            EcstSeed seed = new EcstSeed(schema, expression, dependencies, context, indexed, retainBoundary, rows,
+                    predicateOverride);
+            seed.definitions.put(schema.sourceTable, ecstDefinition(schema.sourceTable));
+            return seed;
+        } catch (Exception | AssertionError failure) {
+            try {
+                cleanupEcstSchema(schema);
+            } catch (Exception cleanup) {
+                failure.addSuppressed(cleanup);
+            }
+            throw failure;
+        }
+    }
+
+    public EcstCase applyEcstTransformation(EcstSeed seed, EcstTransformationConfig config, EcstTarget target)
+            throws Exception {
+        if (!DatabendEcstCapabilities.isLegal(seed, config)) {
+            throw new IllegalArgumentException("unsupported ECST configuration " + config);
+        }
+        // Source data, indexes and SQL are immutable. Only the derived representation is reconfigured.
+        boolean vertical = config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED;
+        boolean indexed = target != null && target.getDimension() == EcstContextDimension.ACCESS_PATH
+                && "PARTITION_PRUNED".equals(target.getTo());
+        String partitionKey = config.getPartitionLayout().name() + ":" + indexed;
+        boolean reusePartitions = vertical && partitionKey.equals(seed.preparedPartitionKey);
+        ecstExecute("DROP VIEW IF EXISTS " + ecstQuote(seed.schema.viewName));
+        if (!reusePartitions) {
+            seed.preparedPartitionKey = null;
+            ecstExecute("DROP TABLE IF EXISTS " + ecstQuote(seed.schema.rightTable));
+            ecstExecute("DROP TABLE IF EXISTS " + ecstQuote(seed.schema.leftTable));
+        }
+        List<VpColumn> left = new ArrayList<>();
+        List<VpColumn> right = new ArrayList<>();
+        for (VpColumn column : seed.schema.columns) {
+            boolean rightDependency = config.getPartitionLayout() == EcstTransformationConfig.PartitionLayout.CROSS_SIDE
+                    && seed.dependencies.indexOf(column.name) > 0;
+            if (rightDependency || !seed.dependencies.contains(column.name) && left.size() > right.size()) {
+                right.add(column);
+            } else {
+                left.add(column);
+            }
+        }
+        VpSchema schema = new VpSchema(seed.schema.prefix, seed.schema.baseTable, seed.schema.sourceTable,
+                seed.schema.leftTable, seed.schema.rightTable, seed.schema.viewName, seed.schema.tempTable,
+                seed.schema.columns, left, right, List.of(), seed.schema.baseShape, SplitStrategy.EVEN_SPLIT, false,
+                seed.schema.stableOrderStrategy, seed.sourceRows, "FUSE", false, false, SchemaProfile.PROJECTION_ONLY,
+                List.of());
+        List<String> setup = new ArrayList<>();
+        if (vertical && !reusePartitions) {
+            // The ECST boundary must distinguish rejected setup from successfully created objects.
+            for (boolean leftSide : List.of(true, false)) {
+                List<VpColumn> columns = leftSide ? left : right;
+                String table = leftSide ? schema.leftTable : schema.rightTable;
+                String sort = indexed && ecstIndexable(columns, seed.dependencies) ? ecstQuote(seed.dependencies.get(0))
+                        : null;
+                ecstExecute(createEcstTableSQL(table, ecstColumnDefs(schema, columns), sort));
+                ecstExecute(ecstPopulatePartition(table, columns, schema.sourceTable, sort));
+            }
+            seed.definitions.put(schema.leftTable, ecstDefinition(schema.leftTable));
+            seed.definitions.put(schema.rightTable, ecstDefinition(schema.rightTable));
+            seed.preparedPartitionKey = partitionKey;
+        } else if (!vertical && config.getReconstruction() != EcstTransformationConfig.Reconstruction.VIEW) {
+            setup.add(
+                    "CREATE VIEW " + ecstQuote(schema.viewName) + " AS SELECT * FROM " + ecstQuote(schema.sourceTable));
+        }
+        String innerExpression = seed.valueExpression;
+        String innerPredicate = seed.predicate;
+        if (vertical) {
+            for (VpColumn column : schema.columns) {
+                String owner = containsColumn(left, column.name) ? "ecst_l." : "ecst_r.";
+                innerExpression = innerExpression.replace(ecstQuote(column.name), owner + ecstQuote(column.name));
+                innerPredicate = innerPredicate.replace(ecstQuote(column.name), owner + ecstQuote(column.name));
+            }
+        }
+        String projection = vertical ? joinProjection(schema, "ecst_l", "ecst_r", false) : "*";
+        if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_SELECT) {
+            projection += ", " + innerExpression + " AS ecst_value";
+        }
+        String from = vertical
+                ? ecstQuote(schema.leftTable) + " ecst_l JOIN " + ecstQuote(schema.rightTable) + " ecst_r ON ecst_l."
+                        + ecstQuote(ROW_ID) + "=ecst_r." + ecstQuote(ROW_ID)
+                : ecstQuote(config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW
+                        ? schema.sourceTable : schema.viewName);
+        if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.JOIN_ON) {
+            from += " AND (" + innerPredicate + ")";
+        }
+        String innerQuery = "SELECT " + projection + " FROM " + from;
+        if (config.getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_WHERE) {
+            innerQuery += " WHERE " + innerPredicate;
+        }
+        String relation;
+        switch (config.getReconstruction()) {
+        case JOIN:
+            relation = "(" + innerQuery + ") ecst_rel";
+            break;
+        case DERIVED_TABLE:
+            relation = "(WITH ecst_derived AS MATERIALIZED (" + innerQuery + ") SELECT * FROM ecst_derived) ecst_rel";
+            break;
+        case CTE:
+            relation = "(WITH ecst_cte AS MATERIALIZED (" + innerQuery + ") SELECT * FROM ecst_cte) ecst_rel";
+            break;
+        case VIEW:
+            setup.add("CREATE VIEW " + ecstQuote(schema.viewName) + " AS " + innerQuery);
+            relation = ecstQuote(schema.viewName) + " ecst_rel";
+            break;
+        default:
+            throw new IllegalArgumentException("unsupported reconstruction");
+        }
+        return new EcstCase(seed, schema, config, ecstQuery(seed, relation, config.getExpressionContext()), setup);
+    }
+
+    private static String ecstQuery(EcstSeed seed, String relation,
+            EcstTransformationConfig.ExpressionContext embedded) {
+        String rowId = ecstQuote(ROW_ID);
+        switch (seed.context) {
+        case SELECT:
+            return "SELECT " + rowId + ", "
+                    + (embedded == EcstTransformationConfig.ExpressionContext.INNER_SELECT ? "ecst_value"
+                            : seed.valueExpression)
+                    + " AS ecst_value, " + ecstQuote(seed.dependencies.get(0)) + " AS ecst_input FROM " + relation;
+        case HAVING:
+            return "SELECT MIN(" + rowId + ") AS " + rowId + ", " + seed.valueExpression
+                    + " AS ecst_value, COUNT(*) AS ecst_count FROM " + relation + " GROUP BY "
+                    + (seed.isIndexable() ? "" : rowId + ", ") + seed.dependencies.stream()
+                            .map(DatabendVerticalPartitioningOracle::ecstQuote).collect(Collectors.joining(", "))
+                    + " HAVING " + seed.predicate;
+        case WHERE:
+            return "SELECT " + rowId + " FROM " + relation
+                    + (embedded == EcstTransformationConfig.ExpressionContext.INNER_WHERE
+                            || embedded == EcstTransformationConfig.ExpressionContext.JOIN_ON ? ""
+                                    : " WHERE " + seed.predicate);
+        default:
+            throw new IllegalArgumentException("unsupported seed context " + seed.context);
+        }
+    }
+
+    public void prepareEcstCase(EcstCase testCase) throws SQLException {
+        if (!testCase.prepared) {
+            for (String sql : testCase.deferredSetup) {
+                ecstExecute(sql);
+            }
+            if (testCase.config.getRepresentation() == EcstTransformationConfig.Representation.VIEW
+                    || testCase.config.getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW) {
+                testCase.viewDefinition = ecstViewDefinition(testCase.schema.viewName);
+            }
+            testCase.prepared = true;
+        }
+    }
+
+    public EcstSemanticPreconditionResult checkSemanticPreconditions(EcstCase testCase) {
+        List<String> violations = new ArrayList<>();
+        if (!DatabendEcstCapabilities.isLegal(testCase.seed, testCase.config)) {
+            violations.add("configuration is not legal for this seed");
+        }
+        try {
+            Map<String, String> source = ecstColumnMetadata(testCase.schema.sourceTable);
+            List<String> physical = new ArrayList<>();
+            physical.add(testCase.schema.sourceTable);
+            if (testCase.config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED) {
+                physical.add(testCase.schema.leftTable);
+                physical.add(testCase.schema.rightTable);
+            }
+            for (String table : physical) {
+                if (!Objects.equals(testCase.seed.definitions.get(table), ecstDefinition(table))) {
+                    violations.add("physical definition/collation/index changed: " + table);
+                }
+            }
+            if (testCase.viewDefinition != null
+                    && !testCase.viewDefinition.equals(ecstViewDefinition(testCase.schema.viewName))) {
+                violations.add("view definition changed");
+            }
+            if (testCase.config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED) {
+                for (String table : List.of(testCase.schema.leftTable, testCase.schema.rightTable)) {
+                    Map<String, String> partition = ecstColumnMetadata(table);
+                    List<String> expected = new ArrayList<>();
+                    expected.add(ROW_ID);
+                    (table.equals(testCase.schema.leftTable) ? testCase.schema.leftColumns
+                            : testCase.schema.rightColumns).forEach(column -> expected.add(column.name));
+                    if (!partition.keySet().equals(new java.util.LinkedHashSet<>(expected))) {
+                        violations.add("partition column set changed: " + table);
+                    }
+                    for (String column : expected) {
+                        if (!Objects.equals(partition.get(column), source.get(column))) {
+                            violations.add("column type or collation changed: " + table + "." + column);
+                        }
+                    }
+                }
+            } else {
+                Map<String, String> view = ecstColumnMetadata(testCase.schema.viewName);
+                source.forEach((column, metadata) -> {
+                    if (!metadata.equals(view.get(column))) {
+                        violations.add("view column type or collation changed: " + column);
+                    }
+                });
+            }
+            if (!violations.isEmpty()) {
+                testCase.seed.preparedPartitionKey = null;
+            }
+            return new EcstSemanticPreconditionResult(
+                    violations.isEmpty() ? EcstSemanticPreconditionResult.Status.STATIC_LEGAL
+                            : EcstSemanticPreconditionResult.Status.INVALID,
+                    violations);
+        } catch (SQLException failure) {
+            testCase.seed.preparedPartitionKey = null;
+            return new EcstSemanticPreconditionResult(EcstSemanticPreconditionResult.Status.UNKNOWN,
+                    List.of(failure.getMessage()));
+        }
+    }
+
+    public EcstSemanticPreconditionResult validateDataPreconditions(EcstCase testCase) {
+        List<String> violations = new ArrayList<>();
+        try {
+            String sourceTable = testCase.schema.sourceTable;
+            if (ecstRowCount(sourceTable) != testCase.seed.sourceRows || ecstScalar("SELECT COUNT(*) - COUNT(DISTINCT "
+                    + ecstQuote(ROW_ID) + ") FROM " + ecstQuote(sourceTable)) != 0) {
+                violations.add("source snapshot cardinality or unique row identities changed");
+            }
+            if (testCase.config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED) {
+                VpSchema schema = testCase.schema;
+                for (String table : List.of(schema.leftTable, schema.rightTable)) {
+                    if (ecstScalar("SELECT COUNT(*) - COUNT(DISTINCT " + ecstQuote(ROW_ID) + ") FROM "
+                            + ecstQuote(table)) != 0) {
+                        violations.add("duplicate or null row identities: " + table);
+                    }
+                    if (ecstRowCount(table) != ecstRowCount(schema.sourceTable)) {
+                        violations.add("row count changed: " + table);
+                    }
+                    if (ecstScalar("SELECT COUNT(*) FROM " + ecstQuote(schema.sourceTable) + " s LEFT JOIN "
+                            + ecstQuote(table) + " p ON s." + ecstQuote(ROW_ID) + "=p." + ecstQuote(ROW_ID)
+                            + " WHERE p." + ecstQuote(ROW_ID) + " IS NULL") != 0) {
+                        violations.add("source row ids missing: " + table);
+                    }
+                    for (VpColumn column : table.equals(schema.leftTable) ? schema.leftColumns : schema.rightColumns) {
+                        String sourceValue = ecstComparableValue(column, "s");
+                        String partitionValue = ecstComparableValue(column, "p");
+                        if (ecstScalar("SELECT COUNT(*) FROM " + ecstQuote(schema.sourceTable) + " s JOIN "
+                                + ecstQuote(table) + " p ON s." + ecstQuote(ROW_ID) + "=p." + ecstQuote(ROW_ID)
+                                + " WHERE " + sourceValue + " IS DISTINCT FROM " + partitionValue) != 0) {
+                            violations.add("column values changed: " + table + "." + column.name);
+                        }
+                    }
+                }
+            } else {
+                VpSchema schema = testCase.schema;
+                long sourceCount = ecstRowCount(schema.sourceTable);
+                long viewCount = ecstRowCount(schema.viewName);
+                boolean filteredView = testCase.config
+                        .getReconstruction() == EcstTransformationConfig.Reconstruction.VIEW
+                        && testCase.config
+                                .getExpressionContext() == EcstTransformationConfig.ExpressionContext.INNER_WHERE;
+                if ((!filteredView && sourceCount != viewCount) || viewCount != ecstScalar(
+                        "SELECT COUNT(DISTINCT " + ecstQuote(ROW_ID) + ") FROM " + ecstQuote(schema.viewName))) {
+                    violations.add("view row identity or multiplicity changed");
+                }
+                // A filtered view is allowed to remove rows. Its predicate semantics belong to the result oracle.
+                if (!filteredView && ecstScalar("SELECT COUNT(*) FROM " + ecstQuote(schema.sourceTable)
+                        + " s LEFT JOIN " + ecstQuote(schema.viewName) + " v ON s." + ecstQuote(ROW_ID) + "=v."
+                        + ecstQuote(ROW_ID) + " WHERE v." + ecstQuote(ROW_ID) + " IS NULL") != 0) {
+                    violations.add("view lost source row ids");
+                }
+                if (ecstScalar("SELECT COUNT(*) FROM " + ecstQuote(schema.viewName) + " v LEFT JOIN "
+                        + ecstQuote(schema.sourceTable) + " s ON s." + ecstQuote(ROW_ID) + "=v." + ecstQuote(ROW_ID)
+                        + " WHERE s." + ecstQuote(ROW_ID) + " IS NULL") != 0) {
+                    violations.add("view has row ids absent from source");
+                }
+                for (VpColumn column : schema.columns) {
+                    String sourceValue = ecstComparableValue(column, "s");
+                    String viewValue = ecstComparableValue(column, "v");
+                    if (ecstScalar("SELECT COUNT(*) FROM " + ecstQuote(schema.sourceTable) + " s JOIN "
+                            + ecstQuote(schema.viewName) + " v ON s." + ecstQuote(ROW_ID) + "=v." + ecstQuote(ROW_ID)
+                            + " WHERE " + sourceValue + " IS DISTINCT FROM " + viewValue) != 0) {
+                        violations.add("view column values changed: " + column.name);
+                    }
+                }
+            }
+            if (!violations.isEmpty()) {
+                testCase.seed.preparedPartitionKey = null;
+            }
+            return new EcstSemanticPreconditionResult(violations.isEmpty()
+                    ? EcstSemanticPreconditionResult.Status.DATA_VALID : EcstSemanticPreconditionResult.Status.INVALID,
+                    violations);
+        } catch (SQLException failure) {
+            testCase.seed.preparedPartitionKey = null;
+            return new EcstSemanticPreconditionResult(EcstSemanticPreconditionResult.Status.UNKNOWN,
+                    List.of(failure.getMessage()));
+        }
+    }
+
+    public EcstComparison compareEcstCase(EcstCase testCase) throws Exception {
+        prepareEcstCase(testCase);
+        EcstRows original = ecstReadResult(testCase.getOriginalQuery());
+        EcstRows transformed = ecstReadResult(testCase.getTransformedQuery());
+        boolean equal = original.types.equals(transformed.types)
+                && resultMultisetsMatch(original.values, transformed.values);
+        return new EcstComparison(true, equal,
+                "original=" + sample(original.values.rows) + "; transformed=" + sample(transformed.values.rows)
+                        + "; originalSchema=" + original.types + "; transformedSchema=" + transformed.types,
+                original.values.orderedRows.size(), transformed.values.orderedRows.size());
+    }
+
+    public boolean validateBugCandidate(EcstCase testCase) throws Exception {
+        EcstComparison repeated = compareEcstCase(testCase);
+        return repeated.isComparable() && !repeated.isEqual();
+    }
+
+    /** Captures only the final layout, literal snapshot and reproducible session settings. */
+    public List<String> getSourceDataReplay(EcstCase testCase) throws SQLException {
+        List<String> replay = new ArrayList<>(DatabendEcstSession.capture(state.getConnection().getJdbcConnection()));
+        VpSchema schema = testCase.schema;
+        replay.add(createEcstTableSQL(schema.sourceTable, ecstColumnDefs(schema, schema.columns),
+                testCase.seed.sourceIndexed ? ecstQuote(testCase.seed.dependencies.get(0)) : null));
+        String projection = ecstQuote(ROW_ID)
+                + schema.columns.stream().map(c -> ", " + ecstReplayExpression(c)).collect(Collectors.joining());
+        try (Statement statement = state.getConnection().createStatement(); ResultSet rows = statement.executeQuery(
+                "SELECT " + projection + " FROM " + ecstQuote(schema.sourceTable) + " ORDER BY " + ecstQuote(ROW_ID))) {
+            while (rows.next()) {
+                List<String> values = new ArrayList<>();
+                values.add(rows.getString(1));
+                for (int i = 0; i < schema.columns.size(); i++) {
+                    values.add(ecstTypedLiteral(rows.getString(i + 2), schema.columns.get(i)));
+                }
+                replay.add(
+                        "INSERT INTO " + ecstQuote(schema.sourceTable) + " VALUES (" + String.join(",", values) + ")");
+            }
+        }
+        if (testCase.config.getRepresentation() == EcstTransformationConfig.Representation.VERTICAL_PARTITIONED) {
+            boolean pruned = testCase.seed.preparedPartitionKey.endsWith(":true");
+            for (boolean leftSide : List.of(true, false)) {
+                List<VpColumn> columns = leftSide ? schema.leftColumns : schema.rightColumns;
+                String sort = pruned && ecstIndexable(columns, testCase.seed.dependencies)
+                        ? ecstQuote(testCase.seed.dependencies.get(0)) : null;
+                String table = leftSide ? schema.leftTable : schema.rightTable;
+                replay.add(createEcstTableSQL(table, ecstColumnDefs(schema, columns), sort));
+                replay.add(ecstPopulatePartition(table, columns, schema.sourceTable, sort));
+            }
+        }
+        replay.addAll(testCase.deferredSetup);
+        return replay;
+    }
+
+    public void cleanupEcstSeed(EcstSeed seed) throws Exception {
+        if (seed != null) {
+            seed.preparedPartitionKey = null;
+            cleanupEcstSchema(seed.schema);
+        }
+    }
+
+    private void cleanupEcstSchema(VpSchema schema) throws SQLException {
+        ecstExecute("DROP VIEW IF EXISTS " + ecstQuote(schema.viewName));
+        ecstExecute("DROP TABLE IF EXISTS " + ecstQuote(schema.rightTable));
+        ecstExecute("DROP TABLE IF EXISTS " + ecstQuote(schema.leftTable));
+        ecstExecute("DROP TABLE IF EXISTS " + ecstQuote(schema.sourceTable));
+    }
+
+    private Map<String, String> ecstColumnMetadata(String table) throws SQLException {
+        Map<String, String> columns = new LinkedHashMap<>();
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet rows = statement.executeQuery("DESCRIBE " + ecstQuote(table))) {
+            while (rows.next()) {
+                columns.put(rows.getString(1), rows.getString(2));
+            }
+        }
+        return columns;
+    }
+
+    private String ecstPopulatePartition(String table, List<VpColumn> columns, String source, String sort) {
+        return populatePartitionSQL(table, columns, source, false) + " ORDER BY "
+                + (sort == null ? "md5(to_string(" + ecstQuote(ROW_ID) + "))" : sort);
+    }
+
+    private long ecstScalar(String query) throws SQLException {
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet rows = statement.executeQuery(query)) {
+            if (!rows.next()) {
+                throw new SQLException("scalar query returned no row: " + query);
+            }
+            return rows.getLong(1);
+        }
+    }
+
+    private void ecstExecute(String sql) throws SQLException {
+        if (state.getState() != null) {
+            state.getState().logStatement(sql);
+        }
+        try (Statement statement = state.getConnection().createStatement()) {
+            statement.execute(sql);
+        }
+    }
+
+    private static boolean ecstIndexable(List<VpColumn> columns, List<String> dependencies) {
+        return dependencies.size() == 1
+                && columns.stream().anyMatch(c -> c.name.equals(dependencies.get(0)) && ecstNumeric(c.compositeType));
+    }
+
+    private static String ecstQuote(String identifier) {
+        return quote(identifier);
+    }
+
+    private static String ecstText(String value) {
+        return "'" + value.replace("\\", "\\\\").replace("'", "''") + "'";
+    }
+
+    private String ecstComparableValue(VpColumn column, String alias) {
+        String value = alias + "." + ecstQuote(column.name);
+        switch (column.type) {
+        case VARCHAR:
+        case BLOB:
+            return "hex(" + value + ")";
+        case GEOMETRY:
+            return "hex(st_asewkb(" + value + "))";
+        case ARRAY:
+        case MAP:
+        case TUPLE:
+            return "to_string(to_variant(" + value + "))";
+        case VARIANT:
+        case BITMAP:
+            return "to_string(" + value + ")";
+        default:
+            return value;
+        }
+    }
+
+    private String ecstReplayExpression(VpColumn column) {
+        String value = ecstQuote(column.name);
+        switch (column.type) {
+        case BLOB:
+            return "hex(" + value + ")";
+        case GEOMETRY:
+            return "hex(st_asewkb(" + value + "))";
+        case BITMAP:
+            return "to_string(" + value + ")";
+        case ARRAY:
+        case MAP:
+        case TUPLE:
+            return "to_string(to_variant(" + value + "))";
+        default:
+            return "to_string(" + value + ")";
+        }
+    }
+
+    private String ecstSqlType(VpColumn column) {
+        return column.type == DatabendDataType.BLOB ? "BINARY" : effectiveDeclaredSqlType(column);
+    }
+
+    private static String ecstHex(String value) {
+        return ecstHexBytes(value.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String ecstHexBytes(byte[] value) {
+        StringBuilder hex = new StringBuilder();
+        for (byte b : value) {
+            hex.append(String.format(Locale.ROOT, "%02x", b & 255));
+        }
+        return hex.toString();
+    }
+
+    private static String ecstUtf8(String value) {
+        return "cast(from_hex('" + ecstHex(value) + "') as string)";
+    }
+
+    private String ecstTypedLiteral(String value, VpColumn column) throws SQLException {
+        if (value == null) {
+            return "NULL";
+        }
+        String text = ecstUtf8(value);
+        String nativeValue;
+        switch (column.type) {
+        case BLOB:
+            nativeValue = "from_hex(" + ecstText(value) + ")";
+            break;
+        case GEOMETRY:
+            nativeValue = "to_geometry(from_hex(" + ecstText(value) + "))";
+            break;
+        case BITMAP:
+            nativeValue = "to_bitmap(" + text + ")";
+            break;
+        case ARRAY:
+        case MAP:
+        case TUPLE:
+            try {
+                ObjectMapper exactJson = new ObjectMapper()
+                        .enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+                return ecstJsonLiteral(exactJson.readTree(value), effectiveDeclaredSqlType(column));
+            } catch (JsonProcessingException failure) {
+                throw new SQLException("cannot decode native nested value for replay", failure);
+            }
+        case VARIANT:
+            nativeValue = "parse_json(" + text + ")";
+            break;
+        default:
+            nativeValue = text;
+            break;
+        }
+        return "CAST(" + nativeValue + " AS " + ecstSqlType(column) + ")";
+    }
+
+    private String ecstJsonLiteral(JsonNode node, String type) throws SQLException {
+        String sqlType = type.trim().replaceFirst("(?i)\\s+(?:NULL|NOT NULL)$", "");
+        if (node == null || node.isNull()) {
+            return "CAST(NULL AS " + sqlType + ")";
+        }
+        String upper = sqlType.toUpperCase(Locale.ROOT);
+        int open = sqlType.indexOf('(');
+        String value;
+        if (upper.startsWith("ARRAY(")) {
+            String element = sqlType.substring(open + 1, sqlType.lastIndexOf(')'));
+            List<String> values = new ArrayList<>();
+            for (JsonNode child : node) {
+                values.add(ecstJsonLiteral(child, element));
+            }
+            value = "[" + String.join(",", values) + "]";
+        } else if (upper.startsWith("MAP(")) {
+            List<String> types = splitTopLevel(sqlType.substring(open + 1, sqlType.lastIndexOf(')')));
+            List<String> keys = new ArrayList<>();
+            List<String> values = new ArrayList<>();
+            java.util.Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                keys.add("CAST(" + ecstUtf8(field.getKey()) + " AS " + types.get(0) + ")");
+                values.add(ecstJsonLiteral(field.getValue(), types.get(1)));
+            }
+            value = "map([" + String.join(",", keys) + "],[" + String.join(",", values) + "])";
+        } else if (upper.startsWith("TUPLE(")) {
+            List<String> types = splitTopLevel(sqlType.substring(open + 1, sqlType.lastIndexOf(')')));
+            List<String> values = new ArrayList<>();
+            java.util.Iterator<JsonNode> children = node.elements();
+            for (String childType : types) {
+                if (!children.hasNext()) {
+                    throw new SQLException("native tuple width differs from its declared type");
+                }
+                values.add(ecstJsonLiteral(children.next(), childType.trim().replaceFirst("^\\d+\\s+", "")));
+            }
+            if (children.hasNext()) {
+                throw new SQLException("native tuple has unexpected fields");
+            }
+            value = "tuple(" + String.join(",", values) + ")";
+        } else if (upper.equals("VARIANT")) {
+            value = "parse_json(" + ecstUtf8(node.toString()) + ")";
+        } else {
+            value = ecstUtf8(node.asText());
+        }
+        return "CAST(" + value + " AS " + sqlType + ")";
+    }
+
+    private static boolean ecstNumeric(DatabendCompositeDataType type) {
+        switch (type.getPrimitiveDataType()) {
+        case INT:
+        case DECIMAL:
+        case FLOAT:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    private static boolean ecstDependency(DatabendCompositeDataType type) {
+        return ecstNumeric(type) || type.getPrimitiveDataType() == DatabendDataType.VARCHAR;
+    }
+
+    private static boolean ecstReplayType(DatabendCompositeDataType type) {
+        return type.getPrimitiveDataType() != DatabendDataType.NULL;
+    }
+
+    private List<String> ecstColumnDefs(VpSchema schema, List<VpColumn> columns) {
+        List<String> result = new ArrayList<>();
+        result.add(ecstQuote(ROW_ID) + " BIGINT NOT NULL");
+        columns.forEach(c -> result.add(ecstQuote(c.name) + " " + ecstSqlType(c) + " NULL"));
+        return result;
+    }
+
+    private String createEcstTableSQL(String table, List<String> columns, String sort) {
+        return createTableSQL(table, columns, "FUSE", false) + (sort == null ? "" : " CLUSTER BY (" + sort + ")")
+                + " ROW_PER_BLOCK=1024 BLOCK_PER_SEGMENT=10";
+    }
+
+    private long ecstRowCount(String table) throws SQLException {
+        return ecstScalar("SELECT COUNT(*) FROM " + ecstQuote(table));
+    }
+
+    private static final class EcstRows {
+        final QueryResultMultiset values;
+        final List<String> types;
+
+        EcstRows(QueryResultMultiset values, List<String> types) {
+            this.values = values;
+            this.types = types;
+        }
+    }
+
+    private EcstRows ecstReadResult(String sql) throws SQLException {
+        Map<String, Integer> rows = new LinkedHashMap<>();
+        Map<String, List<ApproximateKind>> approximate = new LinkedHashMap<>();
+        List<String> ordered = new ArrayList<>();
+        List<List<ApproximateKind>> orderedApproximate = new ArrayList<>();
+        List<String> types = new ArrayList<>();
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet result = statement.executeQuery(sql)) {
+            ResultSetMetaData metadata = result.getMetaData();
+            List<ApproximateKind> kinds = new ArrayList<>();
+            for (int i = 1; i <= metadata.getColumnCount(); i++) {
+                String type = metadata.getColumnTypeName(i);
+                types.add(type + "|" + metadata.getPrecision(i) + "|" + metadata.getScale(i) + "|"
+                        + metadata.getColumnLabel(i));
+                kinds.add(type.equalsIgnoreCase("FLOAT") ? ApproximateKind.FLOAT
+                        : type.equalsIgnoreCase("DOUBLE") ? ApproximateKind.DOUBLE : ApproximateKind.NONE);
+            }
+            while (result.next()) {
+                StringBuilder row = new StringBuilder();
+                for (int i = 1; i <= metadata.getColumnCount(); i++) {
+                    String value = result.getString(i);
+                    if (value == null) {
+                        row.append("N;");
+                    } else {
+                        String type = metadata.getColumnTypeName(i).toUpperCase(Locale.ROOT);
+                        String canonical = type.contains("BINARY") || type.contains("BLOB")
+                                ? ecstHexBytes(result.getBytes(i)) : canonicalizeValue(value, type);
+                        row.append("S:").append(canonical.length()).append(':').append(canonical).append(';');
+                    }
+                }
+                String encoded = row.toString();
+                rows.merge(encoded, 1, Integer::sum);
+                ordered.add(encoded);
+                approximate.putIfAbsent(encoded, kinds);
+                orderedApproximate.add(kinds);
+            }
+        }
+        Main.nrQueries.incrementAndGet();
+        Main.nrSuccessfulActions.incrementAndGet();
+        return new EcstRows(new QueryResultMultiset(rows, approximate, ordered, orderedApproximate, true), types);
+    }
+
+    private String ecstDefinition(String table) throws SQLException {
+        return getCreateTable(table);
+    }
+
+    private String ecstViewDefinition(String view) throws SQLException {
+        try (Statement statement = state.getConnection().createStatement();
+                ResultSet rows = statement.executeQuery("SHOW CREATE TABLE " + ecstQuote(view))) {
+            if (!rows.next()) {
+                throw new SQLException("SHOW CREATE VIEW returned no row");
+            }
+            return rows.getString(2);
+        }
     }
 }

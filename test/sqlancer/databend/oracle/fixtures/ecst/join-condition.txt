@@ -1,0 +1,33 @@
+HashJoin
+├── output columns: [l.vp_rowid (#0)]
+├── join type: INNER
+├── build keys: [r.vp_rowid (#3)]
+├── probe keys: [l.vp_rowid (#0)]
+├── keys is null equal: [false]
+├── filters: [l.c0 (#1) > r.c1 (#4)]
+├── build join filters:
+│   └── filter id:0, build key:r.vp_rowid (#3), probe targets:[l.vp_rowid (#0)@scan0], filter type:bloom,inlist,min_max
+├── estimated rows: 5.00
+├── TableScan(Build)
+│   ├── table: default.ecst_databend_probe_20261108.pr
+│   ├── scan id: 1
+│   ├── output columns: [vp_rowid (#3), c1 (#4)]
+│   ├── read rows: 5
+│   ├── read size: < 1 KiB
+│   ├── partitions total: 1
+│   ├── partitions scanned: 1
+│   ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 1 to 1 cost: 1 ms>]
+│   ├── push downs: [filters: [], limit: NONE]
+│   └── estimated rows: 5.00
+└── TableScan(Probe)
+    ├── table: default.ecst_databend_probe_20261108.pl
+    ├── scan id: 0
+    ├── output columns: [vp_rowid (#0), c0 (#1)]
+    ├── read rows: 5
+    ├── read size: < 1 KiB
+    ├── partitions total: 1
+    ├── partitions scanned: 1
+    ├── pruning stats: [segments: <read cost: 1 ms, decompress cost: 1 ms, range pruning: 1 to 1 cost: 1 ms>, blocks: <range pruning: 1 to 1 cost: 1 ms>]
+    ├── push downs: [filters: [], limit: NONE]
+    ├── apply join filters: [#0]
+    └── estimated rows: 5.00
