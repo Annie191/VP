@@ -1,0 +1,38 @@
+[
+  {
+    "Plan": {
+      "Node Type": "CTE Scan",
+      "Parallel Aware": false,
+      "CTE Name": "ecst_cte",
+      "Alias": "ecst_cte",
+      "Startup Cost": 1.04,
+      "Total Cost": 1.13,
+      "Plan Rows": 1,
+      "Plan Width": 8,
+      "Output": [
+        "ecst_cte.vp_rowid"
+      ],
+      "Filter": "(ecst_cte.c0 > ecst_cte.c1)",
+      "Plans": [
+        {
+          "Node Type": "Seq Scan",
+          "Parent Relationship": "InitPlan",
+          "Subplan Name": "CTE ecst_cte",
+          "Parallel Aware": false,
+          "Relation Name": "source",
+          "Schema": "ecst_pg_fixture_20261109",
+          "Alias": "source",
+          "Startup Cost": 0.0,
+          "Total Cost": 1.04,
+          "Plan Rows": 4,
+          "Plan Width": 24,
+          "Output": [
+            "source.c0",
+            "source.c1",
+            "source.vp_rowid"
+          ]
+        }
+      ]
+    }
+  }
+]

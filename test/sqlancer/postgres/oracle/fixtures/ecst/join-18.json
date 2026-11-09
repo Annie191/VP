@@ -1,0 +1,76 @@
+[
+  {
+    "Plan": {
+      "Node Type": "Hash Join",
+      "Parallel Aware": false,
+      "Async Capable": false,
+      "Join Type": "Inner",
+      "Startup Cost": 1.09,
+      "Total Cost": 2.14,
+      "Plan Rows": 1,
+      "Plan Width": 8,
+      "Disabled": false,
+      "Output": [
+        "ecst_l.vp_rowid"
+      ],
+      "Inner Unique": true,
+      "Hash Cond": "(ecst_l.vp_rowid = ecst_r.vp_rowid)",
+      "Join Filter": "(ecst_l.c0 > ecst_r.c1)",
+      "Plans": [
+        {
+          "Node Type": "Seq Scan",
+          "Parent Relationship": "Outer",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Relation Name": "lhs",
+          "Schema": "ecst_pg_fixture_20261109",
+          "Alias": "ecst_l",
+          "Startup Cost": 0.0,
+          "Total Cost": 1.04,
+          "Plan Rows": 4,
+          "Plan Width": 16,
+          "Disabled": false,
+          "Output": [
+            "ecst_l.c0",
+            "ecst_l.vp_rowid"
+          ]
+        },
+        {
+          "Node Type": "Hash",
+          "Parent Relationship": "Inner",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Startup Cost": 1.04,
+          "Total Cost": 1.04,
+          "Plan Rows": 4,
+          "Plan Width": 16,
+          "Disabled": false,
+          "Output": [
+            "ecst_r.vp_rowid",
+            "ecst_r.c1"
+          ],
+          "Plans": [
+            {
+              "Node Type": "Seq Scan",
+              "Parent Relationship": "Outer",
+              "Parallel Aware": false,
+              "Async Capable": false,
+              "Relation Name": "rhs",
+              "Schema": "ecst_pg_fixture_20261109",
+              "Alias": "ecst_r",
+              "Startup Cost": 0.0,
+              "Total Cost": 1.04,
+              "Plan Rows": 4,
+              "Plan Width": 16,
+              "Disabled": false,
+              "Output": [
+                "ecst_r.vp_rowid",
+                "ecst_r.c1"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]

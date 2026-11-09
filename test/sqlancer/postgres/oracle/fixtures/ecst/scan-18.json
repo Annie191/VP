@@ -1,0 +1,21 @@
+[
+  {
+    "Plan": {
+      "Node Type": "Seq Scan",
+      "Parallel Aware": false,
+      "Async Capable": false,
+      "Relation Name": "source",
+      "Schema": "ecst_pg_fixture_20261109",
+      "Alias": "source",
+      "Startup Cost": 0.0,
+      "Total Cost": 1.05,
+      "Plan Rows": 1,
+      "Plan Width": 8,
+      "Disabled": false,
+      "Output": [
+        "vp_rowid"
+      ],
+      "Filter": "(source.c0 > source.c1)"
+    }
+  }
+]
